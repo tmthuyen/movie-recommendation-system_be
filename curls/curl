@@ -1,0 +1,4 @@
+curl -X GET "http://localhost:3001/api/roles" \
+  -H "accept: application/json" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InRodXllbkBnbWFpbC5jb20iLCJzdWIiOjEsInNjb3BlcyI6WyJBRE1JTiIsIkNVU1RPTUVSIl0sImlhdCI6MTc4NzAyMjc4MywiZXhwIjoxNzg3MDI2MzgzfQ.p3u_CfCGO7Y_Pu8uHwUSw4KAh9rGRNZqp2TfMhD4ij4"

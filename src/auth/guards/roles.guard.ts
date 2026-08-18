@@ -1,0 +1,50 @@
+import { ROLES_KEY } from '@/auth/decorators/roles.decorator';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+
+@Injectable()
+export class RolesGuard implements CanActivate {
+  constructor(private reflector: Reflector) {}
+
+  // Guard có thể chạy bất đồng bộ (async/await)
+  canActivate(context: ExecutionContext): boolean {
+    const req = context.switchToHttp().getRequest();
+
+    // console.log('Request header:', req.headers);
+
+    const requiredRoles = this.reflector.getAllAndOverride<string[]>(
+      ROLES_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
+    // public API
+    if (!requiredRoles) {
+      return true;
+    }
+
+    // private API
+    const { user } = req;
+
+    console.log('User from request:', user);
+
+    if (!user || !user.scopes) {
+      throw new UnauthorizedException('Not login');
+    }
+
+    const scopes = user.scopes;
+
+    const hasRole = requiredRoles.some((scope) => scopes.includes(scope));
+
+    if (!hasRole) {
+      throw new ForbiddenException('Khong co quyen truy cap');
+    }
+
+    return true;
+  }
+}
