@@ -44,7 +44,8 @@ async function bootstrap() {
     .setTitle('Tài liệu API dự án')
     .setDescription('Mô tả các API kết nối với Database')
     .setVersion('1.0')
-    .addBearerAuth() // Thêm dòng này nếu API của bạn có dùng JWT Token (Passport)
+    .setTermsOfService('https://example.com/terms')
+    .addBearerAuth()
     .build();
 
   // 2. Tạo document từ cấu hình trên

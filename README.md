@@ -59,6 +59,41 @@ docker compose \
   up -d
 ```
 
+- Health check: http://localhost:8081/health
+
+```curl
+curl -X 'GET' \
+  'http://localhost:8081/api/health' \
+  -H 'accept: application/json'
+```
+
+- Response health check:
+
+```json
+{
+  "status": "ok",
+  "info": {
+    "nestjs-docs": {
+      "status": "up"
+    },
+    "database": {
+      "responseTime": 120,
+      "status": "up"
+    }
+  },
+  "error": {},
+  "details": {
+    "nestjs-docs": {
+      "status": "up"
+    },
+    "database": {
+      "responseTime": 120,
+      "status": "up"
+    }
+  }
+}
+```
+
 ## Usage
 
 ## Api Documentation

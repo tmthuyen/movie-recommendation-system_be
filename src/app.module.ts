@@ -14,6 +14,7 @@ import { User } from '@/modules/users/entities/user.entity';
 import { validateConfiguration } from '@/config/env.validation';
 import { WinstonModule } from 'nest-winston';
 import { loggerConfig } from '@/config/logger.config';
+import { HealthModule } from './modules/health/health.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { loggerConfig } from '@/config/logger.config';
     PermissionsModule,
     AuthModule,
     UsersModule,
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [AppService],
