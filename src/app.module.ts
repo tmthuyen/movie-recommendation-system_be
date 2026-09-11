@@ -3,17 +3,17 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from '@/app.controller';
 import { AppService } from '@/app.service';
-import { Product } from '@/products/product.entity';
-import { ProductsModule } from '@/products/products.module';
-import { RolesModule } from './roles/roles.module';
-import { PermissionsModule } from './permissions/permissions.module';
-import { AuditsModule } from './audits/audits.module';
-import { AuthModule } from './auth/auth.module';
-import { UsersModule } from './users/users.module';
+import { RolesModule } from '@/modules/roles/roles.module';
+import { PermissionsModule } from '@/modules/permissions/permissions.module';
+import { AuditsModule } from '@common/audits/audits.module';
+import { AuthModule } from '@/modules/auth/auth.module';
+import { UsersModule } from '@/modules/users/users.module';
 import { ClsModule } from 'nestjs-cls';
-import { Role } from '@/roles/entities/role.entity';
-import { User } from '@/users/entities/user.entity';
+import { Role } from '@/modules/roles/entities/role.entity';
+import { User } from '@/modules/users/entities/user.entity';
 import { validateConfiguration } from '@/config/env.validation';
+import { WinstonModule } from 'nest-winston';
+import { loggerConfig } from '@/config/logger.config';
 
 @Module({
   imports: [
@@ -39,7 +39,7 @@ import { validateConfiguration } from '@/config/env.validation';
         password: config.get<string>('DB_PASSWORD'),
         database: config.get<string>('DB_NAME'),
         autoLoadEntities: true,
-        entities: [Product, Role, User],
+        entities: [Role, User],
         synchronize: true,
         logging: config.get<string>('mode') === 'development',
       }),
@@ -48,8 +48,10 @@ import { validateConfiguration } from '@/config/env.validation';
       global: true,
       middleware: { mount: true },
     }),
+    WinstonModule.forRoot(loggerConfig),
+
+    // Domain Modules
     AuditsModule,
-    ProductsModule,
     RolesModule,
     PermissionsModule,
     AuthModule,

@@ -1,0 +1,75 @@
+services:
+  # backend service
+  # backend-service:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: Dockerfile # FROM python:3.11-slim
+  #   ports:
+  #     - '8081:8081'
+  #   environment:
+  #     - NODE_ENV=development
+  #     - APP_PORT=8081
+  #     - DB_URL=xxxx
+  #     - RABBITMQ_URL=amqp://guest:guest@localhost:5672
+  #     - SERVICE_NAME=backend-service
+  #     - OTEL_EXPORTER_URL=http://localhost:4317
+  #   networks:
+  #     - movie-net
+
+  # ai service
+  # ai-service:
+  #   build:
+  #     context: ./ai-service
+  #     dockerfile: Dockerfile # FROM python:3.11-slim
+  #   ports:
+  #     - '8082:8082'
+  #   networks:
+  #     - movie-net
+  #   environment:
+  #     - APP_PORT=8082
+  #     - VECTOR_DB_URL=xxxx
+  #     - SERVICE_NAME=ai-service
+  #     - OTEL_EXPORTER_URL=http://localhost:4317
+  #     - RABBITMQ_URL=amqp://guest:guest@localhost:5672
+
+  # db
+
+  # vector db
+
+  # caching
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    networks:
+      - movie-network
+
+  # message broker
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    ports:
+      - '5672:5672'
+      - '15672:15672' # RabbitMQ Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - movie-network
+
+networks:
+  movie-network:
+    driver: bridge
+
+volumes:
+  # db-data:
+  #   driver: local
+  redis_data:
+    driver: local
+  rabbitmq_data:
+    driver: local

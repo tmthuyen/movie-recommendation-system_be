@@ -36,11 +36,15 @@ export class EnvironmentVariables {
 
   @IsNotEmpty()
   @IsString()
-  JWT_SECRET_KEY: string;
+  ACCESS_SECRET_KEY: string;
 
   @IsNotEmpty()
   @IsString()
-  JWT_EXPIRES_IN: string;
+  ACCESS_EXPIRES_IN: string;
+
+  @IsNotEmpty()
+  @IsString()
+  REFRESH_EXPIRES_IN: string;
 }
 
 export const validateConfiguration = (config: Record<string, unknown>) => {

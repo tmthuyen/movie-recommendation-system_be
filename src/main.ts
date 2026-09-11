@@ -1,13 +1,24 @@
+import '@config/tracing.config'; // Import cấu hình tracing trước khi khởi tạo ứng dụng NestJS
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
+import { CamelCaseInterceptor } from './common/interceptors/camel-case.interceptor';
+import { LoggingInterceptor } from '@/common/interceptors/logging.interceptor';
+import { HttpExceptionFilter } from '@/common/filters/http-exception.filter';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    bufferLogs: true,
+  });
+  const winstonLogger = app.get(WINSTON_MODULE_NEST_PROVIDER);
+  app.useLogger(winstonLogger);
 
   app.setGlobalPrefix('api');
+
+  // pipes
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -17,6 +28,14 @@ async function bootstrap() {
     }),
   );
 
+  // interceptors
+  app.useGlobalInterceptors(new CamelCaseInterceptor());
+  app.useGlobalInterceptors(new LoggingInterceptor(winstonLogger));
+
+  // filters
+  app.useGlobalFilters(new HttpExceptionFilter(winstonLogger));
+
+  // cors
   app.enableCors();
 
   // swagger
