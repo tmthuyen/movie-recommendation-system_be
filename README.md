@@ -32,7 +32,7 @@ A modern recommendation system built with NestJS, Python, PostgreSQL and Vector 
 - OpenTelemetry
 - LLM for Recommendation System (API, self-hosted, or custom model)
 
-# Structure folder
+## Structure folder
 
 ## Installation
 
