@@ -1,11 +1,11 @@
-import 'module-alias/register';
+// import 'module-alias/register';
 import '@config/tracing.config'; // Import cấu hình tracing trước khi khởi tạo ứng dụng NestJS
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
-import { CamelCaseInterceptor } from './common/interceptors/camel-case.interceptor';
+import { CamelCaseInterceptor } from '@/common/interceptors/camel-case.interceptor';
 import { LoggingInterceptor } from '@/common/interceptors/logging.interceptor';
 import { HttpExceptionFilter } from '@/common/filters/http-exception.filter';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';

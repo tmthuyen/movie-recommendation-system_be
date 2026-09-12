@@ -1,8 +1,11 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
-    "moduleResolution": "node",
-    "baseUrl": "./",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "resolvePackageJsonExports": true,
+    // "module": "commonjs",
+    // "moduleResolution": "node",
+    // "baseUrl": "./",
     "esModuleInterop": true,
     "isolatedModules": true,
     "declaration": true,
@@ -11,18 +14,10 @@
     "experimentalDecorators": true,
     "allowSyntheticDefaultImports": true,
     "paths": {
-      "@/*": [
-        "./src/*"
-      ],
-      "@config/*": [
-        "./src/config/*"
-      ],
-      "@modules/*": [
-        "./src/modules/*"
-      ],
-      "@common/*": [
-        "./src/common/*"
-      ]
+      "@/*": ["./src/*"],
+      "@config/*": ["./src/config/*"],
+      "@modules/*": ["./src/modules/*"],
+      "@common/*": ["./src/common/*"]
     },
     "target": "ES2023",
     "sourceMap": true,
@@ -36,8 +31,5 @@
     "noFallthroughCasesInSwitch": false,
     "strictPropertyInitialization": false
   },
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.d.ts"
-  ]
+  "include": ["src/**/*.ts", "src/**/*.d.ts"]
 }

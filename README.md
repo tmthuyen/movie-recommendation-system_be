@@ -65,7 +65,7 @@ docker compose \
   up -d
 ```
 
-- Health check: http://localhost:8081/health
+- Health check: http://localhost:8081/api/health
 
 ```curl
 curl -X 'GET' \
