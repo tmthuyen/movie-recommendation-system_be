@@ -18,7 +18,6 @@ export class HealthController {
   @HealthCheck()
   check() {
     return this.healthService.check([
-      () => this.http.pingCheck('nestjs-docs', 'https://docs.nestjs.com'),
       () => this.typeOrmDb.pingCheck('database'),
     ]);
   }

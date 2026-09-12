@@ -1,3 +1,4 @@
+import 'module-alias/register';
 import '@config/tracing.config'; // Import cấu hình tracing trước khi khởi tạo ứng dụng NestJS
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
@@ -57,6 +58,6 @@ async function bootstrap() {
   const cfsv = app.get(ConfigService);
   const port = Number(cfsv.get<number>('APP_PORT'));
 
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
 }
 bootstrap();
