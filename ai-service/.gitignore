@@ -1,0 +1,59 @@
+# 1. Môi trường ảo (Quan trọng nhất)
+venv/
+.env
+.venv/
+# 2. Python rác
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# 1. Bỏ qua toàn bộ Data (Siêu nặng)
+data/colab/*
+data/processed/*
+data/models/*
+data/predictions/*
+data/checkpoints/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/models/.gitkeep
+!data/predictions/.gitkeep
+
+# 2. Bỏ qua Logs (Rác sinh ra hàng ngày)
+logs/*
+!logs/.gitkeep
+
+# 5. Logs & Notebooks
+logs/*.log
+.ipynb_checkpoints/
+
+.venv/
+venv/
+*.pt
+*.pth
+logs/
+*.log
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environment
+.venv/
+venv/
+
+# Data
+data/
+*.npy
+*.pkl
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# OS
+.DS_Store

@@ -1,1 +1,0 @@
-print('ai-service/main.py')

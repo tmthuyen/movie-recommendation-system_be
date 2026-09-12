@@ -1,0 +1,122 @@
+data:
+  raw_path: 'data/raw'
+  processed_path: 'data/processed'
+  models_path: 'data/models'
+  predictions_path: 'data/predictions'
+
+preprocessing:
+  tokenizer_type: 'underthesea'
+
+  # seq_length: 10
+  min_tokens_per_sentence: 6
+  min_length_content: 50   # Độ dài tối thiểu của nội dung để một bài báo được đưa vào tập huấn luyện
+
+  preview_samples: 0
+  save_normalized_text: False 
+  save_cleaned_data: False 
+
+  # Vocab
+  min_freq: 15   # Tần suất tối thiểu để một token được đưa vào vocab 
+  max_vocab_size: 20000
+
+  # Giảm dữ liệu
+  max_articles: 75000
+  max_sequences: 50000000
+
+  # split data
+  train_ratio: 0.8  
+  val_ratio: 0.1
+  test_ratio: 0.1
+  random_seed: 42
+
+training:
+  random_seed: 42
+  sample_rate: 0.5 # Tỷ lệ mẫu bài báo để giảm RAM khi huấn luyện 
+  eval_sample_rate: 0.05 # Tỷ lệ mẫu bài báo để giảm RAM khi đánh giá
+  batch_size: 128
+  num_workers: 0
+  pin_memory: True
+  train_stride: 1
+  eval_stride: 1
+
+model:
+  # Ngram
+  ngram_params:
+    seq_length: 3
+    max_order: 3
+
+    precompute_topk_size: 5
+    keep_counts: false
+    compute_perplexity: false
+
+    pad_id: 0
+    unk_id: 1
+    eos_id: 2
+
+    excluded_token_ids: [0, 1, 2, 3, 53, 83, 1312, 2666]
+    excluded_target_ids: [0, 1, 2, 3, 53, 83, 1312, 2666]
+    excluded_context_ids: [0, 1, 2]
+
+    min_context_count_by_order:
+      1: 1
+      2: 2
+      3: 3
+
+    # Nếu vẫn nổ RAM thì mở thêm giới hạn cứng này:
+    # max_contexts_by_order:
+    #   1: null
+    #   2: 2000000
+    #   3: 5000000
+
+    progress_every: 500000
+    global_fallback_topk: 5
+  # LSTM
+  lstm_params:
+    seq_length: 20  
+
+    embedding_dim: 256
+    hidden_dim: 512
+    num_layers: 2 
+    dropout: 0.2
+
+    # ==========================================
+    # CAU HINH HUAN LUYEN (TRAINING)
+    # ========================================== 
+    epochs: 5
+    batch_size: 128
+    learning_rate: 0.0005
+    early_stopping_patience: 3
+    early_stopping_min_delta: 0.0005
+
+    # ==========================================
+    # CAU HINH TOI UU (OPTIMIZATION)
+    # ========================================== 
+    weight_decay: 0.00001 
+    grad_clip_norm: 0.8
+    label_smoothing: 0.00
+    scheduler_type: 'plateau' 
+    scheduler_patience: 1
+    scheduler_factor: 0.5
+
+  # Transformer
+  transformer_params:
+    seq_length: 15
+    d_model: 128
+    nhead: 4
+    num_layers: 2
+    dim_feedforward: 512
+
+    dropout: 0.0
+    epochs: 15
+    batch_size: 128
+    learning_rate: 0.0005
+    weight_decay: 0.00001
+    warmup_steps: 0
+    grad_clip_norm: 1.0
+    label_smoothing: 0.0
+
+    early_stopping_patience: 5
+    early_stopping_min_delta: 0.001
+    scheduler_type: 'plateau'
+    scheduler_patience: 2
+    scheduler_factor: 0.5
