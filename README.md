@@ -45,8 +45,14 @@ git clone github link
 - Install dependencies:
 
 ```bash
-cd apps/backend
+cd backend
 npm install
+```
+
+- Run backend server:
+
+```bash
+npm run dev
 ```
 
 - Run docker-compose: root folder
