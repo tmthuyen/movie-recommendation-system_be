@@ -11,22 +11,15 @@
     "experimentalDecorators": true,
     "allowSyntheticDefaultImports": true,
     "paths": {
-      "@/*": [
-        "./src/*"
-      ],
-      "@config/*": [
-        "./src/config/*"
-      ],
-      "@modules/*": [
-        "./src/modules/*"
-      ],
-      "@common/*": [
-        "./src/common/*"
-      ],
+      "@/*": ["./src/*"],
+      "@config/*": ["./src/config/*"],
+      "@modules/*": ["./src/modules/*"],
+      "@common/*": ["./src/common/*"]
     },
     "target": "ES2023",
     "sourceMap": true,
-    "outDir": "./dist",
+    "outDir": "dist/",
+    "rootDir": "./src",
     // "baseUrl": "./",
     "incremental": true,
     "skipLibCheck": true,
@@ -37,8 +30,5 @@
     "noFallthroughCasesInSwitch": false,
     "strictPropertyInitialization": false
   },
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.d.ts"
-  ]
+  "include": ["src/**/*.ts", "src/**/*.d.ts"]
 }

@@ -1,8 +1,8 @@
 # 1. Tạo môi trường ảo (để không làm rác máy tính)
-python -m venv venv
+python -m venv .venv
 
-# 2. Kích hoạt môi trường (Lệnh riêng cho Windows)
-.\venv\Scripts\activate
+# 2. Kích hoạt môi trường (Lệnh riêng cho Windows PowerShell)
+.\.venv\Scripts\activate
 
 # 3. Cài đặt các thư viện cần thiết 
 pip install -e .

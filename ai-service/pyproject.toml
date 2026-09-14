@@ -3,7 +3,7 @@ name = "movie-recommendation"
 version = "0.1.0"
 description = "Movie Recommendation System"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 
 
 dependencies = [
@@ -14,6 +14,24 @@ dependencies = [
     
     "fastapi>=0.100.0",
     "uvicorn>=0.23.0",
+    "pydantic-settings>=2.0.0",
+    "aio-pika>=9.0.0",
+    "redis>=5.0.0",
+    "qdrant-client>=1.7.0",
+    "opentelemetry-api>=1.20.0",
+    "opentelemetry-sdk>=1.20.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.20.0",
+    "opentelemetry-instrumentation-fastapi>=0.41b0",
+    "apscheduler>=3.10.0",
+    
+    # 2. ML & NLP
+    "rank-bm25>=0.2.2",
+    "underthesea>=6.8.0",
+    "joblib>=1.3.0",
+    
+    # deep learing
+    "torch>=2.0.0",
+    "sentence-transformers>=2.7.0",
     
 ]
 
@@ -30,7 +48,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.black]
 line-length = 88
-target-version = ['py39']
+target-version = ['py310']
 
 [tool.isort]
 profile = "black"

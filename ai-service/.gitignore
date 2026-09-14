@@ -12,15 +12,7 @@ dist/
 build/
 
 # 1. Bỏ qua toàn bộ Data (Siêu nặng)
-data/colab/*
-data/processed/*
-data/models/*
-data/predictions/*
-data/checkpoints/*
-!data/raw/.gitkeep
-!data/processed/.gitkeep
-!data/models/.gitkeep
-!data/predictions/.gitkeep
+data/*
 
 # 2. Bỏ qua Logs (Rác sinh ra hàng ngày)
 logs/*
@@ -47,8 +39,7 @@ __pycache__/
 .venv/
 venv/
 
-# Data
-data/
+# Data 
 *.npy
 *.pkl
 
@@ -57,3 +48,5 @@ data/
 
 # OS
 .DS_Store
+
+model_artifacts/

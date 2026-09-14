@@ -2,7 +2,7 @@
 
 > Đây là kế hoạch tổng thể để phát triển trọn vẹn **2 service** (backend + ai-service) theo từng giai đoạn.
 > Chi tiết triển khai từng service ở các file riêng:
-> - [backend-plan.md](./backend-plan.md) — Kế hoạch phát triển **backend** (NestJS)
+> - [V2_backend-plan.md](./V2_backend-plan.md) — Kế hoạch phát triển **backend** (NestJS)
 > - [ai-service-plan.md](./ai-service-plan.md) — Kế hoạch phát triển **ai-service** (Python/FastAPI)
 
 ---
@@ -155,5 +155,5 @@ Mapping bắt buộc: `movies.tmdb_id` (backend) ↔ `tmdb_id` (ai-service index
 
 | | File |
 |---|---|
-| Chi tiết hiện trạng + kế hoạch backend | [backend-plan.md](./backend-plan.md) |
+| Chi tiết hiện trạng + kế hoạch backend | [V2_backend-plan.md](./V2_backend-plan.md) |
 | Chi tiết hiện trạng + kế hoạch ai-service | [ai-service-plan.md](./ai-service-plan.md) |
