@@ -19,6 +19,12 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
+  "_moduleAliases": {
+    "@": "dist",
+    "@config": "dist/config",
+    "@modules": "dist/modules",
+    "@common": "dist/common"
+  },
   "dependencies": {
     "@nestjs/axios": "^12.0.0",
     "@nestjs/common": "^11.0.1",
@@ -40,6 +46,7 @@
     "class-validator": "^0.15.1",
     "dotenv": "^17.4.2",
     "lodash": "^4.18.1",
+    "module-alias": "^2.3.4",
     "nest-winston": "^1.10.2",
     "nestjs-cls": "^6.2.1",
     "passport": "^0.7.0",

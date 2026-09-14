@@ -1,8 +1,7 @@
 {
   "compilerOptions": {
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
-    "resolvePackageJsonExports": true,
+    "module": "CommonJS", //Xung đột trình biên dịch với entity nên t sửa thành này
+    "moduleResolution": "node",
     "esModuleInterop": true,
     "isolatedModules": true,
     "declaration": true,
@@ -27,7 +26,7 @@
     "target": "ES2023",
     "sourceMap": true,
     "outDir": "./dist",
-    // "baseUrl": "./",
+    "baseUrl": "./",
     "incremental": true,
     "skipLibCheck": true,
     "strictNullChecks": true,
