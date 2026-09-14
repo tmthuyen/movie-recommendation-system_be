@@ -1,4 +1,11 @@
-import { Column, Entity, JoinTable, ManyToMany, OneToMany, PrimaryColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  JoinTable,
+  ManyToMany,
+  OneToMany,
+  PrimaryColumn,
+} from 'typeorm';
 import { Genre } from './genre.entity';
 import { Rating } from '@/modules/ratings/entities/rating.entity';
 import { Review } from '@/modules/reviews/entities/review.entity';

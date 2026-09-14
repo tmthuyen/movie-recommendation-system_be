@@ -66,13 +66,23 @@ Khi người dùng nhập câu truy vấn `query`:
 
 ---
 
-## 6. Đánh Giá (Evaluation) - Next Steps
+## 6. Đánh Giá (Evaluation)
 
-Để chứng minh thuật toán nào thông minh hơn một cách khoa học, hệ thống cần (và sẽ) xây dựng một Evaluation Pipeline:
-1. **Ground Truth:** Cần một tập dữ liệu gán nhãn bao gồm `(Query, [Danh sách Movie ID liên quan])`.
-2. **Metrics:**
-   - `NDCG@K`: Chấm điểm xem phim đúng có được đẩy lên top 1, 2 hay không.
-   - `MRR`: Xem phim đúng xuất hiện sớm cỡ nào.
-   - `Precision@K` / `Recall@K`: Tỷ lệ trả về đúng trong Top K kết quả.
-   
-*(Hiện tại 2 mô hình đã sẵn sàng để đối chiếu khi có tập Ground Truth).*
+### B. Đánh giá như thế nào?
+Để đánh giá, hệ thống sẽ thực hiện theo quy trình sau:
+
+1. **Chuẩn bị Ground Truth (Tập dữ liệu chuẩn):**
+   - Cần một bộ dữ liệu chứa các câu truy vấn mẫu (Queries).
+   - Với mỗi câu truy vấn, con người (hoặc logs từ người dùng thật) sẽ gán nhãn sẵn danh sách các bộ phim **thực sự liên quan** (Relevant Movie IDs).
+
+2. **Chạy Mô hình trên tập Ground Truth:**
+   - Hệ thống sẽ lấy từng câu truy vấn trong Ground Truth ném vào mô hình (TF-IDF/BM25).
+   - Mô hình trả về Top K bộ phim (Ví dụ: Top 10).
+
+3. **Tính toán các Chỉ số (Metrics):**
+   Hệ thống sẽ đối chiếu Top K trả về với danh sách phim thực sự liên quan để tính điểm:
+   - **Precision@K:** Trong K phim mô hình trả về, có bao nhiêu % là phim đúng? (Đo lường độ nhiễu).
+   - **Recall@K:** Trong tổng số tất cả các phim đúng của câu truy vấn đó, mô hình tìm ra được bao nhiêu % nằm trong Top K? (Đo lường độ bao phủ).
+   - **MRR (Mean Reciprocal Rank):** Phim đúng xuất hiện sớm nhất ở vị trí số mấy? (Nằm top 1 được 1 điểm, top 2 được 0.5 điểm...). Quan trọng khi người dùng lười cuộn chuột.
+   - **NDCG@K (Normalized Discounted Cumulative Gain):** Chỉ số toàn diện nhất, chấm điểm cao nếu các phim đúng được xếp hạng ở những vị trí cao nhất (Top 1, 2, 3).
+

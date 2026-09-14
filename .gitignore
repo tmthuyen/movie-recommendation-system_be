@@ -65,3 +65,5 @@ ai-service/.env
 
 # agent ignore
 .agent/skills/
+
+tsconfig.build.tsbuildinfo
