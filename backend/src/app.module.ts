@@ -11,6 +11,10 @@ import { UsersModule } from '@/modules/users/users.module';
 import { ClsModule } from 'nestjs-cls';
 import { Role } from '@/modules/roles/entities/role.entity';
 import { User } from '@/modules/users/entities/user.entity';
+import { Genre } from '@/modules/movies/entities/genre.entity';
+import { Movie } from '@/modules/movies/entities/movie.entity';
+import { Rating } from '@/modules/ratings/entities/rating.entity';
+import { Review } from '@/modules/reviews/entities/review.entity';
 import { validateConfiguration } from '@/config/env.validation';
 import { WinstonModule } from 'nest-winston';
 import { loggerConfig } from '@/config/logger.config';
@@ -40,7 +44,7 @@ import { HealthModule } from './modules/health/health.module';
         password: config.get<string>('DB_PASSWORD'),
         database: config.get<string>('DB_NAME'),
         autoLoadEntities: true,
-        entities: [Role, User],
+        entities: [Role, User, Genre, Movie, Rating, Review],
         synchronize: true,
         logging: config.get<string>('mode') === 'development',
       }),

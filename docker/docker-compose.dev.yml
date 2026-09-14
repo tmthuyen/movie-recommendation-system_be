@@ -2,19 +2,28 @@ services:
   # backend service
   # backend-service:
   #   build:
-  #     context: ./backend
-  #     dockerfile: Dockerfile # FROM python:3.11-slim
+  #     context: ../backend
+  #     dockerfile: Dockerfile
+  #   container_name: movie_backend
   #   ports:
   #     - '8081:8081'
   #   environment:
   #     - NODE_ENV=development
   #     - APP_PORT=8081
-  #     - DB_URL=xxxx
-  #     - RABBITMQ_URL=amqp://guest:guest@localhost:5672
+  #     - DB_TYPE=postgres
+  #     - DB_HOST=db
+  #     - DB_PORT=5432
+  #     - DB_USERNAME=postgres
+  #     - DB_PASSWORD=123456
+  #     - DB_NAME=nestjs_db
+  #     - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
   #     - SERVICE_NAME=backend-service
   #     - OTEL_EXPORTER_URL=http://localhost:4317
   #   networks:
-  #     - movie-net
+  #     - movie-network
+  #   depends_on:
+  #     - db
+  #     - rabbitmq
 
   # ai service
   # ai-service:
@@ -33,6 +42,20 @@ services:
   #     - RABBITMQ_URL=amqp://guest:guest@localhost:5672
 
   # db
+  db:
+    image: postgres:15-alpine
+    container_name: postgres_db
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: nestjs_db
+      TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - movie-network
 
   # vector db
 
@@ -67,8 +90,8 @@ networks:
     driver: bridge
 
 volumes:
-  # db-data:
-  #   driver: local
+  db-data:
+    driver: local
   redis_data:
     driver: local
   rabbitmq_data:

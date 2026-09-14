@@ -6,13 +6,22 @@ import {
   Index,
   JoinTable,
   ManyToMany,
-  PrimaryGeneratedColumn,
+  OneToMany,
+  PrimaryColumn,
 } from 'typeorm';
+import { Rating } from '@/modules/ratings/entities/rating.entity';
+import { Review } from '@/modules/reviews/entities/review.entity';
 
 @Entity('users')
 export class User extends BaseAuditEntity {
-  @PrimaryGeneratedColumn()
+  @PrimaryColumn({ type: 'int' })
   id: number;
+
+  @OneToMany(() => Rating, rating => rating.user)
+  ratings: Rating[];
+
+  @OneToMany(() => Review, review => review.user)
+  reviews: Review[];
 
   @Index({ unique: true })
   @Column({ nullable: false })

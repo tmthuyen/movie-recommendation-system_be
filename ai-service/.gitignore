@@ -42,6 +42,7 @@ venv/
 # Data 
 *.npy
 *.pkl
+*.csv
 
 # Notebook checkpoints
 .ipynb_checkpoints/
