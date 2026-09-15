@@ -13,16 +13,21 @@ import { MailService } from '@/modules/mail/mail.service';
 import { SessionService } from './session.service';
 import { RedisService } from '@/modules/redis/redis.service';
 import { RolesService } from '@/modules/roles/roles.service';
+import { EventPublisherService } from '@/modules/messaging/event-publisher.service';
+import { MESSAGE_EVENTS } from '@/modules/messaging/messaging.constants';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class AuthService {
   constructor(
     private usersService: UsersService,
+    private rolesService: RolesService,
     private jwtService: JwtService,
     private mailService: MailService,
     private sessionService: SessionService,
     private redisService: RedisService,
-    private rolesService: RolesService,
+    private eventPublisher: EventPublisherService,
+    private configService: ConfigService,
   ) {}
 
   // 1. Xác thực thông tin người dùng
@@ -73,7 +78,7 @@ export class AuthService {
     }
 
     const hashedPassword = await bcrypt.hash(registerDto.password, 10);
-    
+
     // Lấy role mặc định 'user' thay vì hardcode id = 1
     const defaultRole = await this.rolesService.findByCode('user');
     const roleIds = defaultRole ? [defaultRole.id] : [];
@@ -92,8 +97,18 @@ export class AuthService {
       24 * 60 * 60,
     );
 
-    // Gửi email
-    await this.mailService.sendVerificationEmail(user.email, verifyToken);
+    if (this.configService.get<string>('ASYNC_MAIL_ENABLED') === 'true') {
+      this.eventPublisher.publish(
+        MESSAGE_EVENTS.USER_EMAIL_VERIFICATION_REQUESTED,
+        {
+          userId: user.id,
+          email: user.email,
+          verificationToken: verifyToken,
+        },
+      );
+    } else {
+      await this.mailService.sendVerificationEmail(user.email, verifyToken);
+    }
 
     return {
       message: 'Đăng ký thành công, vui lòng kiểm tra email để xác nhận',
@@ -144,6 +159,9 @@ export class AuthService {
     const userId = Number(userIdStr);
     await this.usersService.updateStatus(userId, UserStatus.ACTIVE);
     await this.redisService.del(`verify_email:${token}`);
+    this.eventPublisher.publish(MESSAGE_EVENTS.USER_EMAIL_VERIFIED, {
+      userId,
+    });
   }
 
   // 6. Quên mật khẩu
@@ -197,7 +215,10 @@ export class AuthService {
   }
 
   // change password
-  async changePassword(userId: number, dto: import('./dto/change-password.dto').ChangePasswordDto) {
+  async changePassword(
+    userId: number,
+    dto: import('./dto/change-password.dto').ChangePasswordDto,
+  ) {
     if (dto.newPassword !== dto.confirmPassword) {
       throw new BadRequestException('Mật khẩu xác nhận không khớp');
     }

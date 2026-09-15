@@ -11,12 +11,15 @@ import { RolesService } from '@/modules/roles/roles.service';
 import { PaginationDto } from '@/common/dtos/pagination.dto';
 import * as bcrypt from 'bcrypt';
 import { IUserRepository } from './users.repository';
+import { EventPublisherService } from '@/modules/messaging/event-publisher.service';
+import { MESSAGE_EVENTS } from '@/modules/messaging/messaging.constants';
 
 @Injectable()
 export class UsersService {
   constructor(
     @Inject(IUserRepository) private readonly userRepo: IUserRepository,
     private readonly roleSv: RolesService,
+    private readonly eventPublisher: EventPublisherService,
   ) {}
 
   // =========
@@ -31,6 +34,13 @@ export class UsersService {
     const u = await this.userRepo.save({
       ...createUserDto,
       roles: r,
+    });
+
+    this.eventPublisher.publish(MESSAGE_EVENTS.USER_CREATED, {
+      userId: u.id,
+      email: u.email,
+      fullName: u.fullName,
+      status: u.status,
     });
 
     return u;

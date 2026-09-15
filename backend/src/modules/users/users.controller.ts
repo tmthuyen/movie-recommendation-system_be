@@ -8,16 +8,21 @@ import {
   Delete,
   HttpStatus,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { PaginationDto } from '@/common/dtos/pagination.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Roles } from '@/common/decorators/roles.decorator';
 
 @Controller('users')
+@UseGuards(JwtAuthGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  @Roles('ADMIN', 'SUPERADMIN')
   @Post()
   async create(@Body() createUserDto: CreateUserDto) {
     const result = await this.usersService.create(createUserDto);
@@ -29,6 +34,7 @@ export class UsersController {
     };
   }
 
+  @Roles('ADMIN', 'SUPERADMIN')
   @Get()
   async findAll(@Query() paginationDto: PaginationDto) {
     const result = await this.usersService.findAll(paginationDto);
@@ -46,6 +52,7 @@ export class UsersController {
     };
   }
 
+  @Roles('ADMIN', 'SUPERADMIN')
   @Get(':id')
   async findOne(@Param('id') id: string) {
     const result = await this.usersService.findOne(+id);
@@ -57,6 +64,7 @@ export class UsersController {
     };
   }
 
+  @Roles('ADMIN', 'SUPERADMIN')
   @Patch(':id')
   async update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
     const result = await this.usersService.update(+id, updateUserDto);
@@ -68,6 +76,7 @@ export class UsersController {
     };
   }
 
+  @Roles('ADMIN', 'SUPERADMIN')
   @Delete(':id')
   async remove(@Param('id') id: string) {
     const result = await this.usersService.remove(+id);
@@ -79,6 +88,7 @@ export class UsersController {
     };
   }
 
+  @Roles('ADMIN', 'SUPERADMIN')
   @Patch(':id/roles')
   async assignRoles(
     @Param('id') id: string,

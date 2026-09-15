@@ -19,8 +19,10 @@ import { validateConfiguration } from '@/config/env.validation';
 import { WinstonModule } from 'nest-winston';
 import { loggerConfig } from '@/config/logger.config';
 import { HealthModule } from './modules/health/health.module';
-import { RedisModule } from '@/modules/redis/redis.module';
-import { MailModule } from '@/modules/mail/mail.module';
+import { RedisModule } from './modules/redis/redis.module';
+import { RateLimitModule } from './common/rate-limit/rate-limit.module';
+import { MailModule } from './modules/mail/mail.module';
+import { MessagingModule } from './modules/messaging/messaging.module';
 
 @Module({
   imports: [
@@ -57,15 +59,18 @@ import { MailModule } from '@/modules/mail/mail.module';
     }),
     WinstonModule.forRoot(loggerConfig),
 
-    // Domain Modules
+    // infra modules
     RedisModule,
+    RateLimitModule,
     MailModule,
+    MessagingModule,
+    HealthModule,
+    // Domain Modules
     AuditsModule,
-    RolesModule,
-    PermissionsModule,
     AuthModule,
     UsersModule,
-    HealthModule,
+    PermissionsModule,
+    RolesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -24,6 +24,7 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
 import { Public } from '@/common/decorators/public.decorator';
+import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 import { JwtService } from '@nestjs/jwt';
 
@@ -37,6 +38,13 @@ export class AuthController {
   ) {}
 
   @Public()
+  @RateLimit({
+    strategy: 'sliding-window',
+    type: 'ip',
+    limit: 5,
+    windowMs: 60000,
+    errorMessage: 'Quá nhiều yêu cầu đăng nhập, vui lòng thử lại sau 1 phút',
+  })
   @HttpCode(HttpStatus.OK)
   @Post('login')
   async login(
@@ -84,6 +92,13 @@ export class AuthController {
     };
   }
 
+  @RateLimit({
+    strategy: 'sliding-window',
+    type: 'ip',
+    limit: 5,
+    windowMs: 60000,
+    errorMessage: 'Quá nhiều yêu cầu đăng ký, vui lòng thử lại sau 1 phút',
+  })
   @Public()
   @Post('register')
   async register(@Body() registerDto: RegisterDto) {
@@ -98,6 +113,12 @@ export class AuthController {
 
   // refresh token: revoke old + create new access and refresh
   @Public()
+  @RateLimit({
+    strategy: 'token-bucket',
+    type: 'ip',
+    limit: 10,
+    windowMs: 60000,
+  })
   @Post('refresh')
   async refresh(
     @Req() req: Request,
@@ -200,6 +221,7 @@ export class AuthController {
 
   // reset passord
   @Public()
+  @RateLimit({ strategy: 'sliding-window', limit: 3, windowMs: 60000 })
   @Post('reset-password')
   async resetPassword(@Body() resetDto: ResetPasswordDto) {
     await this.authService.resetPassword(resetDto);
@@ -213,6 +235,7 @@ export class AuthController {
 
   // forgot passord
   @Public()
+  @RateLimit({ strategy: 'sliding-window', limit: 3, windowMs: 60000 })
   @Post('forgot-password')
   async forgotPassword(@Body('email') email: string) {
     await this.authService.forgotPassword(email);
