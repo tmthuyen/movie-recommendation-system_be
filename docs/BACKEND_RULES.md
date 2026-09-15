@@ -28,6 +28,12 @@
 }
 ```
 
+### Tiêu chuẩn Query Params Phân trang
+- Mọi API Get List có phân trang đều dùng chung DTO `PaginationDto`:
+  - `page`: Trang hiện tại (mặc định: 1)
+  - `limit`: Số phần tử trên mỗi trang (mặc định: 10)
+  - `keyword`: (Optional) Dùng để tìm kiếm chung (tìm theo tên, email, title, ... tùy logic API).
+
 ### Thất bại
 - statusCode, message, errorCode, success = false, timestamp, path
 ```

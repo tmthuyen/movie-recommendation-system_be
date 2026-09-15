@@ -11,6 +11,8 @@ import {
   Param,
   Delete,
   UnauthorizedException,
+  Get,
+  Patch,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
@@ -18,6 +20,7 @@ import { SessionService } from './session.service';
 import { LoginRequestDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
 import { Public } from '@/common/decorators/public.decorator';
@@ -230,6 +233,37 @@ export class AuthController {
       success: true,
       statusCode: HttpStatus.OK,
       message: 'Xác thực email thành công',
+      result: {},
+    };
+  }
+
+  @Get('me')
+  async getMe(@Req() req: Request) {
+    const userPayload = req.user as JwtPayload;
+    const user = await this.authService.getMe(Number(userPayload.sub));
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Lấy thông tin thành công',
+      result: user,
+    };
+  }
+
+  @Patch('change-password')
+  async changePassword(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    const userPayload = req.user as JwtPayload;
+    await this.authService.changePassword(Number(userPayload.sub), dto);
+
+    // Xóa cookie refreshToken hiện tại
+    res.clearCookie('refreshToken');
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Đổi mật khẩu thành công. Vui lòng đăng nhập lại.',
       result: {},
     };
   }

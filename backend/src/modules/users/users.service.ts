@@ -6,8 +6,10 @@ import {
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { User, UserStatus } from '@/modules/users/entities/user.entity';
+import { User, UserStatus } from './entities/user.entity';
 import { RolesService } from '@/modules/roles/roles.service';
+import { PaginationDto } from '@/common/dtos/pagination.dto';
+import * as bcrypt from 'bcrypt';
 import { IUserRepository } from './users.repository';
 
 @Injectable()
@@ -34,20 +36,53 @@ export class UsersService {
     return u;
   }
 
-  findAll() {
-    return `This action returns all users`;
+  async findAll(paginationDto: PaginationDto) {
+    const { page = 1, limit = 10, keyword } = paginationDto;
+    const [data, total] = await this.userRepo.findAndCount({
+      page,
+      limit,
+      keyword,
+    });
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} user`;
+  async findOne(id: number) {
+    const user = await this.userRepo.findByIdWithRoles(id);
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+    return user;
   }
 
-  update(id: number, updateUserDto: UpdateUserDto) {
-    return `This action updates a #${id} user`;
+  async update(id: number, updateUserDto: UpdateUserDto) {
+    const user = await this.findOne(id);
+    if (updateUserDto.password) {
+      updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
+    }
+    Object.assign(user, updateUserDto);
+    await this.userRepo.save(user);
+    return user;
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} user`;
+  async remove(id: number) {
+    const user = await this.findOne(id);
+    user.status = UserStatus.BLOCKED;
+    await this.userRepo.save(user);
+    return user;
+  }
+
+  async assignRoles(userId: number, roleIds: number[]) {
+    const user = await this.findByIdWithRoles(userId);
+    const roles = await this.roleSv.findAllByIds(roleIds);
+    user.roles = roles;
+    await this.userRepo.save(user);
+    return user;
   }
 
   // End CRUD basic

@@ -12,6 +12,7 @@ import { User, UserStatus } from '@/modules/users/entities/user.entity';
 import { MailService } from '@/modules/mail/mail.service';
 import { SessionService } from './session.service';
 import { RedisService } from '@/modules/redis/redis.service';
+import { RolesService } from '@/modules/roles/roles.service';
 
 @Injectable()
 export class AuthService {
@@ -21,6 +22,7 @@ export class AuthService {
     private mailService: MailService,
     private sessionService: SessionService,
     private redisService: RedisService,
+    private rolesService: RolesService,
   ) {}
 
   // 1. Xác thực thông tin người dùng
@@ -71,10 +73,14 @@ export class AuthService {
     }
 
     const hashedPassword = await bcrypt.hash(registerDto.password, 10);
-    // Gọi UsersService để lưu vào DB...
+    
+    // Lấy role mặc định 'user' thay vì hardcode id = 1
+    const defaultRole = await this.rolesService.findByCode('user');
+    const roleIds = defaultRole ? [defaultRole.id] : [];
+
     const user = await this.usersService.create({
       ...registerDto,
-      roleIds: [1], // TODO: Configurable default role
+      roleIds,
       password: hashedPassword,
     });
 
@@ -178,5 +184,38 @@ export class AuthService {
 
     await this.sessionService.removeAllSessions(userId);
     await this.redisService.del(`reset_password:${resetDto.token}`);
+  }
+
+  // get me
+  async getMe(userId: number) {
+    const user = await this.usersService.findByIdWithRoles(userId);
+    if (!user) {
+      throw new UnauthorizedException('Người dùng không tồn tại');
+    }
+    const { password, ...result } = user;
+    return result;
+  }
+
+  // change password
+  async changePassword(userId: number, dto: import('./dto/change-password.dto').ChangePasswordDto) {
+    if (dto.newPassword !== dto.confirmPassword) {
+      throw new BadRequestException('Mật khẩu xác nhận không khớp');
+    }
+
+    const user = await this.usersService.findByIdWithRoles(userId);
+    if (!user) {
+      throw new UnauthorizedException('Người dùng không tồn tại');
+    }
+
+    const matchPass = await bcrypt.compare(dto.oldPassword, user.password);
+    if (!matchPass) {
+      throw new BadRequestException('Mật khẩu cũ không chính xác');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
+    await this.usersService.updatePassword(userId, hashedPassword);
+
+    // Logout all as requested by user
+    await this.sessionService.removeAllSessions(userId);
   }
 }

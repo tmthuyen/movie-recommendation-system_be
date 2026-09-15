@@ -7,10 +7,12 @@ import {
   Param,
   Delete,
   HttpStatus,
+  Query,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { PaginationDto } from '@/common/dtos/pagination.dto';
 
 @Controller('users')
 export class UsersController {
@@ -28,19 +30,25 @@ export class UsersController {
   }
 
   @Get()
-  findAll() {
-    const result = this.usersService.findAll();
+  async findAll(@Query() paginationDto: PaginationDto) {
+    const result = await this.usersService.findAll(paginationDto);
     return {
       success: true,
       statusCode: HttpStatus.OK,
       message: 'Lấy danh sách user thành công',
-      result,
+      result: result.data,
+      pagination: {
+        total: result.total,
+        page: result.page,
+        limit: result.limit,
+        totalPages: result.totalPages,
+      },
     };
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    const result = this.usersService.findOne(+id);
+  async findOne(@Param('id') id: string) {
+    const result = await this.usersService.findOne(+id);
     return {
       success: true,
       statusCode: HttpStatus.OK,
@@ -50,8 +58,8 @@ export class UsersController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-    const result = this.usersService.update(+id, updateUserDto);
+  async update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
+    const result = await this.usersService.update(+id, updateUserDto);
     return {
       success: true,
       statusCode: HttpStatus.OK,
@@ -61,12 +69,26 @@ export class UsersController {
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    const result = this.usersService.remove(+id);
+  async remove(@Param('id') id: string) {
+    const result = await this.usersService.remove(+id);
     return {
       success: true,
       statusCode: HttpStatus.OK,
       message: 'Xóa user thành công',
+      result,
+    };
+  }
+
+  @Patch(':id/roles')
+  async assignRoles(
+    @Param('id') id: string,
+    @Body('roleIds') roleIds: number[],
+  ) {
+    const result = await this.usersService.assignRoles(+id, roleIds);
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Cập nhật role cho user thành công',
       result,
     };
   }

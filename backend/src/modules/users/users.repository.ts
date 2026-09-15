@@ -9,6 +9,11 @@ export interface IUserRepository {
   save(user: Partial<User>): Promise<User>;
   findByIdWithRoles(userId: number): Promise<User | null>;
   findByEmail(email: string): Promise<User | null>;
+  findAndCount(options: {
+    page: number;
+    limit: number;
+    keyword?: string;
+  }): Promise<[User[], number]>;
 }
 
 @Injectable()
@@ -33,5 +38,29 @@ export class UserRepository implements IUserRepository {
       where: { email },
       relations: { roles: true },
     });
+  }
+
+  async findAndCount(options: {
+    page: number;
+    limit: number;
+    keyword?: string;
+  }): Promise<[User[], number]> {
+    const { page, limit, keyword } = options;
+    const query = this.userRepo
+      .createQueryBuilder('user')
+      .leftJoinAndSelect('user.roles', 'roles');
+
+    if (keyword) {
+      query.where('user.fullName ILIKE :keyword OR user.email ILIKE :keyword', {
+        keyword: `%${keyword}%`,
+      });
+    }
+
+    query
+      .skip((page - 1) * limit)
+      .take(limit)
+      .orderBy('user.createdAt', 'DESC');
+
+    return query.getManyAndCount();
   }
 }

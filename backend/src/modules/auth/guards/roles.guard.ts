@@ -35,7 +35,9 @@ export class RolesGuard implements CanActivate {
 
     const scopes = user.scopes as string[];
 
-    const hasRole = requiredRoles.some(scope => scopes.includes(scope));
+    const hasRole = requiredRoles.some(scope =>
+      scopes.includes(scope.toUpperCase()),
+    );
 
     if (!hasRole) {
       throw new ForbiddenException('Khong co quyen truy cap');
