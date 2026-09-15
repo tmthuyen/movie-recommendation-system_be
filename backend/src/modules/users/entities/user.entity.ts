@@ -6,13 +6,26 @@ import {
   Index,
   JoinTable,
   ManyToMany,
-  PrimaryGeneratedColumn,
+  OneToMany,
+  PrimaryColumn,
 } from 'typeorm';
+import { Rating } from '@/modules/ratings/entities/rating.entity';
+import { Review } from '@/modules/reviews/entities/review.entity';
+
+export enum UserStatus {
+  UNVERIFIED = 'UNVERIFIED',
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+  BLOCKED = 'BLOCKED',
+}
 
 @Entity('users')
 export class User extends BaseAuditEntity {
-  @PrimaryGeneratedColumn()
+  @PrimaryColumn({ type: 'int' })
   id: number;
+
+  @Column({ type: 'varchar', default: UserStatus.UNVERIFIED })
+  status: UserStatus;
 
   @Index({ unique: true })
   @Column({ nullable: false })
@@ -30,4 +43,10 @@ export class User extends BaseAuditEntity {
   @ManyToMany(() => Role, role => role.users)
   @JoinTable({ name: 'user_roles' })
   roles: Role[];
+
+  @OneToMany(() => Rating, rating => rating.user)
+  ratings: Rating[];
+
+  @OneToMany(() => Review, review => review.user)
+  reviews: Review[];
 }

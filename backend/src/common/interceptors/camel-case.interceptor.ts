@@ -30,7 +30,7 @@ export class CamelCaseInterceptor implements NestInterceptor {
     if (Array.isArray(obj)) {
       return obj.map(val => this.deepCamelCase(val));
     } else if (isPlainObject(obj)) {
-      const camelCased = mapKeys(obj, (key, val) => camelCase(key));
+      const camelCased = mapKeys(obj, (value, key) => camelCase(key));
       return mapValues(camelCased, val => this.deepCamelCase(val));
     }
 

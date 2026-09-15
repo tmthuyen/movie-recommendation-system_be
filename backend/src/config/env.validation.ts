@@ -1,5 +1,12 @@
 import { plainToInstance } from 'class-transformer';
-import { IsNotEmpty, IsNumber, IsString, validateSync } from 'class-validator';
+import {
+  IsBoolean,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  validateSync,
+} from 'class-validator';
 
 export class EnvironmentVariables {
   @IsNotEmpty()
@@ -45,6 +52,28 @@ export class EnvironmentVariables {
   @IsNotEmpty()
   @IsString()
   REFRESH_EXPIRES_IN: string;
+
+  @IsString()
+  REDIS_HOST: string;
+
+  @IsNumber()
+  REDIS_PORT: number;
+
+  @IsOptional()
+  @IsBoolean()
+  RABBITMQ_ENABLED: boolean;
+
+  @IsOptional()
+  @IsString()
+  RABBITMQ_URL: string;
+
+  @IsOptional()
+  @IsString()
+  RABBITMQ_QUEUE: string;
+
+  @IsOptional()
+  @IsBoolean()
+  ASYNC_MAIL_ENABLED: boolean;
 }
 
 export const validateConfiguration = (config: Record<string, unknown>) => {

@@ -11,10 +11,18 @@ import { UsersModule } from '@/modules/users/users.module';
 import { ClsModule } from 'nestjs-cls';
 import { Role } from '@/modules/roles/entities/role.entity';
 import { User } from '@/modules/users/entities/user.entity';
+import { Genre } from '@/modules/movies/entities/genre.entity';
+import { Movie } from '@/modules/movies/entities/movie.entity';
+import { Rating } from '@/modules/ratings/entities/rating.entity';
+import { Review } from '@/modules/reviews/entities/review.entity';
 import { validateConfiguration } from '@/config/env.validation';
 import { WinstonModule } from 'nest-winston';
 import { loggerConfig } from '@/config/logger.config';
 import { HealthModule } from './modules/health/health.module';
+import { RedisModule } from './modules/redis/redis.module';
+import { RateLimitModule } from './common/rate-limit/rate-limit.module';
+import { MailModule } from './modules/mail/mail.module';
+import { MessagingModule } from './modules/messaging/messaging.module';
 
 @Module({
   imports: [
@@ -40,7 +48,7 @@ import { HealthModule } from './modules/health/health.module';
         password: config.get<string>('DB_PASSWORD'),
         database: config.get<string>('DB_NAME'),
         autoLoadEntities: true,
-        entities: [Role, User],
+        entities: [Role, User, Genre, Movie, Rating, Review],
         synchronize: true,
         logging: config.get<string>('mode') === 'development',
       }),
@@ -51,13 +59,18 @@ import { HealthModule } from './modules/health/health.module';
     }),
     WinstonModule.forRoot(loggerConfig),
 
+    // infra modules
+    RedisModule,
+    RateLimitModule,
+    MailModule,
+    MessagingModule,
+    HealthModule,
     // Domain Modules
     AuditsModule,
-    RolesModule,
-    PermissionsModule,
     AuthModule,
     UsersModule,
-    HealthModule,
+    PermissionsModule,
+    RolesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

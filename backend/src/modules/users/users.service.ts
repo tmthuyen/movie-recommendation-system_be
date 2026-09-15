@@ -6,24 +6,29 @@ import {
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { User } from '@/modules/users/entities/user.entity';
+import { User, UserStatus } from './entities/user.entity';
 import { RolesService } from '@/modules/roles/roles.service';
+import { PaginationDto } from '@/common/dtos/pagination.dto';
+import * as bcrypt from 'bcrypt';
+import { IUserRepository } from './users.repository';
+import { EventPublisherService } from '@/modules/messaging/event-publisher.service';
+import { MESSAGE_EVENTS } from '@/modules/messaging/messaging.constants';
 
 @Injectable()
 export class UsersService {
   constructor(
-    @InjectRepository(User) private readonly userRepo: Repository<User>,
+    @Inject(IUserRepository) private readonly userRepo: IUserRepository,
     private readonly roleSv: RolesService,
+    private readonly eventPublisher: EventPublisherService,
   ) {}
 
   // =========
   // CRUD basic
 
   async create(createUserDto: CreateUserDto) {
-    if (await this.findByEmail(createUserDto.email)) {
-      throw new ConflictException('Email is existed');
+    const existingUser = await this.findByEmail(createUserDto.email);
+    if (existingUser) {
+      throw new ConflictException('Email đã tồn tại');
     }
     const r = await this.roleSv.findAllByIds(createUserDto.roleIds);
     const u = await this.userRepo.save({
@@ -31,55 +36,84 @@ export class UsersService {
       roles: r,
     });
 
+    this.eventPublisher.publish(MESSAGE_EVENTS.USER_CREATED, {
+      userId: u.id,
+      email: u.email,
+      fullName: u.fullName,
+      status: u.status,
+    });
+
     return u;
   }
 
-  findAll() {
-    return `This action returns all users`;
+  async findAll(paginationDto: PaginationDto) {
+    const { page = 1, limit = 10, keyword } = paginationDto;
+    const [data, total] = await this.userRepo.findAndCount({
+      page,
+      limit,
+      keyword,
+    });
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} user`;
+  async findOne(id: number) {
+    const user = await this.userRepo.findByIdWithRoles(id);
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+    return user;
   }
 
-  update(id: number, updateUserDto: UpdateUserDto) {
-    return `This action updates a #${id} user`;
+  async update(id: number, updateUserDto: UpdateUserDto) {
+    const user = await this.findOne(id);
+    if (updateUserDto.password) {
+      updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
+    }
+    Object.assign(user, updateUserDto);
+    await this.userRepo.save(user);
+    return user;
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} user`;
+  async remove(id: number) {
+    const user = await this.findOne(id);
+    user.status = UserStatus.BLOCKED;
+    await this.userRepo.save(user);
+    return user;
+  }
+
+  async assignRoles(userId: number, roleIds: number[]) {
+    const user = await this.findByIdWithRoles(userId);
+    const roles = await this.roleSv.findAllByIds(roleIds);
+    user.roles = roles;
+    await this.userRepo.save(user);
+    return user;
   }
 
   // End CRUD basic
   // ===============
 
   async findByIdWithRoles(userId: number): Promise<User> {
-    const user = await this.userRepo.findOne({
-      where: {
-        id: userId,
-      },
-      relations: {
-        roles: true, // Include the roles relation
-      },
-    });
+    const user = await this.userRepo.findByIdWithRoles(userId);
     if (!user) {
       throw new NotFoundException(`User with not found`);
     }
     return user;
   }
 
-  async findByEmail(email: string): Promise<User> {
-    const user = await this.userRepo.findOne({
-      where: {
-        email,
-      },
-      relations: {
-        roles: true, // Include the roles relation
-      },
-    });
-    if (!user) {
-      throw new NotFoundException(`User with not found`);
-    }
-    return user;
+  async findByEmail(email: string): Promise<User | null> {
+    return this.userRepo.findByEmail(email);
+  }
+  async updateStatus(id: number, status: UserStatus) {
+    await this.userRepo.save({ id, status });
+  }
+
+  async updatePassword(id: number, passwordHash: string) {
+    await this.userRepo.save({ id, password: passwordHash });
   }
 }

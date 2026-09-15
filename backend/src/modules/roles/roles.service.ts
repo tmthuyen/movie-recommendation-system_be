@@ -64,7 +64,11 @@ export class RolesService {
     }
 
     return await this.roleRepo.findBy({
-      id: In(ids), // Generates SQL: WHERE id IN (1, 2, 3)
+      id: In(ids),
     });
+  }
+
+  async findByCode(code: string): Promise<Role | null> {
+    return await this.roleRepo.findOneBy({ code });
   }
 }

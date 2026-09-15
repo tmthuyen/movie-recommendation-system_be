@@ -14,10 +14,18 @@
     "experimentalDecorators": true,
     "allowSyntheticDefaultImports": true,
     "paths": {
-      "@/*": ["./src/*"],
-      "@config/*": ["./src/config/*"],
-      "@modules/*": ["./src/modules/*"],
-      "@common/*": ["./src/common/*"]
+      "@/*": [
+        "./src/*"
+      ],
+      "@config/*": [
+        "./src/config/*"
+      ],
+      "@modules/*": [
+        "./src/modules/*"
+      ],
+      "@common/*": [
+        "./src/common/*"
+      ]
     },
     "target": "ES2023",
     "sourceMap": true,
@@ -31,5 +39,12 @@
     "noFallthroughCasesInSwitch": false,
     "strictPropertyInitialization": false
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts"]
+  "typeRoots": [
+    "./node_modules/@types",
+    "./src/types"
+  ],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.d.ts"
+  ]
 }
