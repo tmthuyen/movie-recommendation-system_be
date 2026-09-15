@@ -45,6 +45,12 @@ export class EnvironmentVariables {
   @IsNotEmpty()
   @IsString()
   REFRESH_EXPIRES_IN: string;
+
+  @IsString()
+  REDIS_HOST: string;
+
+  @IsNumber()
+  REDIS_PORT: number;
 }
 
 export const validateConfiguration = (config: Record<string, unknown>) => {

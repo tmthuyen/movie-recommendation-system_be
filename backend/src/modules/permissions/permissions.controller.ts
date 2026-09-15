@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  HttpStatus,
 } from '@nestjs/common';
 import { PermissionsService } from './permissions.service';
 import { CreatePermissionDto } from './dto/create-permission.dto';
@@ -17,17 +18,35 @@ export class PermissionsController {
 
   @Post()
   create(@Body() createPermissionDto: CreatePermissionDto) {
-    return this.permissionsService.create(createPermissionDto);
+    const result = this.permissionsService.create(createPermissionDto);
+    return {
+      success: true,
+      statusCode: HttpStatus.CREATED,
+      message: 'Tạo permission thành công',
+      result,
+    };
   }
 
   @Get()
   findAll() {
-    return this.permissionsService.findAll();
+    const result = this.permissionsService.findAll();
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Lấy danh sách permission thành công',
+      result,
+    };
   }
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.permissionsService.findOne(+id);
+    const result = this.permissionsService.findOne(+id);
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Lấy thông tin permission thành công',
+      result,
+    };
   }
 
   @Patch(':id')
@@ -35,11 +54,23 @@ export class PermissionsController {
     @Param('id') id: string,
     @Body() updatePermissionDto: UpdatePermissionDto,
   ) {
-    return this.permissionsService.update(+id, updatePermissionDto);
+    const result = this.permissionsService.update(+id, updatePermissionDto);
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Cập nhật permission thành công',
+      result,
+    };
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.permissionsService.remove(+id);
+    const result = this.permissionsService.remove(+id);
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Xóa permission thành công',
+      result,
+    };
   }
 }

@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  HttpStatus,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -16,27 +17,57 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
-  create(@Body() createUserDto: CreateUserDto) {
-    return this.usersService.create(createUserDto);
+  async create(@Body() createUserDto: CreateUserDto) {
+    const result = await this.usersService.create(createUserDto);
+    return {
+      success: true,
+      statusCode: HttpStatus.CREATED,
+      message: 'Tạo user thành công',
+      result,
+    };
   }
 
   @Get()
   findAll() {
-    return this.usersService.findAll();
+    const result = this.usersService.findAll();
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Lấy danh sách user thành công',
+      result,
+    };
   }
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.usersService.findOne(+id);
+    const result = this.usersService.findOne(+id);
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Lấy thông tin user thành công',
+      result,
+    };
   }
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-    return this.usersService.update(+id, updateUserDto);
+    const result = this.usersService.update(+id, updateUserDto);
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Cập nhật user thành công',
+      result,
+    };
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.usersService.remove(+id);
+    const result = this.usersService.remove(+id);
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Xóa user thành công',
+      result,
+    };
   }
 }

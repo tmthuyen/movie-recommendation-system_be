@@ -14,5 +14,4 @@ export class LoginRequestDto {
 
 export class LoginResponseDto {
   accessToken: string;
-  refreshToken: string;
 }

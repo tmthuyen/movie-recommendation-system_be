@@ -19,6 +19,8 @@ import { validateConfiguration } from '@/config/env.validation';
 import { WinstonModule } from 'nest-winston';
 import { loggerConfig } from '@/config/logger.config';
 import { HealthModule } from './modules/health/health.module';
+import { RedisModule } from '@/modules/redis/redis.module';
+import { MailModule } from '@/modules/mail/mail.module';
 
 @Module({
   imports: [
@@ -56,6 +58,8 @@ import { HealthModule } from './modules/health/health.module';
     WinstonModule.forRoot(loggerConfig),
 
     // Domain Modules
+    RedisModule,
+    MailModule,
     AuditsModule,
     RolesModule,
     PermissionsModule,

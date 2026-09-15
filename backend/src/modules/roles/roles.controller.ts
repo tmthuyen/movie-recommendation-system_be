@@ -9,6 +9,7 @@ import {
   UseInterceptors,
   ClassSerializerInterceptor,
   UseGuards,
+  HttpStatus,
 } from '@nestjs/common';
 import { RolesService } from './roles.service';
 import { CreateRoleDto } from './dto/create-role.dto';
@@ -28,28 +29,58 @@ export class RolesController {
 
   @UseInterceptors(ClassSerializerInterceptor)
   @Post()
-  async create(@Body() createRoleDto: CreateRoleDto): Promise<Role> {
-    return await this.rolesService.create(createRoleDto);
+  async create(@Body() createRoleDto: CreateRoleDto) {
+    const result = await this.rolesService.create(createRoleDto);
+    return {
+      success: true,
+      statusCode: HttpStatus.CREATED,
+      message: 'Tạo role thành công',
+      result,
+    };
   }
 
   @Get()
   @Roles('ADMIN', 'MANAGER')
-  findAll() {
-    return this.rolesService.findAll();
+  async findAll() {
+    const result = await this.rolesService.findAll();
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Lấy danh sách role thành công',
+      result,
+    };
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.rolesService.findOne(+id);
+  async findOne(@Param('id') id: string) {
+    const result = await this.rolesService.findOne(+id);
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Lấy thông tin role thành công',
+      result,
+    };
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateRoleDto: UpdateRoleDto) {
-    return this.rolesService.update(+id, updateRoleDto);
+  async update(@Param('id') id: string, @Body() updateRoleDto: UpdateRoleDto) {
+    const result = await this.rolesService.update(+id, updateRoleDto);
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Cập nhật role thành công',
+      result,
+    };
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.rolesService.remove(+id);
+  async remove(@Param('id') id: string) {
+    const result = await this.rolesService.remove(+id);
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Xóa role thành công',
+      result,
+    };
   }
 }

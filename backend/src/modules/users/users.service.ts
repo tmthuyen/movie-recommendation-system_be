@@ -6,15 +6,14 @@ import {
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { User } from '@/modules/users/entities/user.entity';
+import { User, UserStatus } from '@/modules/users/entities/user.entity';
 import { RolesService } from '@/modules/roles/roles.service';
+import { IUserRepository } from './users.repository';
 
 @Injectable()
 export class UsersService {
   constructor(
-    @InjectRepository(User) private readonly userRepo: Repository<User>,
+    @Inject(IUserRepository) private readonly userRepo: IUserRepository,
     private readonly roleSv: RolesService,
   ) {}
 
@@ -22,8 +21,9 @@ export class UsersService {
   // CRUD basic
 
   async create(createUserDto: CreateUserDto) {
-    if (await this.findByEmail(createUserDto.email)) {
-      throw new ConflictException('Email is existed');
+    const existingUser = await this.findByEmail(createUserDto.email);
+    if (existingUser) {
+      throw new ConflictException('Email đã tồn tại');
     }
     const r = await this.roleSv.findAllByIds(createUserDto.roleIds);
     const u = await this.userRepo.save({
@@ -54,32 +54,21 @@ export class UsersService {
   // ===============
 
   async findByIdWithRoles(userId: number): Promise<User> {
-    const user = await this.userRepo.findOne({
-      where: {
-        id: userId,
-      },
-      relations: {
-        roles: true, // Include the roles relation
-      },
-    });
+    const user = await this.userRepo.findByIdWithRoles(userId);
     if (!user) {
       throw new NotFoundException(`User with not found`);
     }
     return user;
   }
 
-  async findByEmail(email: string): Promise<User> {
-    const user = await this.userRepo.findOne({
-      where: {
-        email,
-      },
-      relations: {
-        roles: true, // Include the roles relation
-      },
-    });
-    if (!user) {
-      throw new NotFoundException(`User with not found`);
-    }
-    return user;
+  async findByEmail(email: string): Promise<User | null> {
+    return this.userRepo.findByEmail(email);
+  }
+  async updateStatus(id: number, status: UserStatus) {
+    await this.userRepo.save({ id, status });
+  }
+
+  async updatePassword(id: number, passwordHash: string) {
+    await this.userRepo.save({ id, password: passwordHash });
   }
 }

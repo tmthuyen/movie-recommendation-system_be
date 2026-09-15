@@ -1,3 +1,4 @@
+from api.response import success
 from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, Field
@@ -14,6 +15,7 @@ class Pagination(BaseModel):
 
 
 class ApiResponse(BaseModel, Generic[DataT]):
+    success: bool
     statusCode: int
     message: str
     data: DataT | None = None
