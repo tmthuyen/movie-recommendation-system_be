@@ -10,7 +10,7 @@ import {
   PrimaryColumn,
 } from 'typeorm';
 import { Rating } from '@/modules/ratings/entities/rating.entity';
-import { Review } from '@/modules/reviews/entities/review.entity';
+import { Comment } from '@/modules/comments/entities/comment.entity';
 
 export enum UserStatus {
   UNVERIFIED = 'UNVERIFIED',
@@ -31,22 +31,42 @@ export class User extends BaseAuditEntity {
   @Column({ nullable: false })
   email: string;
 
-  @Column({ name: 'phone_number', nullable: true })
-  phoneNumber: string;
+  @Column()
+  password: string;
 
   @Column({ name: 'full_name', nullable: false })
   fullName: string;
 
-  @Column()
-  password: string;
+  @Column({ name: 'phone_number', nullable: true })
+  phoneNumber: string;
 
-  @ManyToMany(() => Role, role => role.users)
-  @JoinTable({ name: 'user_roles' })
+  @Column({ type: 'date', nullable: true })
+  birthDate: Date;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  gender: string;
+
+  @ManyToMany(() => Role, role => role.users, {
+    cascade: ['remove'],
+  })
+  @JoinTable({
+    name: 'user_roles',
+    joinColumn: {
+      name: 'user_id',
+      referencedColumnName: 'id',
+      foreignKeyConstraintName: 'fk_user_roles_user',
+    },
+    inverseJoinColumn: {
+      name: 'role_id',
+      referencedColumnName: 'id',
+      foreignKeyConstraintName: 'fk_user_roles_role',
+    },
+  })
   roles: Role[];
 
   @OneToMany(() => Rating, rating => rating.user)
   ratings: Rating[];
 
-  @OneToMany(() => Review, review => review.user)
-  reviews: Review[];
+  @OneToMany(() => Comment, comment => comment.user)
+  comments: Comment[];
 }

@@ -1,4 +1,10 @@
-import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 import { User } from '@/modules/users/entities/user.entity';
 import { Movie } from '@/modules/movies/entities/movie.entity';
 
@@ -14,10 +20,18 @@ export class Rating {
   timestamp: Date;
 
   @ManyToOne(() => User, user => user.ratings, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'user_id' })
+  @JoinColumn({
+    name: 'user_id',
+    referencedColumnName: 'id',
+    foreignKeyConstraintName: 'fk_rating_user_id',
+  })
   user: User;
 
   @ManyToOne(() => Movie, movie => movie.ratings, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'tmdb_id', referencedColumnName: 'tmdbId' })
+  @JoinColumn({
+    name: 'movie_id',
+    referencedColumnName: 'id',
+    foreignKeyConstraintName: 'fk_rating_movie_id',
+  })
   movie: Movie;
 }

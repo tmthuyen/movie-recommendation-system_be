@@ -12,10 +12,9 @@ import { AuthModule } from '@/modules/auth/auth.module';
 import { UsersModule } from '@/modules/users/users.module';
 import { Role } from '@/modules/roles/entities/role.entity';
 import { User } from '@/modules/users/entities/user.entity';
-import { Genre } from '@/modules/movies/entities/genre.entity';
+import { Genre } from '@/modules/genres/entities/genre.entity';
 import { Movie } from '@/modules/movies/entities/movie.entity';
 import { Rating } from '@/modules/ratings/entities/rating.entity';
-import { Review } from '@/modules/reviews/entities/review.entity';
 import { HealthModule } from './modules/health/health.module';
 import { validateConfiguration } from '@/config/env.validation';
 import { loggerConfig } from '@/config/logger.config';
@@ -23,6 +22,16 @@ import { RateLimitModule } from './common/rate-limit/rate-limit.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
 import { MailModule } from './infrastructure/mail/mail.module';
 import { MessagingModule } from './infrastructure/messaging/messaging.module';
+import { CommentsModule } from './modules/comments/comments.module';
+import { GenresModule } from './modules/genres/genres.module';
+import { CountriesModule } from './modules/countries/countries.module';
+import { PeoplesModule } from './modules/peoples/peoples.module';
+import { MoviesModule } from './modules/movies/movies.module';
+import { RatingsModule } from './modules/ratings/ratings.module';
+import { Comment } from './modules/comments/entities/comment.entity';
+import { People } from './modules/peoples/entities/people.entity';
+import { Country } from './modules/countries/entities/country.entity';
+import { MoviePeople } from './modules/movies/entities/movie-people.entity';
 
 @Module({
   imports: [
@@ -48,7 +57,17 @@ import { MessagingModule } from './infrastructure/messaging/messaging.module';
         password: config.get<string>('DB_PASSWORD'),
         database: config.get<string>('DB_NAME'),
         autoLoadEntities: true,
-        entities: [Role, User, Genre, Movie, Rating, Review],
+        entities: [
+          Role,
+          User,
+          Movie,
+          People,
+          MoviePeople,
+          Country,
+          Genre,
+          Rating,
+          Comment,
+        ],
         synchronize: true,
         logging: config.get<string>('mode') === 'development',
       }),
@@ -71,6 +90,12 @@ import { MessagingModule } from './infrastructure/messaging/messaging.module';
     UsersModule,
     PermissionsModule,
     RolesModule,
+    CommentsModule,
+    GenresModule,
+    CountriesModule,
+    PeoplesModule,
+    MoviesModule,
+    RatingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
