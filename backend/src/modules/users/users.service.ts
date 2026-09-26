@@ -11,8 +11,8 @@ import { RolesService } from '@/modules/roles/roles.service';
 import { PaginationDto } from '@/common/dtos/pagination.dto';
 import * as bcrypt from 'bcrypt';
 import { IUserRepository } from './users.repository';
-import { EventPublisherService } from '@/modules/messaging/event-publisher.service';
-import { MESSAGE_EVENTS } from '@/modules/messaging/messaging.constants';
+import { EventPublisherService } from '@/infrastructure/messaging/event-publisher.service';
+import { MESSAGE_EVENTS } from '@/infrastructure/messaging/messaging.constants';
 
 @Injectable()
 export class UsersService {

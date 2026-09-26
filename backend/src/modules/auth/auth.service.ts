@@ -9,12 +9,12 @@ import * as bcrypt from 'bcrypt';
 import { LoginRequestDto } from './dto/login.dto';
 import { RegisterDto } from '@/modules/auth/dto/register.dto';
 import { User, UserStatus } from '@/modules/users/entities/user.entity';
-import { MailService } from '@/modules/mail/mail.service';
+import { MailService } from '@/infrastructure/mail/mail.service';
 import { SessionService } from './session.service';
-import { RedisService } from '@/modules/redis/redis.service';
+import { RedisService } from '@/infrastructure/redis/redis.service';
 import { RolesService } from '@/modules/roles/roles.service';
-import { EventPublisherService } from '@/modules/messaging/event-publisher.service';
-import { MESSAGE_EVENTS } from '@/modules/messaging/messaging.constants';
+import { EventPublisherService } from '@/infrastructure/messaging/event-publisher.service';
+import { MESSAGE_EVENTS } from '@/infrastructure/messaging/messaging.constants';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()

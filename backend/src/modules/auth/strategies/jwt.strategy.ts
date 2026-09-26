@@ -3,7 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
-import { RedisService } from '@/modules/redis/redis.service';
+import { RedisService } from '@/infrastructure/redis/redis.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {

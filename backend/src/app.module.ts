@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { ClsModule } from 'nestjs-cls';
+import { WinstonModule } from 'nest-winston';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from '@/app.controller';
@@ -8,21 +10,19 @@ import { PermissionsModule } from '@/modules/permissions/permissions.module';
 import { AuditsModule } from '@common/audits/audits.module';
 import { AuthModule } from '@/modules/auth/auth.module';
 import { UsersModule } from '@/modules/users/users.module';
-import { ClsModule } from 'nestjs-cls';
 import { Role } from '@/modules/roles/entities/role.entity';
 import { User } from '@/modules/users/entities/user.entity';
 import { Genre } from '@/modules/movies/entities/genre.entity';
 import { Movie } from '@/modules/movies/entities/movie.entity';
 import { Rating } from '@/modules/ratings/entities/rating.entity';
 import { Review } from '@/modules/reviews/entities/review.entity';
-import { validateConfiguration } from '@/config/env.validation';
-import { WinstonModule } from 'nest-winston';
-import { loggerConfig } from '@/config/logger.config';
 import { HealthModule } from './modules/health/health.module';
-import { RedisModule } from './modules/redis/redis.module';
+import { validateConfiguration } from '@/config/env.validation';
+import { loggerConfig } from '@/config/logger.config';
 import { RateLimitModule } from './common/rate-limit/rate-limit.module';
-import { MailModule } from './modules/mail/mail.module';
-import { MessagingModule } from './modules/messaging/messaging.module';
+import { RedisModule } from './infrastructure/redis/redis.module';
+import { MailModule } from './infrastructure/mail/mail.module';
+import { MessagingModule } from './infrastructure/messaging/messaging.module';
 
 @Module({
   imports: [

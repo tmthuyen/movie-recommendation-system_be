@@ -25,6 +25,9 @@
       ],
       "@common/*": [
         "./src/common/*"
+      ],
+      "@infrastructure/*": [
+        "./src/infrastructure/*"
       ]
     },
     "target": "ES2023",
