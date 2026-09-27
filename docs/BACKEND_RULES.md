@@ -53,6 +53,8 @@
 
 - Tuyệt đối không dùng Error lỏ nha
 
+- TẤT CẢ CÁC EXCEPTION MESSAGE (Thông báo lỗi) trả về cho client PHẢI BẰNG TIẾNG VIỆT, TUYỆT ĐỐI CẤM DÙNG TIẾNG ANH (Ví dụ: `throw new BadRequestException('Quốc gia không tồn tại')`).
+
 ## Auth
 
 - Login: data: { acccessToken, refreshToken }, refreshToken httpOnly cookie

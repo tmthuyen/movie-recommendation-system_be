@@ -12,6 +12,10 @@ import {
   InteractionScoreMap,
 } from '@/modules/interactions/entities/interaction.entity';
 import { Movie } from './entities/movie.entity';
+import { Genre } from '@/modules/genres/entities/genre.entity';
+import { Country } from '@/modules/countries/entities/country.entity';
+import { People } from '@/modules/peoples/entities/people.entity';
+import { BadRequestException } from '@nestjs/common';
 
 @Injectable()
 export class MoviesService {
@@ -33,15 +37,49 @@ export class MoviesService {
     return entity;
   }
 
+  private async validateRelations(dto: any) {
+    const { genreIds, countryId, peopleIds } = dto;
+    if (genreIds && genreIds.length > 0) {
+      const count = await this.dataSource.getRepository(Genre).count({
+        where: genreIds.map((id: number) => ({ id })),
+      });
+      if (count !== genreIds.length)
+        throw new BadRequestException('Một hoặc nhiều thể loại không tồn tại');
+    }
+    if (countryId) {
+      const exists = await this.dataSource
+        .getRepository(Country)
+        .findOne({ where: { id: countryId } });
+      if (!exists) throw new BadRequestException('Quốc gia không tồn tại');
+    }
+    if (peopleIds && peopleIds.length > 0) {
+      const count = await this.dataSource.getRepository(People).count({
+        where: peopleIds.map((id: number) => ({ id })),
+      });
+      if (count !== peopleIds.length)
+        throw new BadRequestException('Một hoặc nhiều nhân vật không tồn tại');
+    }
+  }
+
   async create(createMovieDto: CreateMovieDto) {
+    await this.validateRelations(createMovieDto);
     const entity = this.mapDtoToEntity(createMovieDto);
     const saved = await this.repo.create(entity);
 
+    // Fetch full movie with relations for queue
+    const fullMovie = await this.repo.findById(saved.id);
+
     // Publish movie.created event
-    this.eventPublisher.publish('movie.created', {
-      movieId: saved.id,
-      title: saved.title,
-    });
+    if (fullMovie) {
+      this.eventPublisher.publish('movie.created', {
+        movieId: fullMovie.id,
+        title: fullMovie.title,
+        titleVi: fullMovie.titleVi,
+        overview: fullMovie.overview,
+        overviewVi: fullMovie.overviewVi,
+        genres: fullMovie.genres?.map(g => g.name) || [],
+      });
+    }
 
     return saved;
   }
@@ -53,13 +91,14 @@ export class MoviesService {
   async findOne(id: number) {
     const movie = await this.repo.findById(id);
     if (!movie) {
-      throw new NotFoundException(`Movie with ID ${id} not found`);
+      throw new NotFoundException(`Không tìm thấy phim với ID ${id}`);
     }
     return movie;
   }
 
   async update(id: number, updateMovieDto: UpdateMovieDto) {
     const movie = await this.findOne(id); // Check exists
+    await this.validateRelations(updateMovieDto);
     const entity = this.mapDtoToEntity(updateMovieDto);
 
     // Check if relevant fields changed
@@ -86,10 +125,17 @@ export class MoviesService {
     const updated = await this.repo.update(movie.id, entity);
 
     if (hasChanges && updated) {
-      this.eventPublisher.publish('movie.updated', {
-        movieId: updated.id,
-        title: updated.title,
-      });
+      const fullMovie = await this.repo.findById(updated.id);
+      if (fullMovie) {
+        this.eventPublisher.publish('movie.updated', {
+          movieId: fullMovie.id,
+          title: fullMovie.title,
+          titleVi: fullMovie.titleVi,
+          overview: fullMovie.overview,
+          overviewVi: fullMovie.overviewVi,
+          genres: fullMovie.genres?.map(g => g.name) || [],
+        });
+      }
     }
 
     return updated;

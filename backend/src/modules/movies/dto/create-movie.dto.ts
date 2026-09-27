@@ -16,18 +16,30 @@ export class CreateMovieDto {
   @MaxLength(255)
   title: string;
 
-  @ApiProperty({ example: 'Ma Trận', description: 'Tên tiếng Việt', required: false })
+  @ApiProperty({
+    example: 'Ma Trận',
+    description: 'Tên tiếng Việt',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   @MaxLength(255)
   titleVi?: string;
 
-  @ApiProperty({ example: 'A computer hacker learns from mysterious rebels about the true nature of his reality...', required: false })
+  @ApiProperty({
+    example:
+      'A computer hacker learns from mysterious rebels about the true nature of his reality...',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   overview?: string;
 
-  @ApiProperty({ example: 'Một hacker máy tính học được từ những phiến quân bí ẩn về bản chất thực sự của thực tại...', required: false })
+  @ApiProperty({
+    example:
+      'Một hacker máy tính học được từ những phiến quân bí ẩn về bản chất thực sự của thực tại...',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   overviewVi?: string;
@@ -93,7 +105,11 @@ export class CreateMovieDto {
   @IsNumber()
   voteCount?: number;
 
-  @ApiProperty({ example: [28, 878], description: 'Mảng các ID thể loại', required: false })
+  @ApiProperty({
+    example: [28, 878],
+    description: 'Mảng các ID thể loại',
+    required: false,
+  })
   @IsOptional()
   @IsArray()
   @IsNumber({}, { each: true })
@@ -104,7 +120,11 @@ export class CreateMovieDto {
   @IsNumber()
   countryId?: number;
 
-  @ApiProperty({ example: [1, 2, 3], description: 'Mảng các ID diễn viên/đạo diễn', required: false })
+  @ApiProperty({
+    example: [1, 2, 3],
+    description: 'Mảng các ID diễn viên/đạo diễn',
+    required: false,
+  })
   @IsOptional()
   @IsArray()
   @IsNumber({}, { each: true })

@@ -70,7 +70,10 @@ export class MovieRepository implements IMovieRepository {
   }
 
   async update(id: number, movie: Partial<Movie>): Promise<Movie | null> {
-    await this.repo.update(id, movie);
+    const existing = await this.findById(id);
+    if (!existing) return null;
+    const updated = this.repo.merge(existing, movie);
+    await this.repo.save(updated);
     return this.findById(id);
   }
 

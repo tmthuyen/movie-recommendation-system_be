@@ -12,11 +12,11 @@ export class GenresService {
   ) {}
 
   async create(createGenreDto: CreateGenreDto) {
-    return this.repo.create(createGenreDto);
+    return await this.repo.create(createGenreDto);
   }
 
   async findAll(paginationDto: PaginationDto) {
-    return this.repo.findAll(paginationDto);
+    return await this.repo.findAll(paginationDto);
   }
 
   async findOne(id: number) {
@@ -29,7 +29,7 @@ export class GenresService {
 
   async update(id: number, updateGenreDto: UpdateGenreDto) {
     const genre = await this.findOne(id); // Check exists
-    return this.repo.update(genre.id, updateGenreDto);
+    return await this.repo.update(genre.id, updateGenreDto);
   }
 
   async remove(id: number) {
