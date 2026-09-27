@@ -16,6 +16,8 @@ import { UpdateInteractionDto } from './dto/update-interaction.dto';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { PaginationDto } from '@/common/dtos/pagination.dto';
+import { type Request } from 'express';
+import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
 
 @ApiTags('Interactions')
 @Controller('interactions')
@@ -26,8 +28,11 @@ export class InteractionsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Thêm tương tác mới (Yêu cầu đăng nhập)' })
-  create(@Req() req: any, @Body() createInteractionDto: CreateInteractionDto) {
-    const userId = req.user.id;
+  create(
+    @Req() req: Request,
+    @Body() createInteractionDto: CreateInteractionDto,
+  ) {
+    const { sub: userId } = req.user as JwtPayload;
     return this.interactionsService.create(userId, createInteractionDto);
   }
 

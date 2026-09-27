@@ -19,6 +19,8 @@ import { PaginationDto } from '@/common/dtos/pagination.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles } from '@/common/decorators/roles.decorator';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { type Request } from 'express';
+import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
 
 @ApiTags('Users')
 @Controller('users')
@@ -29,8 +31,8 @@ export class UsersController {
 
   @Get('me')
   @ApiOperation({ summary: 'Lấy thông tin profile cá nhân' })
-  async getProfile(@Req() req: any) {
-    const userId = req.user.id;
+  async getProfile(@Req() req: Request) {
+    const { sub: userId } = req.user as JwtPayload;
     const result = await this.usersService.findOne(userId);
     return {
       success: true,
@@ -45,10 +47,10 @@ export class UsersController {
     summary: 'Cập nhật thông tin profile cá nhân (kể cả preferences)',
   })
   async updateProfile(
-    @Req() req: any,
+    @Req() req: Request,
     @Body() updateProfileDto: UpdateProfileDto,
   ) {
-    const userId = req.user.id;
+    const { sub: userId } = req.user as JwtPayload;
     const result = await this.usersService.update(userId, updateProfileDto);
     return {
       success: true,

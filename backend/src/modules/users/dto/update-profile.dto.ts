@@ -27,10 +27,10 @@ export class UpdateProfileDto {
   @IsString()
   gender?: string;
 
-  @ApiProperty({ 
-    required: false, 
+  @ApiProperty({
+    required: false,
     description: 'Dữ liệu sở thích của người dùng (thể loại, đạo diễn,...)',
-    example: { genres: ['Action', 'Sci-Fi'] } 
+    example: { genres: ['Action', 'Sci-Fi'] },
   })
   @IsOptional()
   @IsObject()

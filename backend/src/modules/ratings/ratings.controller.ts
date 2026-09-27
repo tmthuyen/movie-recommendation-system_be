@@ -17,6 +17,8 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { Roles } from '@/common/decorators/roles.decorator';
 import { PaginationDto } from '@/common/dtos/pagination.dto';
+import { type Request } from 'express';
+import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
 
 @ApiTags('Ratings')
 @Controller('ratings')
@@ -27,9 +29,9 @@ export class RatingsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Thêm đánh giá mới (Yêu cầu đăng nhập)' })
-  create(@Req() req: any, @Body() createRatingDto: CreateRatingDto) {
-    const userId = req.user.id;
-    return this.ratingsService.create(userId, createRatingDto);
+  create(@Req() req: Request, @Body() createRatingDto: CreateRatingDto) {
+    const { sub } = req.user as JwtPayload;
+    return this.ratingsService.create(sub, createRatingDto);
   }
 
   @Get()

@@ -17,6 +17,8 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { Roles } from '@/common/decorators/roles.decorator';
 import { PaginationDto } from '@/common/dtos/pagination.dto';
+import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
+import type { Request } from 'express';
 
 @ApiTags('Comments')
 @Controller('comments')
@@ -27,9 +29,9 @@ export class CommentsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Thêm bình luận mới (Yêu cầu đăng nhập)' })
-  create(@Req() req: any, @Body() createCommentDto: CreateCommentDto) {
-    const userId = req.user.id;
-    return this.commentsService.create(userId, createCommentDto);
+  create(@Req() req: Request, @Body() createCommentDto: CreateCommentDto) {
+    const { sub } = req.user as JwtPayload;
+    return this.commentsService.create(sub, createCommentDto);
   }
 
   @Get()
