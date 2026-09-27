@@ -28,10 +28,18 @@ class Settings(BaseSettings):
 
     vector_db_url: str = "http://localhost:6333"
     vector_db_api_key: str | None = None
-    vector_db_provider: str = "qdrant"
+    # Set to "chroma" | "qdrant" | "redis" | "memory"
+    vector_db_provider: str = "chroma"
     vector_collection: str = "movies"
+    # Dimension of paraphrase-multilingual-MiniLM-L12-v2 (multilingual, 384-dim)
     vector_size: int = 384
-    vector_db_enabled: bool = False
+    vector_db_enabled: bool = True
+
+    # ChromaDB — persistent storage directory (relative to ai-service working dir)
+    chroma_persist_dir: str = "./data/chroma_db"
+
+    # SBERT model used for embedding (also referenced by build_vector_db.py)
+    embedding_model_name: str = "paraphrase-multilingual-MiniLM-L12-v2"
 
     model_train_cron: str = "0 3 * * 0"
     model_train_enabled: bool = False

@@ -61,13 +61,8 @@ pycache/
 ai-service/__pycache__/
 ai-service/.env
 
-<<<<<<< HEAD
+*.csv
+
 ai-service/data/
-=======
-
-
-# agent ignore
 .agent/skills/
-
 tsconfig.build.tsbuildinfo
->>>>>>> dev
