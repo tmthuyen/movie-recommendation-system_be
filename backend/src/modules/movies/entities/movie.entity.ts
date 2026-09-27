@@ -1,18 +1,21 @@
 import {
   Column,
   Entity,
+  Index,
   JoinColumn,
   JoinTable,
   ManyToMany,
   ManyToOne,
   OneToMany,
   PrimaryColumn,
+  PrimaryGeneratedColumn,
 } from 'typeorm';
 import { Rating } from '@/modules/ratings/entities/rating.entity';
 import { Comment } from '@/modules/comments/entities/comment.entity';
 import { Country } from '@/modules/countries/entities/country.entity';
 import { MoviePeople } from '@/modules/movies/entities/movie-people.entity';
 import { Genre } from '@/modules/genres/entities/genre.entity';
+import { BaseAuditEntity } from '@/common/audits/baseaudit.entity';
 
 /*
 tmdb_id,title_vi,overview_vi,genres,release_date,poster_path,adult,backdrop_path,
@@ -37,14 +40,22 @@ is_ai_translated
 */
 
 @Entity('movies')
-export class Movie {
-  @PrimaryColumn({ name: 'id', type: 'bigint' })
+export class Movie extends BaseAuditEntity {
+  @PrimaryGeneratedColumn({ name: 'id', type: 'bigint' })
   id: number;
 
-  @Column({ name: 'tmdb_id', type: 'bigint', nullable: true })
+  @Index('IDX_MOVIES_TMDB_ID')
+  @Column({ name: 'tmdb_id', type: 'bigint', nullable: true, unique: true })
   tmdbId: number;
 
-  @Column({ name: 'imdb_id', type: 'varchar', length: 50, nullable: true })
+  @Index('IDX_MOVIES_IMDB_ID')
+  @Column({
+    name: 'imdb_id',
+    type: 'varchar',
+    length: 50,
+    nullable: true,
+    unique: true,
+  })
   imdbId: string;
 
   @Column({ name: 'title', type: 'varchar', length: 255, nullable: true })
@@ -59,6 +70,7 @@ export class Movie {
   @Column({ name: 'overview_vi', type: 'text', nullable: true })
   overviewVi: string;
 
+  @Index('IDX_MOVIES_RELEASE_DATE')
   @Column({ name: 'release_date', type: 'varchar', length: 20, nullable: true })
   releaseDate: string;
 
@@ -113,6 +125,7 @@ export class Movie {
   @Column({ name: 'vote_count', type: 'bigint', default: 0 })
   voteCount: number;
 
+  @Index('IDX_MOVIES_VIEW_COUNT')
   @Column({ name: 'view_count', type: 'bigint', default: 0 })
   viewCount: number;
 

@@ -3,7 +3,7 @@ import { RedisService } from '@/infrastructure/redis/redis.service';
 import * as crypto from 'crypto';
 
 export interface SessionData {
-  userId: number;
+  userId: string;
   refreshToken: string;
   deviceId: string;
   ip: string;
@@ -18,7 +18,7 @@ export interface SessionData {
 export class SessionService {
   constructor(private readonly redisService: RedisService) {}
 
-  private getSessionKey(userId: number, deviceId: string): string {
+  private getSessionKey(userId: string, deviceId: string): string {
     return `session:${userId}:${deviceId}`;
   }
 
@@ -26,12 +26,12 @@ export class SessionService {
     return crypto.randomBytes(40).toString('hex');
   }
 
-  generateRefreshToken(userId: number): string {
+  generateRefreshToken(userId: string): string {
     return `${userId}.${crypto.randomBytes(40).toString('hex')}`;
   }
 
   async createSession(
-    userId: number,
+    userId: string,
     ip: string,
     userAgent: string,
     deviceId?: string,
@@ -63,7 +63,7 @@ export class SessionService {
   }
 
   async getSession(
-    userId: number,
+    userId: string,
     deviceId: string,
   ): Promise<SessionData | null> {
     const data = await this.redisService.get(
@@ -74,7 +74,7 @@ export class SessionService {
   }
 
   async updateLastActivity(
-    userId: number,
+    userId: string,
     deviceId: string,
     sessionData: SessionData,
   ): Promise<void> {
@@ -91,7 +91,7 @@ export class SessionService {
     }
   }
 
-  async removeSession(userId: number, deviceId: string): Promise<void> {
+  async removeSession(userId: string, deviceId: string): Promise<void> {
     const session = await this.getSession(userId, deviceId);
     if (session && session.jti) {
       await this.redisService.set(`blacklist:${session.jti}`, 'true', 3600); // Blacklist for 1h
@@ -99,7 +99,7 @@ export class SessionService {
     await this.redisService.del(this.getSessionKey(userId, deviceId));
   }
 
-  async removeAllSessions(userId: number): Promise<void> {
+  async removeAllSessions(userId: string): Promise<void> {
     const keys = await this.redisService.getKeys(`session:${userId}:*`);
     for (const key of keys) {
       const data = await this.redisService.get(key);

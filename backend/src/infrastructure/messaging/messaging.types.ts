@@ -9,19 +9,19 @@ export interface EventEnvelope<TPayload> {
 }
 
 export interface UserCreatedPayload {
-  userId: number;
+  userId: string;
   email: string;
   fullName: string;
   status: string;
 }
 
 export interface EmailVerificationRequestedPayload {
-  userId: number;
+  userId: string;
   email: string;
   verificationToken: string;
 }
 
 export interface UserEmailVerifiedPayload {
-  userId: number;
+  userId: string;
   email?: string;
 }

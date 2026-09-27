@@ -32,6 +32,7 @@ import { Comment } from './modules/comments/entities/comment.entity';
 import { People } from './modules/peoples/entities/people.entity';
 import { Country } from './modules/countries/entities/country.entity';
 import { MoviePeople } from './modules/movies/entities/movie-people.entity';
+import { SeedRating } from './modules/ratings/entities/seed-rating.entity';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { MoviePeople } from './modules/movies/entities/movie-people.entity';
           Genre,
           Rating,
           Comment,
+          SeedRating,
         ],
         synchronize: true,
         logging: config.get<string>('mode') === 'development',

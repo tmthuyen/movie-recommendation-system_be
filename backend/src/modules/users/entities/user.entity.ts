@@ -8,6 +8,7 @@ import {
   ManyToMany,
   OneToMany,
   PrimaryColumn,
+  PrimaryGeneratedColumn,
 } from 'typeorm';
 import { Rating } from '@/modules/ratings/entities/rating.entity';
 import { Comment } from '@/modules/comments/entities/comment.entity';
@@ -21,8 +22,8 @@ export enum UserStatus {
 
 @Entity('users')
 export class User extends BaseAuditEntity {
-  @PrimaryColumn({ type: 'int' })
-  id: number;
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
 
   @Column({ type: 'varchar', default: UserStatus.UNVERIFIED })
   status: UserStatus;

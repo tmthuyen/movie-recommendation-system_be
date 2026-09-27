@@ -55,7 +55,7 @@ export class UsersController {
   @Roles('ADMIN', 'SUPERADMIN')
   @Get(':id')
   async findOne(@Param('id') id: string) {
-    const result = await this.usersService.findOne(+id);
+    const result = await this.usersService.findOne(id);
     return {
       success: true,
       statusCode: HttpStatus.OK,
@@ -67,7 +67,7 @@ export class UsersController {
   @Roles('ADMIN', 'SUPERADMIN')
   @Patch(':id')
   async update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-    const result = await this.usersService.update(+id, updateUserDto);
+    const result = await this.usersService.update(id, updateUserDto);
     return {
       success: true,
       statusCode: HttpStatus.OK,
@@ -79,7 +79,7 @@ export class UsersController {
   @Roles('ADMIN', 'SUPERADMIN')
   @Delete(':id')
   async remove(@Param('id') id: string) {
-    const result = await this.usersService.remove(+id);
+    const result = await this.usersService.remove(id);
     return {
       success: true,
       statusCode: HttpStatus.OK,
@@ -94,7 +94,7 @@ export class UsersController {
     @Param('id') id: string,
     @Body('roleIds') roleIds: number[],
   ) {
-    const result = await this.usersService.assignRoles(+id, roleIds);
+    const result = await this.usersService.assignRoles(id, roleIds);
     return {
       success: true,
       statusCode: HttpStatus.OK,

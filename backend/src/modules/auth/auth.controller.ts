@@ -132,9 +132,9 @@ export class AuthController {
     }
 
     const userIdStr = refreshToken.split('.')[0];
-    const userId = Number(userIdStr);
+    const userId = userIdStr;
 
-    if (!userId || isNaN(userId)) {
+    if (!userId) {
       throw new UnauthorizedException('Token không hợp lệ');
     }
 
@@ -172,7 +172,7 @@ export class AuthController {
     const deviceIdCookie = req.cookies?.deviceId;
 
     if (user && deviceIdCookie) {
-      await this.sessionService.removeSession(Number(user.sub), deviceIdCookie);
+      await this.sessionService.removeSession(user.sub, deviceIdCookie);
     }
 
     res.clearCookie('refreshToken');
@@ -192,7 +192,7 @@ export class AuthController {
   ) {
     const user = req.user as JwtPayload;
     if (user) {
-      await this.sessionService.removeAllSessions(Number(user.sub));
+      await this.sessionService.removeAllSessions(user.sub);
     }
     res.clearCookie('refreshToken');
     return {
@@ -209,7 +209,7 @@ export class AuthController {
   async logoutDevice(@Req() req: Request, @Param('deviceId') deviceId: string) {
     const user = req.user as JwtPayload;
     if (user) {
-      await this.sessionService.removeSession(Number(user.sub), deviceId);
+      await this.sessionService.removeSession(user.sub, deviceId);
     }
     return {
       success: true,
@@ -263,7 +263,7 @@ export class AuthController {
   @Get('me')
   async getMe(@Req() req: Request) {
     const userPayload = req.user as JwtPayload;
-    const user = await this.authService.getMe(Number(userPayload.sub));
+    const user = await this.authService.getMe(userPayload.sub);
     return {
       success: true,
       statusCode: HttpStatus.OK,
@@ -279,7 +279,7 @@ export class AuthController {
     @Body() dto: ChangePasswordDto,
   ) {
     const userPayload = req.user as JwtPayload;
-    await this.authService.changePassword(Number(userPayload.sub), dto);
+    await this.authService.changePassword(userPayload.sub, dto);
 
     // Xóa cookie refreshToken hiện tại
     res.clearCookie('refreshToken');

@@ -8,17 +8,15 @@ import {
 } from 'typeorm';
 import { User } from '@/modules/users/entities/user.entity';
 import { Movie } from '@/modules/movies/entities/movie.entity';
+import { BaseAuditEntity } from '@/common/audits/baseaudit.entity';
 
 @Entity('comments')
-export class Comment {
+export class Comment extends BaseAuditEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
   @Column({ type: 'text' })
   content: string;
-
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
 
   @ManyToOne(() => User, user => user.comments, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })

@@ -1,20 +1,15 @@
+import { BaseAuditEntity } from '@/common/audits/baseaudit.entity';
 import { Movie } from '@/modules/movies/entities/movie.entity';
 import { People } from '@/modules/peoples/entities/people.entity';
-import {
-  Column,
-  Entity,
-  JoinColumn,
-  ManyToOne,
-  PrimaryGeneratedColumn,
-} from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, PrimaryColumn } from 'typeorm';
 
 @Entity('movie_peoples')
-export class MoviePeople {
-  @PrimaryGeneratedColumn({
-    name: 'id',
-    type: 'bigint',
-  })
-  id: number;
+export class MoviePeople extends BaseAuditEntity {
+  @PrimaryColumn({ name: 'movie_id', type: 'bigint' })
+  movieId: number;
+
+  @PrimaryColumn({ name: 'people_id', type: 'bigint' })
+  peopleId: number;
 
   @ManyToOne(() => Movie, movie => movie.moviePeoples, { cascade: ['remove'] })
   @JoinColumn({

@@ -7,7 +7,7 @@ export const IUserRepository = Symbol('IUserRepository');
 
 export interface IUserRepository {
   save(user: Partial<User>): Promise<User>;
-  findByIdWithRoles(userId: number): Promise<User | null>;
+  findByIdWithRoles(userId: string): Promise<User | null>;
   findByEmail(email: string): Promise<User | null>;
   findAndCount(options: {
     page: number;
@@ -26,7 +26,7 @@ export class UserRepository implements IUserRepository {
     return this.userRepo.save(user);
   }
 
-  async findByIdWithRoles(userId: number): Promise<User | null> {
+  async findByIdWithRoles(userId: string): Promise<User | null> {
     return this.userRepo.findOne({
       where: { id: userId },
       relations: { roles: true },

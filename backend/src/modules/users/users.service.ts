@@ -62,7 +62,7 @@ export class UsersService {
     };
   }
 
-  async findOne(id: number) {
+  async findOne(id: string) {
     const user = await this.userRepo.findByIdWithRoles(id);
     if (!user) {
       throw new NotFoundException(`User with ID ${id} not found`);
@@ -70,7 +70,7 @@ export class UsersService {
     return user;
   }
 
-  async update(id: number, updateUserDto: UpdateUserDto) {
+  async update(id: string, updateUserDto: UpdateUserDto) {
     const user = await this.findOne(id);
     if (updateUserDto.password) {
       updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
@@ -80,14 +80,14 @@ export class UsersService {
     return user;
   }
 
-  async remove(id: number) {
+  async remove(id: string) {
     const user = await this.findOne(id);
     user.status = UserStatus.BLOCKED;
     await this.userRepo.save(user);
     return user;
   }
 
-  async assignRoles(userId: number, roleIds: number[]) {
+  async assignRoles(userId: string, roleIds: number[]) {
     const user = await this.findByIdWithRoles(userId);
     const roles = await this.roleSv.findAllByIds(roleIds);
     user.roles = roles;
@@ -98,7 +98,7 @@ export class UsersService {
   // End CRUD basic
   // ===============
 
-  async findByIdWithRoles(userId: number): Promise<User> {
+  async findByIdWithRoles(userId: string): Promise<User> {
     const user = await this.userRepo.findByIdWithRoles(userId);
     if (!user) {
       throw new NotFoundException(`User with not found`);
@@ -109,11 +109,11 @@ export class UsersService {
   async findByEmail(email: string): Promise<User | null> {
     return this.userRepo.findByEmail(email);
   }
-  async updateStatus(id: number, status: UserStatus) {
+  async updateStatus(id: string, status: UserStatus) {
     await this.userRepo.save({ id, status });
   }
 
-  async updatePassword(id: number, passwordHash: string) {
+  async updatePassword(id: string, passwordHash: string) {
     await this.userRepo.save({ id, password: passwordHash });
   }
 }

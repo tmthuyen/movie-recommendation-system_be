@@ -116,7 +116,7 @@ export class AuthService {
   }
   // 4. Refresh Token
   async refreshToken(
-    userId: number,
+    userId: string,
     refreshToken: string,
     deviceId: string,
     userAgent: string,
@@ -156,7 +156,7 @@ export class AuthService {
       throw new BadRequestException('Mã xác thực không hợp lệ hoặc đã hết hạn');
     }
 
-    const userId = Number(userIdStr);
+    const userId = userIdStr;
     await this.usersService.updateStatus(userId, UserStatus.ACTIVE);
     await this.redisService.del(`verify_email:${token}`);
     this.eventPublisher.publish(MESSAGE_EVENTS.USER_EMAIL_VERIFIED, {
@@ -196,7 +196,7 @@ export class AuthService {
       throw new BadRequestException('Mã xác thực không hợp lệ hoặc đã hết hạn');
     }
 
-    const userId = Number(userIdStr);
+    const userId = userIdStr;
     const hashedPassword = await bcrypt.hash(resetDto.password, 10);
     await this.usersService.updatePassword(userId, hashedPassword);
 
@@ -205,7 +205,7 @@ export class AuthService {
   }
 
   // get me
-  async getMe(userId: number) {
+  async getMe(userId: string) {
     const user = await this.usersService.findByIdWithRoles(userId);
     if (!user) {
       throw new UnauthorizedException('Người dùng không tồn tại');
@@ -216,7 +216,7 @@ export class AuthService {
 
   // change password
   async changePassword(
-    userId: number,
+    userId: string,
     dto: import('./dto/change-password.dto').ChangePasswordDto,
   ) {
     if (dto.newPassword !== dto.confirmPassword) {

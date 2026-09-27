@@ -4,12 +4,15 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
+  Unique,
 } from 'typeorm';
 import { User } from '@/modules/users/entities/user.entity';
 import { Movie } from '@/modules/movies/entities/movie.entity';
+import { BaseAuditEntity } from '@/common/audits/baseaudit.entity';
 
 @Entity('ratings')
-export class Rating {
+@Unique('UQ_RATING_USER_MOVIE', ['user', 'movie'])
+export class Rating extends BaseAuditEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
