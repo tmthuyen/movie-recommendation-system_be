@@ -18,6 +18,9 @@ export class Comment extends BaseAuditEntity {
   @Column({ type: 'text' })
   content: string;
 
+  @Column({ type: 'bigint', default: 0, nullable: true })
+  parentId: number;
+
   @ManyToOne(() => User, user => user.comments, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
   user: User;

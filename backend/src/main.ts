@@ -3,6 +3,7 @@ import '@config/tracing.config'; // Import cấu hình tracing trước khi kh�
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { CamelCaseInterceptor } from '@/common/interceptors/camel-case.interceptor';
@@ -58,6 +59,29 @@ async function bootstrap() {
   const cfsv = app.get(ConfigService);
   const port = Number(cfsv.get<number>('APP_PORT'));
 
-  await app.listen(port, '0.0.0.0');
+  const isRabbitMQEnabled =
+    cfsv.get('RABBITMQ_ENABLED') === 'true' ||
+    cfsv.get('RABBITMQ_ENABLED') === true;
+
+  if (isRabbitMQEnabled) {
+    // Kết nối Microservice để Consume RabbitMQ (Bao gồm DLQ)
+    app.connectMicroservice<MicroserviceOptions>({
+      transport: Transport.RMQ,
+      options: {
+        urls: [
+          cfsv.get<string>('RABBITMQ_URL', 'amqp://guest:guest@localhost:5672'),
+        ],
+        queue: 'failed_events_queue', // Queue DLQ
+        queueOptions: {
+          durable: true,
+        },
+        noAck: false, // Để có thể chủ động ACK/NACK
+      },
+    });
+
+    await app.startAllMicroservices();
+  }
+
+  await app.listen(port);
 }
 bootstrap();

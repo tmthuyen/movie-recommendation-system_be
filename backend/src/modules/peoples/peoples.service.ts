@@ -1,26 +1,40 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { CreatePeopleDto } from './dto/create-people.dto';
 import { UpdatePeopleDto } from './dto/update-people.dto';
+import { IPeopleRepository } from './peoples.repository';
+import { PaginationDto } from '@/common/dtos/pagination.dto';
 
 @Injectable()
 export class PeoplesService {
-  create(createPeopleDto: CreatePeopleDto) {
-    return 'This action adds a new people';
+  constructor(
+    @Inject(IPeopleRepository)
+    private readonly repo: IPeopleRepository,
+  ) {}
+
+  async create(createPeopleDto: CreatePeopleDto) {
+    return this.repo.create(createPeopleDto);
   }
 
-  findAll() {
-    return `This action returns all peoples`;
+  async findAll(paginationDto: PaginationDto) {
+    return this.repo.findAll(paginationDto);
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} people`;
+  async findOne(id: number) {
+    const people = await this.repo.findById(id);
+    if (!people) {
+      throw new NotFoundException(`People with ID ${id} not found`);
+    }
+    return people;
   }
 
-  update(id: number, updatePeopleDto: UpdatePeopleDto) {
-    return `This action updates a #${id} people`;
+  async update(id: number, updatePeopleDto: UpdatePeopleDto) {
+    const people = await this.findOne(id); // Check exists
+    return this.repo.update(people.id, updatePeopleDto);
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} people`;
+  async remove(id: number) {
+    const people = await this.findOne(id); // Check exists
+    await this.repo.remove(people.id);
+    return { success: true };
   }
 }

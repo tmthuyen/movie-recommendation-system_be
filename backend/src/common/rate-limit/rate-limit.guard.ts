@@ -22,18 +22,18 @@ export class RateLimitGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const ctx = context.switchToHttp();
     const request = ctx.getRequest<Request>();
-    
-    const specificOptions = this.reflector.getAllAndOverride<RateLimitOptions>(RATE_LIMIT_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
+
+    const specificOptions = this.reflector.getAllAndOverride<RateLimitOptions>(
+      RATE_LIMIT_KEY,
+      [context.getHandler(), context.getClass()],
+    );
 
     // Nếu không có decorator, áp dụng Global Limit mặc định
     const options: RateLimitOptions = specificOptions || {
       strategy: 'fixed-window',
       type: 'ip',
       limit: 100,
-      windowMs: 60000, 
+      windowMs: 60000,
     };
 
     const clientIp = request.ip || 'unknown';
@@ -41,7 +41,7 @@ export class RateLimitGuard implements CanActivate {
     const userId = user?.sub ? String(user.sub) : 'guest';
 
     let key = `rl:${options.strategy}`;
-    
+
     if (options.type === 'user') {
       key += `:usr:${userId}`;
     } else if (options.type === 'ip-and-user') {
@@ -59,13 +59,25 @@ export class RateLimitGuard implements CanActivate {
     let isAllowed = false;
     switch (options.strategy) {
       case 'fixed-window':
-        isAllowed = await this.rateLimitService.checkFixedWindow(key, options.limit, options.windowMs);
+        isAllowed = await this.rateLimitService.checkFixedWindow(
+          key,
+          options.limit,
+          options.windowMs,
+        );
         break;
       case 'sliding-window':
-        isAllowed = await this.rateLimitService.checkSlidingWindow(key, options.limit, options.windowMs);
+        isAllowed = await this.rateLimitService.checkSlidingWindow(
+          key,
+          options.limit,
+          options.windowMs,
+        );
         break;
       case 'token-bucket':
-        isAllowed = await this.rateLimitService.checkTokenBucket(key, options.limit, options.windowMs);
+        isAllowed = await this.rateLimitService.checkTokenBucket(
+          key,
+          options.limit,
+          options.windowMs,
+        );
         break;
     }
 

@@ -74,6 +74,31 @@ export class EnvironmentVariables {
   @IsOptional()
   @IsBoolean()
   ASYNC_MAIL_ENABLED: boolean;
+
+  // --- S3 / R2 STORAGE ---
+  @IsNotEmpty()
+  @IsString()
+  S3_REGION: string;
+
+  @IsNotEmpty()
+  @IsString()
+  S3_ENDPOINT: string;
+
+  @IsNotEmpty()
+  @IsString()
+  S3_ACCESS_KEY: string;
+
+  @IsNotEmpty()
+  @IsString()
+  S3_SECRET_KEY: string;
+
+  @IsNotEmpty()
+  @IsString()
+  S3_BUCKET_NAME: string;
+
+  @IsNotEmpty()
+  @IsString()
+  S3_PUBLIC_URL: string;
 }
 
 export const validateConfiguration = (config: Record<string, unknown>) => {

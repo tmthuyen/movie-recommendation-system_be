@@ -33,7 +33,12 @@ import { People } from './modules/peoples/entities/people.entity';
 import { Country } from './modules/countries/entities/country.entity';
 import { MoviePeople } from './modules/movies/entities/movie-people.entity';
 import { SeedRating } from './modules/ratings/entities/seed-rating.entity';
-
+import { FilesModule } from './modules/files/files.module';
+import { FailedEvent } from './modules/failed-events/entities/failed-event.entity';
+import { FailedEventsModule } from './modules/failed-events/failed-events.module';
+import { InteractionsModule } from './modules/interactions/interactions.module';
+import { EventsModule } from './modules/events/events.module';
+import { Interaction } from './modules/interactions/entities/interaction.entity';
 @Module({
   imports: [
     // Configuration
@@ -69,6 +74,7 @@ import { SeedRating } from './modules/ratings/entities/seed-rating.entity';
           Rating,
           Comment,
           SeedRating,
+          FailedEvent,
         ],
         synchronize: true,
         logging: config.get<string>('mode') === 'development',
@@ -98,6 +104,9 @@ import { SeedRating } from './modules/ratings/entities/seed-rating.entity';
     PeoplesModule,
     MoviesModule,
     RatingsModule,
+    FilesModule,
+    FailedEventsModule,
+    InteractionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

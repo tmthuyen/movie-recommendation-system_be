@@ -16,6 +16,7 @@ import { Country } from '@/modules/countries/entities/country.entity';
 import { MoviePeople } from '@/modules/movies/entities/movie-people.entity';
 import { Genre } from '@/modules/genres/entities/genre.entity';
 import { BaseAuditEntity } from '@/common/audits/baseaudit.entity';
+import { Interaction } from '@/modules/interactions/entities/interaction.entity';
 
 /*
 tmdb_id,title_vi,overview_vi,genres,release_date,poster_path,adult,backdrop_path,
@@ -159,4 +160,7 @@ export class Movie extends BaseAuditEntity {
 
   @OneToMany(() => Comment, comment => comment.movie)
   comments: Comment[];
+
+  @OneToMany(() => Interaction, interaction => interaction.movie)
+  interactions: Interaction[];
 }

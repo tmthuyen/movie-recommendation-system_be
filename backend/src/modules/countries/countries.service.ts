@@ -1,26 +1,40 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { CreateCountryDto } from './dto/create-country.dto';
 import { UpdateCountryDto } from './dto/update-country.dto';
+import { ICountryRepository } from './countries.repository';
+import { PaginationDto } from '@/common/dtos/pagination.dto';
 
 @Injectable()
 export class CountriesService {
-  create(createCountryDto: CreateCountryDto) {
-    return 'This action adds a new country';
+  constructor(
+    @Inject(ICountryRepository)
+    private readonly repo: ICountryRepository,
+  ) {}
+
+  async create(createCountryDto: CreateCountryDto) {
+    return this.repo.create(createCountryDto);
   }
 
-  findAll() {
-    return `This action returns all countries`;
+  async findAll(paginationDto: PaginationDto) {
+    return this.repo.findAll(paginationDto);
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} country`;
+  async findOne(id: number) {
+    const country = await this.repo.findById(id);
+    if (!country) {
+      throw new NotFoundException(`Country with ID ${id} not found`);
+    }
+    return country;
   }
 
-  update(id: number, updateCountryDto: UpdateCountryDto) {
-    return `This action updates a #${id} country`;
+  async update(id: number, updateCountryDto: UpdateCountryDto) {
+    const country = await this.findOne(id); // Check exists
+    return this.repo.update(country.id, updateCountryDto);
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} country`;
+  async remove(id: number) {
+    const country = await this.findOne(id); // Check exists
+    await this.repo.remove(country.id);
+    return { success: true };
   }
 }

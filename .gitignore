@@ -66,3 +66,5 @@ ai-service/.env
 ai-service/data/
 .agent/skills/
 tsconfig.build.tsbuildinfo
+
+backup/

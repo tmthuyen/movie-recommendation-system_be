@@ -12,6 +12,7 @@ import {
 } from 'typeorm';
 import { Rating } from '@/modules/ratings/entities/rating.entity';
 import { Comment } from '@/modules/comments/entities/comment.entity';
+import { Interaction } from '@/modules/interactions/entities/interaction.entity';
 
 export enum UserStatus {
   UNVERIFIED = 'UNVERIFIED',
@@ -80,4 +81,7 @@ export class User extends BaseAuditEntity {
 
   @OneToMany(() => Comment, comment => comment.user)
   comments: Comment[];
+
+  @OneToMany(() => Interaction, interaction => interaction.user)
+  interactions: Interaction[];
 }

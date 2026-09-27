@@ -9,18 +9,54 @@ import {
   HttpStatus,
   Query,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { PaginationDto } from '@/common/dtos/pagination.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles } from '@/common/decorators/roles.decorator';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiTags('Users')
 @Controller('users')
 @UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
+
+  @Get('me')
+  @ApiOperation({ summary: 'Lấy thông tin profile cá nhân' })
+  async getProfile(@Req() req: any) {
+    const userId = req.user.id;
+    const result = await this.usersService.findOne(userId);
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Lấy thông tin profile thành công',
+      result,
+    };
+  }
+
+  @Patch('me')
+  @ApiOperation({
+    summary: 'Cập nhật thông tin profile cá nhân (kể cả preferences)',
+  })
+  async updateProfile(
+    @Req() req: any,
+    @Body() updateProfileDto: UpdateProfileDto,
+  ) {
+    const userId = req.user.id;
+    const result = await this.usersService.update(userId, updateProfileDto);
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Cập nhật profile thành công',
+      result,
+    };
+  }
 
   @Roles('ADMIN', 'SUPERADMIN')
   @Post()
