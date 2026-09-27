@@ -28,31 +28,55 @@ export class InteractionsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Thêm tương tác mới (Yêu cầu đăng nhập)' })
-  create(
+  async create(
     @Req() req: Request,
     @Body() createInteractionDto: CreateInteractionDto,
   ) {
     const { sub: userId } = req.user as JwtPayload;
-    return this.interactionsService.create(userId, createInteractionDto);
+    return await this.interactionsService.create(userId, createInteractionDto);
   }
 
   @Get()
   @ApiOperation({ summary: 'Lấy tất cả tương tác (Public)' })
-  findAll(@Query() paginationDto: PaginationDto) {
-    return this.interactionsService.findAll(paginationDto);
+  async findAll(@Query() paginationDto: PaginationDto) {
+    return await this.interactionsService.findAll(paginationDto);
+  }
+
+  @Get('my-history')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Lấy lịch sử xem phim của cá nhân' })
+  async getMyHistory(
+    @Req() req: Request,
+    @Query() paginationDto: PaginationDto,
+  ) {
+    const { sub: userId } = req.user as JwtPayload;
+    return await this.interactionsService.getHistory(userId, paginationDto);
+  }
+
+  @Get('my-favorites')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Lấy danh sách phim yêu thích của cá nhân' })
+  async getMyFavorites(
+    @Req() req: Request,
+    @Query() paginationDto: PaginationDto,
+  ) {
+    const { sub: userId } = req.user as JwtPayload;
+    return await this.interactionsService.getFavorites(userId, paginationDto);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Lấy chi tiết tương tác (Public)' })
-  findOne(@Param('id') id: string) {
-    return this.interactionsService.findOne(+id);
+  async findOne(@Param('id') id: string) {
+    return await this.interactionsService.findOne(+id);
   }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Xoá tương tác (Yêu cầu đăng nhập)' })
-  remove(@Param('id') id: string) {
-    return this.interactionsService.remove(+id);
+  async remove(@Param('id') id: string) {
+    return await this.interactionsService.remove(+id);
   }
 }

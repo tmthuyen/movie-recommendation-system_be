@@ -3,6 +3,9 @@ import {
   WebSocketServer,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  SubscribeMessage,
+  MessageBody,
+  ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { UseGuards } from '@nestjs/common';
@@ -31,5 +34,22 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   broadcastRating(movieId: number, rating: any) {
     this.server.emit(`movie-${movieId}-rating`, rating);
+  }
+
+  broadcastViewCount(movieId: number, viewCount: number) {
+    this.server.emit(`movie-${movieId}-viewCount`, { movieId, viewCount });
+  }
+
+  @SubscribeMessage('typingComment')
+  handleTypingComment(
+    @MessageBody()
+    data: { movieId: number; isTyping: boolean; userFullName?: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    // Broadcast to everyone else that a user is typing
+    client.broadcast.emit(`movie-${data.movieId}-typing`, {
+      isTyping: data.isTyping,
+      userFullName: data.userFullName || 'Một người dùng',
+    });
   }
 }

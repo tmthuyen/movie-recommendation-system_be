@@ -29,39 +29,50 @@ export class CommentsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Thêm bình luận mới (Yêu cầu đăng nhập)' })
-  create(@Req() req: Request, @Body() createCommentDto: CreateCommentDto) {
+  async create(
+    @Req() req: Request,
+    @Body() createCommentDto: CreateCommentDto,
+  ) {
     const { sub } = req.user as JwtPayload;
-    return this.commentsService.create(sub, createCommentDto);
+    return await this.commentsService.create(sub, createCommentDto);
   }
 
   @Get()
   @ApiOperation({ summary: 'Lấy tất cả bình luận (Public)' })
-  findAll(@Query() paginationDto: PaginationDto) {
-    return this.commentsService.findAll(paginationDto);
+  async findAll(@Query() paginationDto: PaginationDto) {
+    return await this.commentsService.findAll(paginationDto);
   }
 
   @Get('movie/:movieId')
-  @ApiOperation({ summary: 'Lấy bình luận của một bộ phim (Public)' })
-  findByMovie(
+  @ApiOperation({ summary: 'Lấy bình luận của một bộ phim (có phân cấp)' })
+  async findByMovie(
     @Param('movieId') movieId: string,
     @Query() paginationDto: PaginationDto,
+    @Query('parentId') parentId?: string,
   ) {
-    return this.commentsService.findByMovie(+movieId, paginationDto);
+    return await this.commentsService.findByMovie(
+      +movieId,
+      paginationDto,
+      parentId ? +parentId : undefined,
+    );
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Lấy chi tiết bình luận (Public)' })
-  findOne(@Param('id') id: string) {
-    return this.commentsService.findOne(+id);
+  async findOne(@Param('id') id: string) {
+    return await this.commentsService.findOne(+id);
   }
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Cập nhật bình luận của mình (Yêu cầu đăng nhập)' })
-  update(@Param('id') id: string, @Body() updateCommentDto: UpdateCommentDto) {
+  async update(
+    @Param('id') id: string,
+    @Body() updateCommentDto: UpdateCommentDto,
+  ) {
     // Note: should check if comment belongs to user
-    return this.commentsService.update(+id, updateCommentDto);
+    return await this.commentsService.update(+id, updateCommentDto);
   }
 
   @Delete(':id')
@@ -69,7 +80,7 @@ export class CommentsController {
   @Roles('ADMIN', 'SUPERADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Xoá bình luận (Chỉ dành cho ADMIN)' })
-  remove(@Param('id') id: string) {
-    return this.commentsService.remove(+id);
+  async remove(@Param('id') id: string) {
+    return await this.commentsService.remove(+id);
   }
 }

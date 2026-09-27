@@ -17,7 +17,18 @@ export enum InteractionType {
   WATCHLIST = 'watchlist',
   RATING = 'rating',
   COMMENT = 'comment',
+  CLICK = 'click',
 }
+
+export const InteractionScoreMap: Record<InteractionType, number> = {
+  [InteractionType.LIKE]: 10,
+  [InteractionType.DISLIKE]: 1,
+  [InteractionType.FAVORITE]: 7,
+  [InteractionType.WATCHLIST]: 3,
+  [InteractionType.COMMENT]: 5,
+  [InteractionType.CLICK]: 2,
+  [InteractionType.RATING]: 0, // Dynamic, depends on user input
+};
 @Entity('interactions')
 @Index(['user', 'movie', 'type'], { unique: true })
 export class Interaction extends BaseEntity {

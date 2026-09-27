@@ -6,9 +6,14 @@ import { Movie } from './entities/movie.entity';
 import { MoviePeople } from './entities/movie-people.entity';
 import { MovieRepository, IMovieRepository } from './movies.repository';
 import { MessagingModule } from '@/infrastructure/messaging/messaging.module';
+import { EventsModule } from '../events/events.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Movie, MoviePeople]), MessagingModule],
+  imports: [
+    TypeOrmModule.forFeature([Movie, MoviePeople]),
+    MessagingModule,
+    EventsModule,
+  ],
   controllers: [MoviesController],
   providers: [
     {

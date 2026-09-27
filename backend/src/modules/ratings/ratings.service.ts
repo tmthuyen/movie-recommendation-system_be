@@ -10,6 +10,7 @@ import {
 } from '@/modules/interactions/entities/interaction.entity';
 import { Rating } from './entities/rating.entity';
 import { EventsGateway } from '@/modules/events/events.gateway';
+import { Movie } from '@/modules/movies/entities/movie.entity';
 
 @Injectable()
 export class RatingsService {
@@ -35,14 +36,35 @@ export class RatingsService {
 
       // Create Interaction
       const interaction = manager.create(Interaction, {
-        score: rating,
+        score: rating, // Rating score is the actual user rating
         type: InteractionType.RATING,
         movie: { id: movieId } as any,
         user: { id: userId } as any,
       });
       await manager.save(interaction);
 
-      this.eventsGateway.broadcastRating(movieId, savedRating);
+      // Recalculate average and count for the movie
+      const result = await manager
+        .createQueryBuilder(Rating, 'rating')
+        .select('COUNT(rating.id)', 'count')
+        .addSelect('AVG(rating.rating)', 'average')
+        .where('rating.movie_id = :movieId', { movieId })
+        .getRawOne();
+
+      const voteCount = parseInt(result.count || '0', 10);
+      const voteAverage = parseFloat(
+        parseFloat(result.average || '0').toFixed(2),
+      );
+
+      await manager.update(Movie, movieId, {
+        voteCount,
+        voteAverage,
+      });
+
+      this.eventsGateway.broadcastRating(movieId, {
+        ...savedRating,
+        movieStats: { voteCount, voteAverage },
+      });
 
       return savedRating;
     });

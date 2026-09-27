@@ -9,7 +9,11 @@ export const ICommentRepository = Symbol('ICommentRepository');
 
 export interface ICommentRepository {
   findAll(paginationDto: PaginationDto): Promise<PaginatedResult<Comment>>;
-  findByMovie(movieId: number, paginationDto: PaginationDto): Promise<PaginatedResult<Comment>>;
+  findByMovie(
+    movieId: number,
+    paginationDto: PaginationDto,
+    parentId?: number,
+  ): Promise<PaginatedResult<Comment>>;
   findById(id: number): Promise<Comment | null>;
   create(comment: Partial<Comment>): Promise<Comment>;
   update(id: number, comment: Partial<Comment>): Promise<Comment | null>;
@@ -23,11 +27,14 @@ export class CommentRepository implements ICommentRepository {
     private readonly repo: Repository<Comment>,
   ) {}
 
-  async findAll(paginationDto: PaginationDto): Promise<PaginatedResult<Comment>> {
+  async findAll(
+    paginationDto: PaginationDto,
+  ): Promise<PaginatedResult<Comment>> {
     const { page = 1, limit = 10 } = paginationDto;
     const skip = (page - 1) * limit;
 
-    const queryBuilder = this.repo.createQueryBuilder('comment')
+    const queryBuilder = this.repo
+      .createQueryBuilder('comment')
       .leftJoinAndSelect('comment.user', 'user')
       .leftJoinAndSelect('comment.movie', 'movie')
       .skip(skip)
@@ -45,21 +52,47 @@ export class CommentRepository implements ICommentRepository {
     };
   }
 
-  async findByMovie(movieId: number, paginationDto: PaginationDto): Promise<PaginatedResult<Comment>> {
+  async findByMovie(
+    movieId: number,
+    paginationDto: PaginationDto,
+    parentId?: number,
+  ): Promise<PaginatedResult<Comment>> {
     const { page = 1, limit = 10 } = paginationDto;
     const skip = (page - 1) * limit;
 
-    const queryBuilder = this.repo.createQueryBuilder('comment')
+    const queryBuilder = this.repo
+      .createQueryBuilder('comment')
       .leftJoinAndSelect('comment.user', 'user')
       .where('comment.movie_id = :movieId', { movieId })
       .skip(skip)
       .take(limit)
       .orderBy('comment.createdAt', 'DESC');
 
-    const [data, total] = await queryBuilder.getManyAndCount();
+    if (parentId) {
+      queryBuilder.andWhere('comment.parentId = :parentId', { parentId });
+    } else {
+      queryBuilder.andWhere('comment.parentId IS NULL');
+    }
+
+    // Let's just use a subquery to count replies
+    queryBuilder.addSelect(subQuery => {
+      return subQuery
+        .select('COUNT(c.id)', 'count')
+        .from(Comment, 'c')
+        .where('c.parentId = comment.id');
+    }, 'replyCount');
+
+    const { entities, raw } = await queryBuilder.getRawAndEntities();
+
+    // Map the raw replyCount back to the entities
+    entities.forEach((entity, index) => {
+      (entity as any).replyCount = parseInt(raw[index].replyCount || '0', 10);
+    });
+
+    const total = await queryBuilder.getCount();
 
     return {
-      data,
+      data: entities,
       total,
       page,
       limit,
@@ -68,7 +101,8 @@ export class CommentRepository implements ICommentRepository {
   }
 
   async findById(id: number): Promise<Comment | null> {
-    return this.repo.createQueryBuilder('comment')
+    return this.repo
+      .createQueryBuilder('comment')
       .leftJoinAndSelect('comment.user', 'user')
       .leftJoinAndSelect('comment.movie', 'movie')
       .where('comment.id = :id', { id })

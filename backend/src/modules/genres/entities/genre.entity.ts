@@ -1,10 +1,4 @@
-import {
-  Column,
-  Entity,
-  ManyToMany,
-  PrimaryColumn,
-  PrimaryGeneratedColumn,
-} from 'typeorm';
+import { Column, Entity, ManyToMany, PrimaryColumn } from 'typeorm';
 import { Movie } from '@/modules/movies/entities/movie.entity';
 import { BaseAuditEntity } from '@/common/audits/baseaudit.entity';
 

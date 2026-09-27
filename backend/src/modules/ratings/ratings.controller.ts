@@ -29,39 +29,42 @@ export class RatingsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Thêm đánh giá mới (Yêu cầu đăng nhập)' })
-  create(@Req() req: Request, @Body() createRatingDto: CreateRatingDto) {
+  async create(@Req() req: Request, @Body() createRatingDto: CreateRatingDto) {
     const { sub } = req.user as JwtPayload;
-    return this.ratingsService.create(sub, createRatingDto);
+    return await this.ratingsService.create(sub, createRatingDto);
   }
 
   @Get()
   @ApiOperation({ summary: 'Lấy tất cả đánh giá (Public)' })
-  findAll(@Query() paginationDto: PaginationDto) {
-    return this.ratingsService.findAll(paginationDto);
+  async findAll(@Query() paginationDto: PaginationDto) {
+    return await this.ratingsService.findAll(paginationDto);
   }
 
   @Get('movie/:movieId')
   @ApiOperation({ summary: 'Lấy đánh giá của một bộ phim (Public)' })
-  findByMovie(
+  async findByMovie(
     @Param('movieId') movieId: string,
     @Query() paginationDto: PaginationDto,
   ) {
-    return this.ratingsService.findByMovie(+movieId, paginationDto);
+    return await this.ratingsService.findByMovie(+movieId, paginationDto);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Lấy chi tiết đánh giá (Public)' })
-  findOne(@Param('id') id: string) {
-    return this.ratingsService.findOne(+id);
+  async findOne(@Param('id') id: string) {
+    return await this.ratingsService.findOne(+id);
   }
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Cập nhật đánh giá của mình (Yêu cầu đăng nhập)' })
-  update(@Param('id') id: string, @Body() updateRatingDto: UpdateRatingDto) {
+  async update(
+    @Param('id') id: string,
+    @Body() updateRatingDto: UpdateRatingDto,
+  ) {
     // Note: should check if rating belongs to user
-    return this.ratingsService.update(+id, updateRatingDto);
+    return await this.ratingsService.update(+id, updateRatingDto);
   }
 
   @Delete(':id')
@@ -69,7 +72,7 @@ export class RatingsController {
   @Roles('ADMIN', 'SUPERADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Xoá đánh giá (Chỉ dành cho ADMIN)' })
-  remove(@Param('id') id: string) {
-    return this.ratingsService.remove(+id);
+  async remove(@Param('id') id: string) {
+    return await this.ratingsService.remove(+id);
   }
 }

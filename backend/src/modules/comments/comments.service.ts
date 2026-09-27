@@ -6,6 +6,7 @@ import { PaginationDto } from '@/common/dtos/pagination.dto';
 import { DataSource } from 'typeorm';
 import {
   Interaction,
+  InteractionScoreMap,
   InteractionType,
 } from '@/modules/interactions/entities/interaction.entity';
 import { Comment } from './entities/comment.entity';
@@ -35,7 +36,7 @@ export class CommentsService {
 
       // Create Interaction
       const interaction = manager.create(Interaction, {
-        score: 1, // Default score for comment interaction
+        score: InteractionScoreMap[InteractionType.COMMENT],
         type: InteractionType.COMMENT,
         movie: { id: movieId } as any,
         user: { id: userId } as any,
@@ -52,8 +53,12 @@ export class CommentsService {
     return this.repo.findAll(paginationDto);
   }
 
-  async findByMovie(movieId: number, paginationDto: PaginationDto) {
-    return this.repo.findByMovie(movieId, paginationDto);
+  async findByMovie(
+    movieId: number,
+    paginationDto: PaginationDto,
+    parentId?: number,
+  ) {
+    return this.repo.findByMovie(movieId, paginationDto, parentId);
   }
 
   async findOne(id: number) {
