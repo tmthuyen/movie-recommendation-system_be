@@ -130,6 +130,9 @@ class VectorBackend(ABC):
         """Return top_k nearest neighbours as [{id, score, payload}]."""
         raise NotImplementedError
 
+    async def get_by_id(self, movie_id: int) -> dict | None:
+        return None
+
     @abstractmethod
     async def close(self) -> None:
         raise NotImplementedError
@@ -331,6 +334,25 @@ class ChromaVectorBackend(VectorBackend):
     ) -> list[dict[str, Any]]:
         return await asyncio.to_thread(self._sync_query, vector, top_k, where)
 
+    def _sync_get_by_id(self, movie_id: int) -> dict | None:
+        if self._collection is None:
+            return None
+        res = self._collection.get(ids=[str(movie_id)], include=["embeddings", "metadatas"])
+        if res and res.get("ids") and len(res["ids"]) > 0:
+            embeddings = res.get("embeddings")
+            metadatas = res.get("metadatas")
+            vec = (
+                embeddings[0].tolist()
+                if hasattr(embeddings[0], "tolist")
+                else embeddings[0]
+            ) if embeddings is not None and len(embeddings) > 0 else None
+            meta = metadatas[0] if metadatas is not None and len(metadatas) > 0 else {}
+            return {"id": movie_id, "vector": vec, "payload": meta}
+        return None
+
+    async def get_by_id(self, movie_id: int) -> dict | None:
+        return await asyncio.to_thread(self._sync_get_by_id, movie_id)
+
     def get_collection_count(self) -> int:
         """Synchronous helper — safe to call from one-off scripts."""
         if self._collection is None:
@@ -384,6 +406,11 @@ class VectorStore:
         if not self.settings.vector_db_enabled:
             return []
         return await self.backend.query(vector, top_k, where)
+
+    async def get_by_id(self, movie_id: int) -> dict | None:
+        if not self.settings.vector_db_enabled:
+            return None
+        return await self.backend.get_by_id(movie_id)
 
     async def close(self) -> None:
         if self.settings.vector_db_enabled:

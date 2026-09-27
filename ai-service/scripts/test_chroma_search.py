@@ -10,15 +10,15 @@ def main():
     model_name = "paraphrase-multilingual-MiniLM-L12-v2"
     
     print(f"=== ChromaDB Verification Test ===")
-    print(f"📁 Path: {db_path}")
+    print(f"Path: {db_path}")
     
     client = chromadb.PersistentClient(path=db_path)
     collection = client.get_collection(name="movies")
     
     total_count = collection.count()
-    print(f"📊 Tổng số vector đã nạp trong DB: {total_count:,} phim")
+    print(f"Tổng số vector đã nạp trong DB: {total_count:,} phim")
     
-    print(f"🧠 Đang load model embedding '{model_name}'...")
+    print(f"Đang load model embedding '{model_name}'...")
     model = SentenceTransformer(model_name)
     
     queries = [
@@ -30,7 +30,7 @@ def main():
     
     for text in queries:
         print(f"\n==================================================================")
-        print(f"🔍 TRUY VẤN NGỮ NGHĨA: '{text}'")
+        print(f"TRUY VẤN NGỮ NGHĨA: '{text}'")
         print(f"==================================================================")
         
         vector = model.encode(text, normalize_embeddings=True).tolist()
@@ -57,7 +57,7 @@ def main():
             print(f"{i}. [Độ tương đồng: {score:.4f} ({score*100:.1f}%)] {display_title} ({year})")
             print(f"   - Tên tiếng Anh: {title_en}")
             print(f"   - Thể loại: {genres}")
-            print(f"   - Đánh giá: ⭐ {vote}/10 | ID Phim: {m_id} | TMDB ID: {meta.get('tmdb_id')}")
+            print(f"   - Đánh giá:  {vote}/10 | ID Phim: {m_id} | TMDB ID: {meta.get('tmdb_id')}")
 
 if __name__ == "__main__":
     main()

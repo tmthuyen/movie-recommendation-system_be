@@ -10,7 +10,7 @@ def success(data: Any = None, message: str = "Success", status_code: int = 200) 
         success=True,
         statusCode=status_code, 
         message=message, 
-        result=data
+        data=data
     ).model_dump(exclude_none=True)
 
 
@@ -19,8 +19,8 @@ def paginated(data: Any, total_items: int, page: int, page_size: int, message: s
         success=True,
         statusCode=200,
         message=message,
-        result=data,
-        pagination=Pagination(
+        data=data,
+        metadata=Pagination(
             totalItems=total_items,
             totalPages=ceil(total_items / page_size) if page_size else 0,
             currentPage=page,
@@ -36,5 +36,4 @@ def failure(message: str, error_code: str, status_code: int) -> dict:
         message=message, 
         errorCode=error_code,
         timestamp=datetime.now().isoformat(),
-        # path=request.path,
     ).model_dump(exclude_none=True)

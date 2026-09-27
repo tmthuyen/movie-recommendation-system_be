@@ -62,7 +62,7 @@ ai-service/__pycache__/
 ai-service/.env
 
 *.csv
-
+*.md
 ai-service/data/
 .agent/skills/
 tsconfig.build.tsbuildinfo
