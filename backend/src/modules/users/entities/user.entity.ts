@@ -41,6 +41,16 @@ export class User extends BaseAuditEntity {
   @Column({ name: 'phone_number', nullable: true })
   phoneNumber: string;
 
+  @Column({
+    name: 'avatar_url',
+    nullable: true,
+    default: 'https://ui-avatars.com/api/?name=Default+User',
+  })
+  avatarUrl: string;
+
+  @Column({ name: 'preference_data', nullable: true, type: 'jsonb' })
+  preferenceData: Record<string, any>;
+
   @Column({ type: 'date', nullable: true })
   birthDate: Date;
 

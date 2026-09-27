@@ -109,8 +109,23 @@
 
 - Không log thông tin nhạy cảm
 
+## Storage / Upload
 
-# Viết code
+- Các file tĩnh (ảnh phim, avatar user) không lưu trên disk local mà phải lưu trên Object Storage (S3 / Cloudflare R2).
+- Sử dụng Design Pattern Strategy hoặc Interface (`IStorageService`) để dễ dàng swap giữa các provider.
+- Validate chặt chẽ kích thước file (giới hạn Max Size) và định dạng file (MIME type).
+
+## User Interactions & Behavior
+
+- Các hành vi (view, rating, comment, favorite) ngoài việc lưu vào các bảng cụ thể (như `comments`, `ratings`) thì cần lưu lịch sử (log) vào bảng `interactions` để phục vụ cho thuật toán Gợi ý (AI Recommendation) sau này.
+- Dùng Message Queue hoặc bất đồng bộ (EventEmitter) để ghi log tương tác, tránh làm chậm response của API chính.
+
+
+## Validation
+
+- Kiếm tra và validation dữ liệu DTO hoặc params request
+
+##  Viết code
 
 - Biên cammelCase, cột db là snake_case
 
@@ -121,3 +136,25 @@
 - ví dụ mail: có nhiều cách để gửi mail khác nhau
 
 - Giao tiếp event, caching
+
+- Log tập trung
+- Caching
+- Tối ưu query db
+- Đảm bảo transaction toàn vẹn, ACID
+- Giải quyết N + 1 query
+- Rate limiting, cors, DDoS attack, security
+- Giao tiếp message queue, xử lý message lỗi (dead letter queue), lưu lại khi vẫn lỗi
+- Response đúng format cho success / err
+- Chia tách code rõ ràng, không All In File, có khả năng tái sử dụng cao, dễ maintain, dễ sửa đổi
+- Clean code như design pattern, abstraction (interface), SOLID principle, Dependency Invertion
+- Unit test cơ bản
+- UI thân thiện, hiện đại, đồng nhất các trang, spacing, responsive, 
+cấm tông màu lệch lạc (quá AI thô sơ), animation, frame motion, …"
+- Sử dụng git thành thạo
+- Tên nhánh: fea/{domain làm việc, fixbug, ...}: fea/aut; fea/users, / fea/movie, fea/ai-**
+main để show, dev staging, production deploy
+- Commit message đúng format: fea: **   \n task: ui **, backend **, Ai***
+fea: auth
+task: luồng đăng ký đăng nhập, sửa bug, sửa docs
+- Dùng rebase để tạo commit thẳng và đẹp, Hạn chế merge local merge remote
+- Làm cái luồng gì viết các plans / docs bỏ vô docs/**.md"
