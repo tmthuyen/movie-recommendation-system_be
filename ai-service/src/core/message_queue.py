@@ -1,3 +1,4 @@
+from aio_pika import ExchangeType
 from datetime import datetime
 from api.schemas import UserInteractionEvent
 from api.schemas import MovieEvent
@@ -12,12 +13,21 @@ from .config import Settings
 # Message Queue
 # ─────────────────────────────────────────────────────────────────────────────
 
+class MessageQueueMetadata:
+    movie_exchange = 'movie.exchange'
+    movie_event_routing_key = 'movie.#'
+    movie_event_create_routing_key = 'movie.created'
+    movie_event_update_routing_key = 'movie.updated'
+    movie_event_delete_routing_key = 'movie.deleted'
 
+    recommendation_queue = 'recommendation.queue'
+    
+    
 
 
 class MessageQueue:
-    def __init__(self, settings: Settings) -> None:
-        self.settings = settings
+    def __init__(self) -> None:
+        self.settings = MessageQueueMetadata()
         self.connection = None
         self.channel = None
         self.consumer_tag = None
@@ -30,28 +40,51 @@ class MessageQueue:
             self.settings.rabbitmq_url
         )
         self.channel = await self.connection.channel()
-        exchange = await self.channel.declare_exchange(
-            self.settings.rabbitmq_exchange,
-            type=self.settings.rabbitmq_exchange_type,
+
+        # Exchange
+        movie_exchange = await self.channel.declare_exchange(
+            self.settings.movie_exchange,
+            type=ExchangeType.TOPIC,
             durable=True,
         )
 
         # queue
-        queue = await self.channel.declare_queue(
-            self.settings.rabbitmq_queue, 
-            durable=True
+        recommend_queue = await self.channel.declare_queue(
+            self.settings.recommendation_queue, 
+            durable=True,
+            arguments={
+                'x-dead-letter-exchange': self.settings.recommendation_queue + '.dlx',
+                'x-dead-letter-routing-key': self.settings.recommendation_queue + '.dlq',
+            }
         )
 
+
         # bind queue to exchange
-        await queue.bind(
-            exchange, 
-            self.settings.movie_event_routing_key
+        await recommend_queue.bind(
+            exchange=movie_exchange, 
+            routing_key='movie.#'
         )
-        await queue.bind(
-            exchange, 
-            self.settings.interaction_event_routing_key
+
+        # dlx
+        await self.channel.declare_exchange(
+            self.settings.recommendation_queue + '.dlx',
+            type=ExchangeType.TOPIC,
+            durable=True,
         )
-        self.consumer_tag = await queue.consume(self._handle_message)
+        # dlq
+        await self.channel.declare_queue(
+            self.settings.recommendation_queue + '.dlq',
+            durable=True,
+        )
+
+        # bind dlq to dlx
+        dlq = await self.channel.get_queue(self.settings.recommendation_queue + '.dlq')
+        await dlq.bind(
+            exchange=self.settings.recommendation_queue + '.dlx',
+            routing_key='movie.#'
+        )
+        
+        self.consumer_tag = await recommend_queue.consume(self._handle_message)
         self.logger.info("Message queue started")
 
     async def _handle_message(self, message: Any) -> None:

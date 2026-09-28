@@ -3,31 +3,13 @@ import json
 from abc import ABC, abstractmethod
 from typing import Any
 
-try:
-    import aio_pika
-except ImportError:
-    aio_pika = None
-try:
-    from apscheduler.schedulers.asyncio import AsyncIOScheduler
-except ImportError:
-    AsyncIOScheduler = None
-try:
-    from qdrant_client import AsyncQdrantClient
-except ImportError:
-    AsyncQdrantClient = None
-try:
-    from qdrant_client.models import Distance, PointStruct, VectorParams
-except ImportError:
-    Distance = PointStruct = VectorParams = None
-try:
-    from redis.asyncio import Redis
-except ImportError:
-    Redis = None
+import aio_pika
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from qdrant_client import AsyncQdrantClient
+from qdrant_client.models import Distance, PointStruct, VectorParams
+from redis.asyncio import Redis
 
-try:
-    from api.schemas import MovieEvent, TrainRequest, UserInteractionEvent
-except Exception:
-    MovieEvent = TrainRequest = UserInteractionEvent = None
+from api.schemas import MovieEvent, TrainRequest, UserInteractionEvent
 from .config import Settings
 from utils import setup_logger
 
@@ -74,6 +56,8 @@ class MessageQueue:
             except Exception as exc:
                 logger.error("_handle_message: failed to decode message body: %s", exc)
                 return
+
+            logger.info('Handle event with routing key: ', message.routing_key)
 
             event_type: str = payload.get("eventType", "")
             event_id: str = payload.get("eventId", "")
@@ -133,24 +117,6 @@ class MessageQueue:
     async def close(self) -> None:
         if self.connection:
             await self.connection.close()
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Redis Store (cache)
-# ─────────────────────────────────────────────────────────────────────────────
-
-class RedisStore:
-    def __init__(self, settings: Settings) -> None:
-        self.settings = settings
-        self.client: Redis | None = None
-
-    async def start(self) -> None:
-        if self.settings.redis_enabled:
-            self.client = Redis.from_url(self.settings.redis_url, decode_responses=True)
-
-    async def close(self) -> None:
-        if self.client:
-            await self.client.aclose()
 
 
 # ─────────────────────────────────────────────────────────────────────────────

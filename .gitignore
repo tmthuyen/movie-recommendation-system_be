@@ -56,14 +56,10 @@ pids
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 
-# AI service ignore: fastAPI
-pycache/
-ai-service/__pycache__/
-ai-service/.env
+.env
 *.sql
 *.csv
-*.md
-ai-service/data/
+
 .agent/skills/
 tsconfig.build.tsbuildinfo
 

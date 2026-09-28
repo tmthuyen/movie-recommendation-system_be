@@ -1,5 +1,4 @@
 
-from api.middleware import setup_middleware
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -8,8 +7,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from core.config import get_settings
-from core.integrations import MessageQueue, RedisStore, TrainingScheduler, VectorStore
+from core.integrations import MessageQueue, TrainingScheduler, VectorStore
+from core.redis_service import RedisStore
 from core.telemetry import configure_tracing
+from api.middleware import setup_middleware
 from api.routes import health, recommendations
 from services.recommend_service import RecommendService
 from services.embedding_service import embedding_service
@@ -25,6 +26,8 @@ async def lifespan(application: FastAPI):
 	application.state.redis = RedisStore(settings)
 	application.state.vector_store = VectorStore(settings)
 	application.state.training_scheduler = TrainingScheduler(settings)
+
+	# start
 	await application.state.message_queue.start()
 	await application.state.redis.start()
 	await application.state.vector_store.start()
@@ -36,6 +39,8 @@ async def lifespan(application: FastAPI):
 	)
 	application.state.recommend_service = recommend_svc
 	application.state.message_queue.set_recommend_service(recommend_svc)
+
+	# close
 	yield
 	await application.state.training_scheduler.close()
 	await application.state.vector_store.close()
