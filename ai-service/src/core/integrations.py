@@ -49,6 +49,12 @@ class MessageQueue:
         self.connection = None
         self.channel = None
         self.consumer_tag = None
+        # Injected after startup to avoid circular import
+        self._recommend_service: Any | None = None
+
+    def set_recommend_service(self, svc: Any) -> None:
+        """Inject RecommendService sau khi khởi tạo app."""
+        self._recommend_service = svc
 
     async def start(self) -> None:
         if not self.settings.rabbitmq_enabled:
@@ -67,9 +73,50 @@ class MessageQueue:
 
     async def _handle_message(self, message: Any) -> None:
         async with message.process():
-            payload = json.loads(message.body.decode("utf-8"))
-            logger.info("Received event type=%s id=%s", payload.get("eventType"), payload.get("eventId"))
-            # TODO: dispatch movie updates and interactions to model/vector services.
+            try:
+                payload = json.loads(message.body.decode("utf-8"))
+            except Exception as exc:
+                logger.error("_handle_message: failed to decode message body: %s", exc)
+                return
+
+            event_type: str = payload.get("eventType", "")
+            event_id: str = payload.get("eventId", "")
+            logger.info("Received event type=%s id=%s", event_type, event_id)
+
+            svc = self._recommend_service
+            if svc is None:
+                logger.warning("_handle_message: RecommendService chua duoc inject, bo qua event %s", event_id)
+                return
+
+            movie_payload: dict[str, Any] = payload.get("payload") or {}
+            movie_id: int | None = payload.get("movieId") or movie_payload.get("movieId")
+
+            if event_type in ("movie.created", "movie.updated"):
+                if movie_id is None:
+                    logger.warning("_handle_message: %s thieu movieId, bo qua.", event_type)
+                    return
+                movie_data: dict[str, Any] = {"movieId": movie_id, **movie_payload}
+                try:
+                    await svc.upsert_movie_vector(movie_data)
+                    logger.info("_handle_message: upsert vector thanh cong movieId=%s event=%s", movie_id, event_type)
+                except Exception as exc:
+                    logger.error("_handle_message: upsert_movie_vector that bai movieId=%s: %s", movie_id, exc)
+
+            elif event_type == "movie.deleted":
+                if movie_id is None:
+                    logger.warning("_handle_message: movie.deleted thieu movieId, bo qua.")
+                    return
+                try:
+                    deleted = await svc.delete_movie_vector(int(movie_id))
+                    if deleted:
+                        logger.info("_handle_message: xoa vector thanh cong movieId=%s", movie_id)
+                    else:
+                        logger.warning("_handle_message: khong the xoa vector movieId=%s", movie_id)
+                except Exception as exc:
+                    logger.error("_handle_message: delete_movie_vector that bai movieId=%s: %s", movie_id, exc)
+
+            else:
+                logger.debug("_handle_message: event_type='%s' khong duoc xu ly.", event_type)
 
     async def publish_movie_event(self, event: MovieEvent) -> None:
         await self._publish(event.eventType, event.model_dump())

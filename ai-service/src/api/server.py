@@ -10,6 +10,8 @@ from core.config import get_settings
 from core.integrations import MessageQueue, RedisStore, TrainingScheduler, VectorStore
 from core.telemetry import configure_tracing
 from api.routes import events, health, recommendations, training, vectors
+from services.recommend_service import RecommendService
+from services.embedding_service import embedding_service
 
 
 settings = get_settings()
@@ -26,6 +28,13 @@ async def lifespan(application: FastAPI):
 	await application.state.redis.start()
 	await application.state.vector_store.start()
 	await application.state.training_scheduler.start()
+	# Tao RecommendService va inject vao MessageQueue de xu ly RabbitMQ events
+	recommend_svc = RecommendService(
+		vector_store=application.state.vector_store,
+		embedding_service=embedding_service,
+	)
+	application.state.recommend_service = recommend_svc
+	application.state.message_queue.set_recommend_service(recommend_svc)
 	yield
 	await application.state.training_scheduler.close()
 	await application.state.vector_store.close()
