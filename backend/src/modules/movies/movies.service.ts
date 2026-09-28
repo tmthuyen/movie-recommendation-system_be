@@ -121,7 +121,6 @@ export class MoviesService {
         break;
       }
     }
-
     const updated = await this.repo.update(movie.id, entity);
 
     if (hasChanges && updated) {

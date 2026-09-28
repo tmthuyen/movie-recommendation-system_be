@@ -7,23 +7,25 @@ class Settings(BaseSettings):
     app_name: str = "movie-recommendation-ai-service"
     app_version: str = "0.1.0"
     app_port: int = 8082
-    api_prefix: str = "/api"
-    cors_origins: str = "http://localhost:3000,http://localhost:8081"
+    api_prefix: str = "/api/recommendations"
+    cors_origins: str = "http://localhost:3000,http://localhost:5173"
 
     service_name: str = "ai-service"
-    otel_exporter_url: str = "http://localhost:4317"
-    otel_enabled: bool = False
+    otel_exporter_url: str = "http://localhost:4318"
+    otel_enabled: bool = True
 
     rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"
     rabbitmq_exchange: str = "movie.events"
     rabbitmq_exchange_type: str = "topic"
-    rabbitmq_queue: str = "ai-service.movie-events"
-    rabbitmq_enabled: bool = False
+    rabbitmq_queue: str = "recommendation.queue"
+    rabbitmq_dlx: str = "recommendation.dlx"
+    rabbitmq_dlq: str = "recommendation.dlq"
+    rabbitmq_enabled: bool = True
     movie_event_routing_key: str = "movie.#"
     interaction_event_routing_key: str = "user.interaction.#"
 
     redis_url: str = "redis://localhost:6379/0"
-    redis_enabled: bool = False
+    redis_enabled: bool = True
     redis_key_prefix: str = "movie-recommendation:"
 
     vector_db_url: str = "http://localhost:6333"

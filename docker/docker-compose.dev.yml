@@ -1,51 +1,10 @@
 services:
-  # backend-service:
-  #   build:
-  #     context: ../backend
-  #     dockerfile: Dockerfile
-  #   container_name: movie_backend
-  #   ports:
-  #     - '8081:8081'
-  #   environment:
-  #     - NODE_ENV=development
-  #     - APP_PORT=8081
-  #     - DB_TYPE=postgres
-  #     - DB_HOST=db
-  #     - DB_PORT=5432
-  #     - DB_USERNAME=postgres
-  #     - DB_PASSWORD=123456
-  #     - DB_NAME=nestjs_db
-  #     - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
-  #     - SERVICE_NAME=backend-service
-  #     - OTEL_EXPORTER_URL=http://localhost:4317
-  #   networks:
-  #     - movie-network
-  #   depends_on:
-  #     - db
-  #     - rabbitmq
-
-  # ai service
-  # ai-service:
-  #   build:
-  #     context: ./ai-service
-  #     dockerfile: Dockerfile # FROM python:3.11-slim
-  #   ports:
-  #     - '8082:8082'
-  #   networks:
-  #     - movie-net
-  #   environment:
-  #     - APP_PORT=8082
-  #     - VECTOR_DB_URL=xxxx
-  #     - SERVICE_NAME=ai-service
-  #     - OTEL_EXPORTER_URL=http://localhost:4317
-  #     - RABBITMQ_URL=amqp://guest:guest@localhost:5672
-
   # db
   db:
     image: postgres:15-alpine
     container_name: postgres_db
     ports:
-      - '5432:5432'
+      - '5434:5432'   # 5432 trùng port mặc định
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: 123456
@@ -66,6 +25,19 @@ services:
       - '6379:6379'
     volumes:
       - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - movie-network
+
+  # Redis UI
+  redis-insight:
+    image: redis/redisinsight:latest
+    container_name: redis-insight
+    ports:
+      - '5540:5540'
+    volumes:
+      - redis_insight_data:/data
+    restart: unless-stopped
     networks:
       - movie-network
 
@@ -81,6 +53,106 @@ services:
       RABBITMQ_DEFAULT_PASS: guest
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+    restart: unless-stopped
+    networks:
+      - movie-network
+
+  
+  # ==========================================
+  # KONG API GATEWAY
+  # ==========================================
+
+  kong:
+    image: kong:latest
+    container_name: kong
+    restart: unless-stopped
+
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /kong/kong.yml
+
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+
+    ports:
+      - "8000:8000"
+      - "8443:8443"
+      - "8001:8001"
+
+    volumes:
+      - ../gateway/kong.yml:/kong/kong.yml:ro
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    networks:
+      - movie-network
+
+  # ==========================================
+  # PROMETHEUS
+  # ==========================================
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+
+    ports:
+      - "9090:9090"
+
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+
+    networks:
+      - movie-network
+
+
+  # ==========================================
+  # GRAFANA
+  # ==========================================
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+
+    ports:
+      - "3000:3000"
+
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+    networks:
+      - movie-network
+
+
+  # ==========================================
+  # JAEGER
+  # ==========================================
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    restart: unless-stopped
+
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+      - "4317:4317"
+
     networks:
       - movie-network
 
@@ -91,7 +163,14 @@ networks:
 volumes:
   db-data:
     driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
   redis_data:
     driver: local
   rabbitmq_data:
     driver: local
+  redis_insight_data:
+    driver: local
+

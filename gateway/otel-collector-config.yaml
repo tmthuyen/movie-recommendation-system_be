@@ -1,0 +1,30 @@
+receivers:
+  otlp:
+    protocols:
+      grpc: # cổng 4317 cho FastAPI và NestJS
+      http: # cổng 4318 cho Kong OpenTelemetry Plugin
+
+processors:
+  batch: # Gộp dữ liệu gửi theo lô để tối ưu hiệu năng
+
+exporters:
+  # Ví dụ 1: Đẩy Trace sang Jaeger
+  otlp/jaeger:
+    endpoint: "jaeger:4318"
+    tls:
+      insecure: true
+
+  # Ví dụ 2: Đẩy Log sang Grafana Loki (nếu dùng Loki làm log tập trung)
+  loki:
+    endpoint: "http://loki:3100/loki/api/v1/push"
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/jaeger]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [loki]

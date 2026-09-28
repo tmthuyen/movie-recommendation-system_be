@@ -1,4 +1,5 @@
 
+from api.middleware import setup_middleware
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -9,9 +10,10 @@ from fastapi.responses import JSONResponse
 from core.config import get_settings
 from core.integrations import MessageQueue, RedisStore, TrainingScheduler, VectorStore
 from core.telemetry import configure_tracing
-from api.routes import events, health, recommendations, training, vectors
+from api.routes import health, recommendations
 from services.recommend_service import RecommendService
 from services.embedding_service import embedding_service
+from api.routes import health, recommendations
 
 
 settings = get_settings()
@@ -19,7 +21,6 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-	configure_tracing(settings)
 	application.state.message_queue = MessageQueue(settings)
 	application.state.redis = RedisStore(settings)
 	application.state.vector_store = VectorStore(settings)
@@ -42,7 +43,14 @@ async def lifespan(application: FastAPI):
 	await application.state.message_queue.close()
 
 
-app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
+app = FastAPI(
+	title=settings.app_name, 
+	version=settings.app_version, 
+	lifespan=lifespan
+)
+
+# Setup tracing after FastAPI app is created
+configure_tracing(app, settings)
 
 
 @app.exception_handler(RequestValidationError)
@@ -52,7 +60,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 		content={
 			"statusCode": 422,
 			"message": "Request validation failed",
-			"data": None,
 			"errorCode": "VALIDATION_ERROR",
 			"errors": exc.errors(),
 		},
@@ -80,12 +87,11 @@ app.add_middleware(
 	allow_headers=["*"],
 )
 
+
+
+# predix: /api/recommendations/
+setup_middleware(app)
+
+
 app.include_router(health.router, prefix=settings.api_prefix)
 app.include_router(recommendations.router, prefix=settings.api_prefix)
-app.include_router(events.router, prefix=settings.api_prefix)
-app.include_router(vectors.router, prefix=settings.api_prefix)
-app.include_router(training.router, prefix=settings.api_prefix)
-
-@app.get("/")
-async def root():
-	return {"message": "AI service is running"}

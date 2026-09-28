@@ -8,6 +8,7 @@ import {
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { Request, Response } from 'express';
+import { trace } from '@opentelemetry/api';
 
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
@@ -20,7 +21,19 @@ export class LoggingInterceptor implements NestInterceptor {
     const { method, originalUrl, ip } = req;
     const userAgent = req.headers['user-agent'] || '';
     const now = Date.now();
+    const headers = req.headers;
+    const activeSpan = trace.getActiveSpan();
+    const traceID = activeSpan ? activeSpan.spanContext().traceId : 'None';
+    const reqID = (headers['x-request-id'] as string) || '';
+    const kongID = (headers['x-kong-request-id'] as string) || '';
 
+    if (!reqID || !kongID) {
+      this.logger.error('Missing request ID or kong ID');
+    }
+
+    this.logger.log(
+      `[Trace ID]: ${traceID} - [Request ID]: ${reqID} - [Kong ID]: ${kongID}`,
+    );
     this.logger.log(`→ ${method} ${originalUrl} - ${ip} - ${userAgent}`);
 
     return next.handle().pipe(

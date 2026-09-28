@@ -1,5 +1,13 @@
 ﻿from fastapi import APIRouter, HTTPException, Query, Request, status
 from typing import Any
+from fastapi import Request
+import requests
+from api.schemas import HybridRequest
+from api.schemas import SimilarityRequest
+from typing import Annotated
+from fastapi import Query 
+from utils import setup_logger
+from fastapi import APIRouter
 
 from ..response import paginated, success
 from ..schemas import RecommendationRequest, SearchRequest
@@ -8,9 +16,10 @@ from core.integrations import VectorStore
 from services.recommend_service import RecommendService
 from services.embedding_service import embedding_service
 
-router = APIRouter(prefix='/recommendations', tags=['recommendations'])
+router = APIRouter(tags=["recommendations"])
 settings = get_settings()
 
+logger = setup_logger(name='FastAPI-Recommendations', filename=__name__)
 
 async def _get_recommend_service(request: Request) -> RecommendService:
     '''Lấy hoặc khởi tạo RecommendService từ app.state.'''
@@ -39,6 +48,11 @@ async def semantic_search(
     top_k: int = Query(default=10, ge=1, le=100, description='So luong phim goi y can tra ve'),
 ) -> dict:
     '''Tim kiem phim theo y dinh tu nhien (Semantic Search) su dung Sentence-BERT va ChromaDB.'''
+    
+    logger.info("semantic search API called")
+    logger.info(f'Semantic search keyword: {query}')
+    logger.info(f'Semantic search top_k: {top_k}')
+
     svc = await _get_recommend_service(app_request)
     data = await svc.semantic_search(query=query, top_k=top_k)
     return paginated(
@@ -84,12 +98,28 @@ async def search(request: SearchRequest, app_request: Request) -> dict:
     return paginated([], 0, request.page, request.pageSize, f"Search model '{request.model}' completed")
 
 
-@router.post('')
-async def recommend(request: RecommendationRequest) -> dict:
-    '''Endpoint goi y phim tong hop (Hybrid Recommender Placeholder).'''
-    return paginated([], 0, request.page, request.pageSize, 'Recommendations generated')
+# @router.post('')
+# async def recommend(request: RecommendationRequest) -> dict:
+#     '''Endpoint goi y phim tong hop (Hybrid Recommender Placeholder).'''
+#     return paginated([], 0, request.page, request.pageSize, 'Recommendations generated')
 
 
-@router.get('/models')
-async def models() -> dict:
-    return success({'available': ['semantic', 'tfidf', 'bm25'], 'active': 'semantic'})
+@router.get("/hybrid")
+async def hybrid_search(request: Annotated[HybridRequest, Query()]) -> dict:
+    """search API"""
+    logger.info("hybrid search API called")
+    logger.info(f'hybrid search req: {request}')
+    # Replace this placeholder with the baseline/main model service.
+    return paginated([], 0, request.page, request.limit, "Search completed")
+
+
+@router.get("/tracing")
+async def tracing(req: Request) -> dict:
+    """test API"""
+    # Không cần truyền headers nữa, OTel tự động kẹp traceparent vào requests.get
+    response = requests.get('http://localhost:8081/api/health')
+    
+    logger.info("tracing API called")
+    return success(
+        data=response.json(),
+    )

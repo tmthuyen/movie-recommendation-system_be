@@ -23,20 +23,16 @@ try:
     from redis.asyncio import Redis
 except ImportError:
     Redis = None
-try:
-    from utils import setup_logger
-except ImportError:
-    import logging
-    def setup_logger(n): return logging.getLogger(n)
 
 try:
     from api.schemas import MovieEvent, TrainRequest, UserInteractionEvent
 except Exception:
     MovieEvent = TrainRequest = UserInteractionEvent = None
 from .config import Settings
+from utils import setup_logger
 
 
-logger = setup_logger(__name__)
+logger = setup_logger(name='FastAPI-Recommendations', filename=__name__)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

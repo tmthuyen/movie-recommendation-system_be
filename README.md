@@ -102,6 +102,9 @@ docker compose \
   -f docker/docker-compose.observability.yml \
   up -d
 ```
+```bash
+docker compose -p movie-app -f docker/docker-compose.dev.yml -f docker/docker-compose.observability.yml up -d
+```
 
 - Health check: http://localhost:8081/api/health
 

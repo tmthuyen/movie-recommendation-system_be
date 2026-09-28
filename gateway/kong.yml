@@ -1,0 +1,92 @@
+_format_version: "3.0"
+
+_transform: true
+
+services:
+  # ============================================
+  # NestJS
+  # ============================================
+
+  - name: nestjs-api
+    url: http://host.docker.internal:8081
+    routes:
+      - name: nestjs-api-route
+        paths:
+          - /api
+        strip_path: false
+        protocols:
+          - http
+          - https
+
+  # ============================================
+  # FastAPI
+  # ============================================
+
+  - name: fastapi-ai
+    url: http://host.docker.internal:8082
+    routes:
+      - name: fastapi-ai-route
+        paths:
+          - /api/recommendations
+        strip_path: false
+        protocols:
+          - http
+          - https
+
+
+# ==============================================
+# Global Plugins
+# ==============================================
+
+plugins:
+
+  # --------------------------------------------
+  # CORS
+  # --------------------------------------------
+  - name: cors
+    config:
+      origins:
+        - http://localhost:5173
+        - http://localhost:3001
+      methods:
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+        - OPTIONS
+      headers:
+        - Accept
+        - Authorization
+        - Content-Type
+        - X-Request-ID
+        - traceparent
+        - tracestate
+
+      exposed_headers:
+        - X-Request-ID
+
+      credentials: true
+
+      max_age: 3600
+
+
+  # --------------------------------------------
+  # Request ID
+  # --------------------------------------------
+
+  - name: correlation-id
+    config:
+      header_name: X-Request-ID
+      generator: uuid
+
+
+  # --------------------------------------------
+  # Rate Limit
+  # --------------------------------------------
+
+  - name: rate-limiting
+    config:
+      minute: 120
+      policy: local
+      

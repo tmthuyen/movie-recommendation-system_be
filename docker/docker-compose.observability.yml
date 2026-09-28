@@ -1,46 +1,49 @@
-services:
-  # --- OBSERVABILITY: MONITORING & LOGS ---
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
-    ports:
-      - '9090:9090'
-    volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-    networks:
-      - movie-network
+# services:
+#   # --- OBSERVABILITY: MONITORING & LOGS ---
+#   prometheus:
+#     image: prom/prometheus:latest
+#     container_name: prometheus
+#     ports:
+#       - '9090:9090'
+#     volumes:
+#       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+#       - prometheus_data:/prometheus
+#     command:
+#       - '--config.file=/etc/prometheus/prometheus.yml'
+#     restart: unless-stopped
+#     networks:
+#       - movie-network
 
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
-    ports:
-      - '3000:3000'
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-    volumes:
-      - grafana_data:/var/lib/grafana
-    networks:
-      - movie-network
+#   grafana:
+#     image: grafana/grafana:latest
+#     container_name: grafana
+#     ports:
+#       - '3000:3000'
+#     environment:
+#       - GF_SECURITY_ADMIN_USER=admin
+#       - GF_SECURITY_ADMIN_PASSWORD=admin
+#     volumes:
+#       - grafana_data:/var/lib/grafana
+#     restart: unless-stopped
+#     networks:
+#       - movie-network
 
-  jaeger:
-    image: jaegertracing/all-in-one:latest
-    container_name: jaeger
-    ports:
-      - '16686:16686' # Jaeger UI
-      - '4318:4318' # OTLP gRPC receiver
-    networks:
-      - movie-network
+#   jaeger:
+#     image: jaegertracing/all-in-one:latest
+#     container_name: jaeger
+#     ports:
+#       - '16686:16686' # Jaeger UI
+#       - '4318:4318' # OTLP http receiver
+#     restart: unless-stopped
+#     networks:
+#       - movie-network
 
-volumes:
-  prometheus_data:
-    driver: local
-  grafana_data:
-    driver: local
+# volumes:
+#   prometheus_data:
+#     driver: local
+#   grafana_data:
+#     driver: local
 
-networks:
-  movie-network:
-    driver: bridge
+# networks:
+#   movie-network:
+#     driver: bridge
