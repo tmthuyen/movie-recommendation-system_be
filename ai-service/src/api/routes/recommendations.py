@@ -1,20 +1,14 @@
-﻿from fastapi import APIRouter, HTTPException, Query, Request, status
-from typing import Any
-from fastapi import Request
-import requests
-from api.schemas import HybridRequest
-from api.schemas import SimilarityRequest
-from typing import Annotated
-from fastapi import Query 
-from utils import setup_logger
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Query, Request, status, Depends 
+from typing import Annotated 
 
-from ..response import paginated, success
-from ..schemas import RecommendationRequest, SearchRequest
+from api.schemas import CurrentUser, HybridRequest, SearchRequest
+from api.dependencies.auth import get_current_user
 from core.config import get_settings
 from core.integrations import VectorStore
 from services.recommend_service import RecommendService
 from services.embedding_service import embedding_service
+from utils import setup_logger
+from ..response import paginated, success
 
 router = APIRouter(tags=["recommendations"])
 settings = get_settings()
@@ -48,11 +42,6 @@ async def semantic_search(
     top_k: int = Query(default=10, ge=1, le=100, description='So luong phim goi y can tra ve'),
 ) -> dict:
     '''Tim kiem phim theo y dinh tu nhien (Semantic Search) su dung Sentence-BERT va ChromaDB.'''
-    
-    logger.info("semantic search API called")
-    logger.info(f'Semantic search keyword: {query}')
-    logger.info(f'Semantic search top_k: {top_k}')
-
     svc = await _get_recommend_service(app_request)
     data = await svc.semantic_search(query=query, top_k=top_k)
     return paginated(
@@ -62,8 +51,13 @@ async def semantic_search(
         page_size=top_k,
         message=f"Tim kiem ngu nghia thanh cong cho tu khoa '{query}'",
     )
+# @router.post("")
+# async def recommend(request: RecommendationRequest) -> dict:
+#     # Combine content-based, collaborative and main model results here.
+#     return paginated([], 0, request.page, request.limit, "Recommendations generated")
 
-
+ 
+ 
 @router.get('/similar/{movie_id}')
 async def get_similar_movies(
     movie_id: int,
@@ -105,21 +99,27 @@ async def search(request: SearchRequest, app_request: Request) -> dict:
 
 
 @router.get("/hybrid")
-async def hybrid_search(request: Annotated[HybridRequest, Query()]) -> dict:
+async def hybrid_search(
+    request: Annotated[HybridRequest, Query()],
+    current_user: Annotated[
+        CurrentUser,
+        Depends(get_current_user)
+    ],
+) -> dict:
     """search API"""
     logger.info("hybrid search API called")
     logger.info(f'hybrid search req: {request}')
+    logger.info(f'hybrid search user: {current_user.sub}')
+
+
+    if current_user.sub != request.userId:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Không có quyền truy cập gợi ý của người khác",
+            headers={
+                "WWW-Authenticate": "Bearer"
+            },
+        )
+
     # Replace this placeholder with the baseline/main model service.
     return paginated([], 0, request.page, request.limit, "Search completed")
-
-
-@router.get("/tracing")
-async def tracing(req: Request) -> dict:
-    """test API"""
-    # Không cần truyền headers nữa, OTel tự động kẹp traceparent vào requests.get
-    response = requests.get('http://localhost:8081/api/health')
-    
-    logger.info("tracing API called")
-    return success(
-        data=response.json(),
-    )

@@ -1,8 +1,16 @@
+from core.config import get_settings
+from jose import JWTError
+from jose import ExpiredSignatureError
+from api.schemas import CurrentUser
+from jose import jwt
+from fastapi.responses import JSONResponse
 from fastapi import HTTPException
 from utils import setup_logger
 import time
 from fastapi import FastAPI, Request
 
+
+settings = get_settings()
 
 from opentelemetry import trace
 
@@ -45,15 +53,121 @@ def setup_middleware(app: FastAPI) -> None:
 
     # Auth middleware
     @app.middleware("http")
-    async def auth_middleware(request: Request, call_next):
-        authorization_header = request.headers.get("Authorization")
-        if authorization_header is None:
-            raise HTTPException(status_code=401, detail="Missing token")
-        
-        token = authorization_header.split(" ")[1]
+    async def auth_middleware(
+        request: Request,
+        call_next,
+    ):
+        # Mặc định request chưa authenticated
+        request.state.user = None
 
-        logger.info(f"[Token] received")
+        authorization = request.headers.get("Authorization")
 
-        reponse = await call_next(request)
-        return reponse
         
+        
+        if not authorization:
+            return await call_next(request)
+
+        # Kiểm tra format:
+        #
+        # Authorization: Bearer <token>
+        #
+        parts = authorization.split(" ", 1)
+
+        if len(parts) != 2:
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "statusCode": 401,
+                    "message": "Token không hợp lệ",
+                    "data": None,
+                    "errorCode": "INVALID_AUTHORIZATION",
+                },
+                headers={
+                    "WWW-Authenticate": "Bearer"
+                },
+            )
+
+        scheme, token = parts
+
+        if scheme.lower() != "bearer":
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "statusCode": 401,
+                    "message": "Token không hợp lệ",
+                    "data": None,
+                    "errorCode": "INVALID_AUTHORIZATION",
+                },
+                headers={
+                    "WWW-Authenticate": "Bearer"
+                },
+            )
+
+        logger.info("[Token] received")
+
+        try:
+            payload = jwt.decode(
+                token=token,
+                key=settings.jwt_secret_key,
+                algorithms=[settings.jwt_algorithm],
+                # issuer=settings.jwt_issuer,
+                # audience=settings.jwt_audience,
+            )
+
+            user_id = payload.get("sub")
+
+            if not user_id:
+                return JSONResponse(
+                    status_code=401,
+                    content={
+                        "statusCode": 401,
+                        "message": "Token không hợp lệ",
+                        "data": None,
+                        "errorCode": "INVALID_TOKEN",
+                    },
+                    headers={
+                        "WWW-Authenticate": "Bearer"
+                    },
+                )
+
+            # Parse JWT → CurrentUser
+            user = CurrentUser(
+                sub=user_id,
+                email=payload.get("email"),
+                fullName=payload.get("fullName"),
+                scopes=payload.get("scopes", []),
+                jti=payload.get("jti"),
+            )
+
+            # Lưu user vào request context
+            request.state.user = user
+
+        except ExpiredSignatureError:
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "statusCode": 401,
+                    "message": "Token đã hết hạn",
+                    "data": None,
+                    "errorCode": "TOKEN_EXPIRED",
+                },
+                headers={
+                    "WWW-Authenticate": "Bearer"
+                },
+            )
+
+        except JWTError:
+            return JSONResponse(
+                status_code=401,
+                content={
+                    "statusCode": 401,
+                    "message": "Token không hợp lệ",
+                    "data": None,
+                    "errorCode": "INVALID_TOKEN",
+                },
+                headers={
+                    "WWW-Authenticate": "Bearer"
+                },
+            )
+
+        return await call_next(request)    

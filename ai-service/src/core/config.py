@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/recommendations"
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
 
+    jwt_secret_key: str
+    jwt_algorithm: str
+
     service_name: str = "ai-service"
     otel_exporter_url: str = "http://localhost:4318"
     otel_enabled: bool = True

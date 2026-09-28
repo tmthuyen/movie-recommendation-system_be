@@ -13,24 +13,6 @@ from .config import Settings
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class DomainEvent: 
-    event_type: str
-    event_id: str
-    occurred_at: datetime
-    correlation_id: str
-    payload: dict[str, Any]
-
-class MovieCreated:
-    movie_id: int
-    title: str
-    title_vi: str
-    overview: str
-    overview_vi: str 
-    genres: list[str]
-class MovieUpdated(MovieCreated):
-    pass
-class MovieDeleted:
-    movie_id: int
 
 
 class MessageQueue:
