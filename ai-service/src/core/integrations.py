@@ -3,120 +3,26 @@ import json
 from abc import ABC, abstractmethod
 from typing import Any
 
-import aio_pika
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from qdrant_client import AsyncQdrantClient
-from qdrant_client.models import Distance, PointStruct, VectorParams
-from redis.asyncio import Redis
+try:
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+except ImportError:
+    AsyncIOScheduler = None
+try:
+    from qdrant_client import AsyncQdrantClient
+    from qdrant_client.models import Distance, PointStruct, VectorParams
+except ImportError:
+    AsyncQdrantClient = Distance = PointStruct = VectorParams = None
+try:
+    from redis.asyncio import Redis
+except ImportError:
+    Redis = None
 
-from api.schemas import MovieEvent, TrainRequest, UserInteractionEvent
+from api.schemas import TrainRequest
 from .config import Settings
 from utils import setup_logger
 
 
 logger = setup_logger(name='FastAPI-Recommendations', filename=__name__)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Message Queue
-# ─────────────────────────────────────────────────────────────────────────────
-
-class MessageQueue:
-    def __init__(self, settings: Settings) -> None:
-        self.settings = settings
-        self.connection = None
-        self.channel = None
-        self.consumer_tag = None
-        # Injected after startup to avoid circular import
-        self._recommend_service: Any | None = None
-
-    def set_recommend_service(self, svc: Any) -> None:
-        """Inject RecommendService sau khi khởi tạo app."""
-        self._recommend_service = svc
-
-    async def start(self) -> None:
-        if not self.settings.rabbitmq_enabled:
-            return
-        self.connection = await aio_pika.connect_robust(self.settings.rabbitmq_url)
-        self.channel = await self.connection.channel()
-        exchange = await self.channel.declare_exchange(
-            self.settings.rabbitmq_exchange,
-            type=self.settings.rabbitmq_exchange_type,
-            durable=True,
-        )
-        queue = await self.channel.declare_queue(self.settings.rabbitmq_queue, durable=True)
-        await queue.bind(exchange, self.settings.movie_event_routing_key)
-        await queue.bind(exchange, self.settings.interaction_event_routing_key)
-        self.consumer_tag = await queue.consume(self._handle_message)
-
-    async def _handle_message(self, message: Any) -> None:
-        async with message.process():
-            try:
-                payload = json.loads(message.body.decode("utf-8"))
-            except Exception as exc:
-                logger.error("_handle_message: failed to decode message body: %s", exc)
-                return
-
-            logger.info('Handle event with routing key: ', message.routing_key)
-
-            event_type: str = payload.get("eventType", "")
-            event_id: str = payload.get("eventId", "")
-            logger.info("Received event type=%s id=%s", event_type, event_id)
-
-            svc = self._recommend_service
-            if svc is None:
-                logger.warning("_handle_message: RecommendService chua duoc inject, bo qua event %s", event_id)
-                return
-
-            movie_payload: dict[str, Any] = payload.get("payload") or {}
-            movie_id: int | None = payload.get("movieId") or movie_payload.get("movieId")
-
-            if event_type in ("movie.created", "movie.updated"):
-                if movie_id is None:
-                    logger.warning("_handle_message: %s thieu movieId, bo qua.", event_type)
-                    return
-                movie_data: dict[str, Any] = {"movieId": movie_id, **movie_payload}
-                try:
-                    await svc.upsert_movie_vector(movie_data)
-                    logger.info("_handle_message: upsert vector thanh cong movieId=%s event=%s", movie_id, event_type)
-                except Exception as exc:
-                    logger.error("_handle_message: upsert_movie_vector that bai movieId=%s: %s", movie_id, exc)
-
-            elif event_type == "movie.deleted":
-                if movie_id is None:
-                    logger.warning("_handle_message: movie.deleted thieu movieId, bo qua.")
-                    return
-                try:
-                    deleted = await svc.delete_movie_vector(int(movie_id))
-                    if deleted:
-                        logger.info("_handle_message: xoa vector thanh cong movieId=%s", movie_id)
-                    else:
-                        logger.warning("_handle_message: khong the xoa vector movieId=%s", movie_id)
-                except Exception as exc:
-                    logger.error("_handle_message: delete_movie_vector that bai movieId=%s: %s", movie_id, exc)
-
-            else:
-                logger.debug("_handle_message: event_type='%s' khong duoc xu ly.", event_type)
-
-    async def publish_movie_event(self, event: MovieEvent) -> None:
-        await self._publish(event.eventType, event.model_dump())
-
-    async def publish_interaction_event(self, event: UserInteractionEvent) -> None:
-        await self._publish(event.eventType, event.model_dump())
-
-    async def _publish(self, routing_key: str, payload: dict[str, Any]) -> None:
-        if self.channel is None:
-            logger.info("Message queue disabled; accepted event %s", payload.get("eventId"))
-            return
-        exchange = await self.channel.get_exchange(self.settings.rabbitmq_exchange)
-        await exchange.publish(
-            aio_pika.Message(body=json.dumps(payload).encode("utf-8")),
-            routing_key=routing_key,
-        )
-
-    async def close(self) -> None:
-        if self.connection:
-            await self.connection.close()
 
 
 # ─────────────────────────────────────────────────────────────────────────────

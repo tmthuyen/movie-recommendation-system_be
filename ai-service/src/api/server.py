@@ -7,14 +7,15 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from core.config import get_settings
-from core.integrations import MessageQueue, TrainingScheduler, VectorStore
+from core.integrations import TrainingScheduler, VectorStore
+from core.message_queue import MessageQueue
 from core.redis_service import RedisStore
 from core.telemetry import configure_tracing
 from api.middleware import setup_middleware
 from api.routes import health, recommendations
 from services.recommend_service import RecommendService
 from services.embedding_service import embedding_service
-from api.routes import health, recommendations
+from services.movie_event_handler import MovieEventHandler
 
 
 settings = get_settings()
@@ -22,30 +23,45 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-	application.state.message_queue = MessageQueue(settings)
-	application.state.redis = RedisStore(settings)
-	application.state.vector_store = VectorStore(settings)
-	application.state.training_scheduler = TrainingScheduler(settings)
+	# 1. Khoi tao VectorStore (ChromaDB)
+	vector_store = VectorStore(settings)
+	await vector_store.start()
 
-	# start
-	await application.state.message_queue.start()
-	await application.state.redis.start()
-	await application.state.vector_store.start()
-	await application.state.training_scheduler.start()
-	# Tao RecommendService va inject vao MessageQueue de xu ly RabbitMQ events
+	# 2. Khoi tao RecommendService (xu ly semantic search va vector CRUD)
 	recommend_svc = RecommendService(
-		vector_store=application.state.vector_store,
+		vector_store=vector_store,
 		embedding_service=embedding_service,
 	)
-	application.state.recommend_service = recommend_svc
-	application.state.message_queue.set_recommend_service(recommend_svc)
 
-	# close
+	# 3. Khoi tao MovieEventHandler (dispatcher theo event_type)
+	event_handler = MovieEventHandler(recommend_service=recommend_svc)
+
+	# 4. Khoi tao MessageQueue -> inject handler -> bat dau consume
+	mq = MessageQueue(settings)
+	mq.set_handler(event_handler)
+	await mq.start()
+
+	# 5. Cac service khac
+	redis_store = RedisStore(settings)
+	await redis_store.start()
+	training_scheduler = TrainingScheduler(settings)
+	await training_scheduler.start()
+
+	# Luu vao app.state de cac route co the truy cap neu can
+	application.state.vector_store = vector_store
+	application.state.recommend_service = recommend_svc
+	application.state.message_queue = mq
+	application.state.redis = redis_store
+	application.state.training_scheduler = training_scheduler
+
 	yield
-	await application.state.training_scheduler.close()
-	await application.state.vector_store.close()
-	await application.state.redis.close()
-	await application.state.message_queue.close()
+
+	# Shutdown nguoc lai
+	await training_scheduler.close()
+	await redis_store.close()
+	await mq.close()
+	await vector_store.close()
+
 
 
 app = FastAPI(

@@ -18,14 +18,24 @@ class Settings(BaseSettings):
     otel_enabled: bool = True
 
     rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"
-    rabbitmq_exchange: str = "movie.events"
-    rabbitmq_exchange_type: str = "topic"
-    rabbitmq_queue: str = "recommendation.queue"
-    rabbitmq_dlx: str = "recommendation.dlx"
-    rabbitmq_dlq: str = "recommendation.dlq"
     rabbitmq_enabled: bool = True
-    movie_event_routing_key: str = "movie.#"
-    interaction_event_routing_key: str = "user.interaction.#"
+
+    # Exchange
+    rabbitmq_movie_exchange: str = "movie.exchange"
+
+    # Queue AI Service lắng nghe
+    rabbitmq_recommendation_queue: str = "recommendation.queue"
+
+    # Dead Letter Exchange & Queue (nhận message thất bại sau khi hết retry)
+    rabbitmq_recommendation_dlx: str = "recommendation.queue.dlx"
+    rabbitmq_recommendation_dlq: str = "recommendation.queue.dlq"
+
+    # Routing key AI Service subscribe
+    rabbitmq_movie_routing_key: str = "movie.#"
+
+    # Số lần retry tối đa trước khi đẩy vào DLQ
+    rabbitmq_max_retry: int = 3
+
 
     redis_url: str = "redis://localhost:6379/0"
     redis_enabled: bool = True
