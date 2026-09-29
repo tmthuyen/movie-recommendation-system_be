@@ -9,7 +9,7 @@ from fastapi import FastAPI
 
 from .config import Settings
 from utils import setup_logger
-logger = setup_logger("FastAPI-Recommendations")
+logger = setup_logger(name="FastAPI-Recommendations", filename=__name__)
 
 def configure_tracing(app: FastAPI, settings: Settings) -> None:
     if not settings.otel_enabled:

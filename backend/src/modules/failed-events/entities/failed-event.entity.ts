@@ -18,8 +18,11 @@ export class FailedEvent extends BaseAuditEntity {
   @Column({ name: 'routing_key', type: 'varchar' })
   routingKey: string;
 
+  @Column({ name: 'correlation_id', type: 'varchar', nullable: true })
+  correlationId?: string;
+
   @Column({ type: 'json' })
-  payload: any;
+  payload: Record<string, any>;
 
   @Column({ name: 'error_reason', type: 'text', nullable: true })
   errorReason: string;

@@ -3,19 +3,11 @@ import json
 from abc import ABC, abstractmethod
 from typing import Any
 
-try:
-    from apscheduler.schedulers.asyncio import AsyncIOScheduler
-except ImportError:
-    AsyncIOScheduler = None
-try:
-    from qdrant_client import AsyncQdrantClient
-    from qdrant_client.models import Distance, PointStruct, VectorParams
-except ImportError:
-    AsyncQdrantClient = Distance = PointStruct = VectorParams = None
-try:
-    from redis.asyncio import Redis
-except ImportError:
-    Redis = None
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from redis.asyncio import Redis
+from qdrant_client import AsyncQdrantClient
+from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from api.schemas import TrainRequest
 from .config import Settings
@@ -303,7 +295,7 @@ class VectorStore:
             backend_type()
             if settings.vector_db_provider == "memory"
             else backend_type(settings)
-        )
+        ) 
 
     async def start(self) -> None:
         if self.settings.vector_db_enabled:

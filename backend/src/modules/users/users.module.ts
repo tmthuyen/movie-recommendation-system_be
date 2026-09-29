@@ -6,6 +6,7 @@ import { User } from '@/modules/users/entities/user.entity';
 import { RolesModule } from '@/modules/roles/roles.module';
 
 import { IUserRepository, UserRepository } from './users.repository';
+import { UserProducer } from '@/infrastructure/messaging/producers/user.producer';
 
 @Module({
   imports: [TypeOrmModule.forFeature([User]), RolesModule],
@@ -16,6 +17,7 @@ import { IUserRepository, UserRepository } from './users.repository';
       useClass: UserRepository,
     },
     UsersService,
+    UserProducer,
   ],
   exports: [UsersService],
 })

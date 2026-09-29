@@ -3,7 +3,7 @@ import { CreateMovieDto } from './dto/create-movie.dto';
 import { UpdateMovieDto } from './dto/update-movie.dto';
 import { IMovieRepository } from './movies.repository';
 import { PaginationDto } from '@/common/dtos/pagination.dto';
-import { EventPublisherService } from '@/infrastructure/messaging/event-publisher.service';
+import { MovieProducer } from '@/infrastructure/messaging/producers/movie.producer';
 import { DataSource } from 'typeorm';
 import { EventsGateway } from '@/modules/events/events.gateway';
 import {
@@ -16,13 +16,17 @@ import { Genre } from '@/modules/genres/entities/genre.entity';
 import { Country } from '@/modules/countries/entities/country.entity';
 import { People } from '@/modules/peoples/entities/people.entity';
 import { BadRequestException } from '@nestjs/common';
+import {
+  MovieCreatedPayload,
+  MovieUpdatedPayload,
+} from '@/infrastructure/messaging/event.types';
 
 @Injectable()
 export class MoviesService {
   constructor(
     @Inject(IMovieRepository)
     private readonly repo: IMovieRepository,
-    private readonly eventPublisher: EventPublisherService,
+    private readonly movieProducer: MovieProducer,
     private readonly dataSource: DataSource,
     private readonly eventsGateway: EventsGateway,
   ) {}
@@ -61,6 +65,23 @@ export class MoviesService {
     }
   }
 
+  testMovieCreated(createMovieDto: CreateMovieDto) {
+    const fullMovie = createMovieDto;
+
+    // Publish movie.created event
+    if (fullMovie) {
+      const payload: MovieCreatedPayload = {
+        movieId: 101000,
+        title: fullMovie.title,
+        titleVi: fullMovie.titleVi || 'no title',
+        overview: fullMovie.overview || 'no overview',
+        overviewVi: fullMovie.overviewVi || 'no overview',
+        genres: ['test genre'],
+      };
+      this.movieProducer.publishMovieCreated(payload);
+    }
+  }
+
   async create(createMovieDto: CreateMovieDto) {
     await this.validateRelations(createMovieDto);
     const entity = this.mapDtoToEntity(createMovieDto);
@@ -71,14 +92,15 @@ export class MoviesService {
 
     // Publish movie.created event
     if (fullMovie) {
-      this.eventPublisher.publish('movie.created', {
+      const payload: MovieCreatedPayload = {
         movieId: fullMovie.id,
         title: fullMovie.title,
         titleVi: fullMovie.titleVi,
         overview: fullMovie.overview,
         overviewVi: fullMovie.overviewVi,
         genres: fullMovie.genres?.map(g => g.name) || [],
-      });
+      };
+      this.movieProducer.publishMovieCreated(payload);
     }
 
     return saved;
@@ -126,14 +148,15 @@ export class MoviesService {
     if (hasChanges && updated) {
       const fullMovie = await this.repo.findById(updated.id);
       if (fullMovie) {
-        this.eventPublisher.publish('movie.updated', {
+        const payload: MovieUpdatedPayload = {
           movieId: fullMovie.id,
           title: fullMovie.title,
           titleVi: fullMovie.titleVi,
           overview: fullMovie.overview,
           overviewVi: fullMovie.overviewVi,
           genres: fullMovie.genres?.map(g => g.name) || [],
-        });
+        };
+        this.movieProducer.publishMovieUpdated(payload);
       }
     }
 
@@ -143,6 +166,9 @@ export class MoviesService {
   async remove(id: number) {
     const movie = await this.findOne(id); // Check exists
     await this.repo.remove(movie.id);
+
+    this.movieProducer.publishMovieDeleted({ movieId: id });
+
     return { success: true };
   }
 

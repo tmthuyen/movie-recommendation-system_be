@@ -13,8 +13,7 @@ import { MailService } from '@/infrastructure/mail/mail.service';
 import { SessionService } from './session.service';
 import { RedisService } from '@/infrastructure/redis/redis.service';
 import { RolesService } from '@/modules/roles/roles.service';
-import { EventPublisherService } from '@/infrastructure/messaging/event-publisher.service';
-import { MESSAGE_EVENTS } from '@/infrastructure/messaging/messaging.constants';
+import { UserProducer } from '@/infrastructure/messaging/producers/user.producer';
 import { ConfigService } from '@nestjs/config';
 
 @Injectable()
@@ -26,7 +25,7 @@ export class AuthService {
     private mailService: MailService,
     private sessionService: SessionService,
     private redisService: RedisService,
-    private eventPublisher: EventPublisherService,
+    private userProducer: UserProducer,
     private configService: ConfigService,
   ) {}
 
@@ -98,14 +97,11 @@ export class AuthService {
     );
 
     if (this.configService.get<string>('ASYNC_MAIL_ENABLED') === 'true') {
-      this.eventPublisher.publish(
-        MESSAGE_EVENTS.USER_EMAIL_VERIFICATION_REQUESTED,
-        {
-          userId: user.id,
-          email: user.email,
-          verificationToken: verifyToken,
-        },
-      );
+      this.userProducer.publishEmailVerificationRequested({
+        userId: user.id,
+        email: user.email,
+        verificationToken: verifyToken,
+      });
     } else {
       await this.mailService.sendVerificationEmail(user.email, verifyToken);
     }
@@ -159,9 +155,7 @@ export class AuthService {
     const userId = userIdStr;
     await this.usersService.updateStatus(userId, UserStatus.ACTIVE);
     await this.redisService.del(`verify_email:${token}`);
-    this.eventPublisher.publish(MESSAGE_EVENTS.USER_EMAIL_VERIFIED, {
-      userId,
-    });
+    this.userProducer.publishEmailVerified(userIdStr);
   }
 
   // 6. Quên mật khẩu

@@ -60,10 +60,6 @@ export class EnvironmentVariables {
   REDIS_PORT: number;
 
   @IsOptional()
-  @IsBoolean()
-  RABBITMQ_ENABLED: boolean;
-
-  @IsOptional()
   @IsString()
   RABBITMQ_URL: string;
 

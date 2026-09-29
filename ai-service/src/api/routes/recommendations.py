@@ -1,3 +1,4 @@
+from fastapi import requests
 from fastapi import APIRouter, HTTPException, Query, Request, status, Depends 
 from typing import Annotated 
 
@@ -123,3 +124,21 @@ async def hybrid_search(
 
     # Replace this placeholder with the baseline/main model service.
     return paginated([], 0, request.page, request.limit, "Search completed")
+
+
+
+# ===================
+# DEBUG APIs
+# ===================
+
+@router.get("/tracing")
+async def tracing(req: Request) -> dict:
+    """test API"""
+    # Không cần truyền headers nữa, OTel tự động kẹp traceparent vào requests.get
+    response = requests.get('http://localhost:8081/api/health')
+    
+    logger.info("tracing API called")
+    return success(
+        data=response.json(),
+    )
+

@@ -1,39 +1,64 @@
-import { Global, Module } from '@nestjs/common';
+import { Global, Module, OnModuleDestroy } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { ClientsModule, Transport } from '@nestjs/microservices';
+import * as amqp from 'amqp-connection-manager';
 import { MESSAGE_BUS_CLIENT, MESSAGE_BUS_CONFIG } from './messaging.constants';
 import { EventPublisherService } from './event-publisher.service';
+import { UserProducer } from './producers/user.producer';
+import { MovieProducer } from './producers/movie.producer';
+import {
+  RecommendationConsumer,
+  RecommendationHandler,
+} from './consumers/recommendation-dlq.consumer';
+import { FailedEventsModule } from '@/modules/failed-events/failed-events.module';
 
 @Global()
 @Module({
-  imports: [
-    ConfigModule,
-    ClientsModule.registerAsync([
-      {
-        name: MESSAGE_BUS_CLIENT,
-        imports: [ConfigModule],
-        inject: [ConfigService],
-        useFactory: (configService: ConfigService) => ({
-          transport: Transport.RMQ,
-          options: {
-            urls: [
-              configService.get<string>(
-                'RABBITMQ_URL',
-                'amqp://guest:guest@localhost:5672',
+  imports: [ConfigModule, FailedEventsModule],
+  providers: [
+    {
+      provide: MESSAGE_BUS_CLIENT,
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const url = configService.get<string>(
+          'RABBITMQ_URL',
+          'amqp://guest:guest@localhost:5672',
+        );
+        const connection = amqp.connect([url]);
+
+        const channelWrapper = connection.createChannel({
+          json: true,
+          publishTimeout: 3000, // 3s
+          setup: function (channel: any) {
+            return Promise.all([
+              channel.assertExchange(
+                MESSAGE_BUS_CONFIG.MOVIE_EXCHANGE,
+                'topic',
+                { durable: true },
               ),
-            ],
-            queue: configService.get<string>(
-              'RABBITMQ_QUEUE',
-              MESSAGE_BUS_CONFIG.queue,
-            ),
-            queueOptions: { durable: true },
-            persistent: true,
+              channel.assertExchange(
+                MESSAGE_BUS_CONFIG.USER_EXCHANGE,
+                'topic',
+                { durable: true },
+              ),
+            ]);
           },
-        }),
+        });
+
+        return channelWrapper;
       },
-    ]),
+    },
+    EventPublisherService,
+    RecommendationConsumer,
+    RecommendationHandler,
+    UserProducer,
+    MovieProducer,
   ],
-  providers: [EventPublisherService],
-  exports: [EventPublisherService],
+  exports: [EventPublisherService, MESSAGE_BUS_CLIENT],
 })
-export class MessagingModule {}
+export class MessagingModule implements OnModuleDestroy {
+  constructor() {}
+
+  onModuleDestroy() {
+    // Cleanup will be handled by amqp-connection-manager on exit
+  }
+}

@@ -11,15 +11,14 @@ import { RolesService } from '@/modules/roles/roles.service';
 import { PaginationDto } from '@/common/dtos/pagination.dto';
 import * as bcrypt from 'bcrypt';
 import { IUserRepository } from './users.repository';
-import { EventPublisherService } from '@/infrastructure/messaging/event-publisher.service';
-import { MESSAGE_EVENTS } from '@/infrastructure/messaging/messaging.constants';
+import { UserProducer } from '@/infrastructure/messaging/producers/user.producer';
 
 @Injectable()
 export class UsersService {
   constructor(
     @Inject(IUserRepository) private readonly userRepo: IUserRepository,
     private readonly roleSv: RolesService,
-    private readonly eventPublisher: EventPublisherService,
+    private readonly userProducer: UserProducer,
   ) {}
 
   // =========
@@ -36,7 +35,7 @@ export class UsersService {
       roles: r,
     });
 
-    this.eventPublisher.publish(MESSAGE_EVENTS.USER_CREATED, {
+    this.userProducer.publishUserCreated({
       userId: u.id,
       email: u.email,
       fullName: u.fullName,
@@ -77,6 +76,14 @@ export class UsersService {
     }
     Object.assign(user, updateUserDto);
     await this.userRepo.save(user);
+
+    this.userProducer.publishUserUpdated({
+      userId: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      status: user.status,
+    });
+
     return user;
   }
 
@@ -84,6 +91,9 @@ export class UsersService {
     const user = await this.findOne(id);
     user.status = UserStatus.BLOCKED;
     await this.userRepo.save(user);
+
+    this.userProducer.publishUserDeleted(user.id);
+
     return user;
   }
 

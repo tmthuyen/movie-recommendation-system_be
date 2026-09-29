@@ -59,28 +59,7 @@ async function bootstrap() {
   const cfsv = app.get(ConfigService);
   const port = Number(cfsv.get<number>('APP_PORT'));
 
-  const isRabbitMQEnabled =
-    cfsv.get('RABBITMQ_ENABLED') === 'true' ||
-    cfsv.get('RABBITMQ_ENABLED') === true;
-
-  if (isRabbitMQEnabled) {
-    // Kết nối Microservice để Consume RabbitMQ (Bao gồm DLQ)
-    app.connectMicroservice<MicroserviceOptions>({
-      transport: Transport.RMQ,
-      options: {
-        urls: [
-          cfsv.get<string>('RABBITMQ_URL', 'amqp://guest:guest@localhost:5672'),
-        ],
-        queue: 'failed_events_queue', // Queue DLQ
-        queueOptions: {
-          durable: true,
-        },
-        noAck: false, // Để có thể chủ động ACK/NACK
-      },
-    });
-
-    await app.startAllMicroservices();
-  }
+  // Removed RMQ microservice setup from main.ts - handled by centralized consumer module
 
   await app.listen(port);
 }

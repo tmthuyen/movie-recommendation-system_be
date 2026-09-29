@@ -9,6 +9,7 @@ import { JwtStrategy } from '@/modules/auth/strategies/jwt.strategy';
 
 import { SessionService } from './session.service';
 import { RolesModule } from '@/modules/roles/roles.module';
+import { UserProducer } from '@/infrastructure/messaging/producers/user.producer';
 
 @Module({
   imports: [
@@ -34,7 +35,7 @@ import { RolesModule } from '@/modules/roles/roles.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, SessionService],
+  providers: [AuthService, JwtStrategy, SessionService, UserProducer],
   exports: [AuthService, SessionService],
 })
 export class AuthModule {}

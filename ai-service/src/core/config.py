@@ -29,12 +29,14 @@ class Settings(BaseSettings):
     # Dead Letter Exchange & Queue (nhận message thất bại sau khi hết retry)
     rabbitmq_recommendation_dlx: str = "recommendation.queue.dlx"
     rabbitmq_recommendation_dlq: str = "recommendation.queue.dlq"
+    # dlq routing key
+    rabbitmq_recommendation_dlq_routing_key: str = "recommendation.queue.dlq.rk"
+    # Số lần retry tối đa trước khi đẩy vào DLQ
+    rabbitmq_max_retry: int = 3
 
     # Routing key AI Service subscribe
     rabbitmq_movie_routing_key: str = "movie.#"
 
-    # Số lần retry tối đa trước khi đẩy vào DLQ
-    rabbitmq_max_retry: int = 3
 
 
     redis_url: str = "redis://localhost:6379/0"

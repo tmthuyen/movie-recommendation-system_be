@@ -5,15 +5,11 @@ import { MoviesController } from './movies.controller';
 import { Movie } from './entities/movie.entity';
 import { MoviePeople } from './entities/movie-people.entity';
 import { MovieRepository, IMovieRepository } from './movies.repository';
-import { MessagingModule } from '@/infrastructure/messaging/messaging.module';
 import { EventsModule } from '../events/events.module';
+import { MovieProducer } from '@/infrastructure/messaging/producers/movie.producer';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([Movie, MoviePeople]),
-    MessagingModule,
-    EventsModule,
-  ],
+  imports: [TypeOrmModule.forFeature([Movie, MoviePeople]), EventsModule],
   controllers: [MoviesController],
   providers: [
     {
@@ -21,6 +17,7 @@ import { EventsModule } from '../events/events.module';
       useClass: MovieRepository,
     },
     MoviesService,
+    MovieProducer,
   ],
   exports: [MoviesService],
 })

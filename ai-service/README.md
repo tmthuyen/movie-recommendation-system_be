@@ -51,6 +51,43 @@ ai-service/
 
 ## Installation
 
+-  Hướng dẫn chạy FastAPI Service
+
+### A. Chạy trong môi trường venv
+
+-  Tạo môi trường ảo (để không làm rác máy tính)
+```
+python -m venv .venv
+```
+
+
+-  Kích hoạt môi trường (Lệnh riêng cho Windows PowerShell)
+```
+.\.venv\Scripts\activate
+```
+
+-  Cài đặt các thư viện cần thiết
+```
+pip install -e .
+```
+
+-  Cài đặt toàn bộ (bao gồm cả Core và nhóm Dev Tools)
+```
+pip install -e .[dev]
+```
+
+
+### B. Hướng dẫn chạy lệnh huấn luyện mô hình (Mẫu)
+```
+python scripts/train_baseline.py 
+```
+
+### C. Hướng dẫn chạy API
+```
+uvicorn src.api.server:app --host localhost --port 8082 --reload
+```
+
+
 ## API Endpoints
 
 - API documentation: [Swagger UI](http://localhost:8082/docs)

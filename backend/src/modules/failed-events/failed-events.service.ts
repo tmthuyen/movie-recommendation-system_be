@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, Inject, Logger } from '@nestjs/common';
 import { IFailedEventRepository } from './failed-events.repository';
 import { FailedEventStatus } from './entities/failed-event.entity';
 import { EventPublisherService } from '@/infrastructure/messaging/event-publisher.service';
+import { MESSAGE_BUS_CONFIG } from '@/infrastructure/messaging/messaging.constants';
 
 @Injectable()
 export class FailedEventsService {
@@ -32,7 +33,17 @@ export class FailedEventsService {
 
     try {
       this.logger.log(`Retrying event ${failedEvent.routingKey}...`);
-      this.eventPublisher.publish(failedEvent.routingKey, failedEvent.payload);
+
+      let exchange = MESSAGE_BUS_CONFIG.MOVIE_EXCHANGE as string;
+      if (failedEvent.routingKey.startsWith('user.')) {
+        exchange = MESSAGE_BUS_CONFIG.USER_EXCHANGE;
+      }
+      this.eventPublisher.publish(
+        exchange,
+        failedEvent.routingKey,
+        failedEvent.payload,
+        failedEvent.correlationId,
+      );
 
       failedEvent.status = FailedEventStatus.RETRIED_SUCCESS;
       failedEvent.retryCount += 1;

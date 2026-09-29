@@ -1,4 +1,5 @@
 ﻿from __future__ import annotations
+from aio_pika import IncomingMessage
 
 import json
 from typing import Any, TYPE_CHECKING
@@ -29,7 +30,7 @@ class MessageQueue:
         self._channel = None
         self._consumer_tag = None
         self._handler: MovieEventHandler | None = None
-        self._logger = setup_logger("message_queue")
+        self._logger = setup_logger(name='FastAPI-Recommendations', filename=__name__)
 
     def set_handler(self, handler: MovieEventHandler) -> None:
         """Inject MovieEventHandler sau khi khoi tao app (tranh circular import)."""
@@ -67,7 +68,11 @@ class MessageQueue:
             self._settings.rabbitmq_recommendation_dlq,
             durable=True,
         )
-        await dlq.bind(exchange=dlx, routing_key="#")
+        
+        await dlq.bind(
+            exchange=dlx, 
+            routing_key=self._settings.rabbitmq_recommendation_dlq_routing_key
+        )
 
         # ── 4. Khai bao recommendation.queue voi DLX config ───────────────
         recommend_queue = await self._channel.declare_queue(
@@ -76,6 +81,7 @@ class MessageQueue:
             arguments={
                 # Khi message bi nack(requeue=False), day sang DLX
                 "x-dead-letter-exchange": self._settings.rabbitmq_recommendation_dlx,
+                "x-dead-letter-routing-key": self._settings.rabbitmq_recommendation_dlq_routing_key
             },
         )
 
@@ -105,7 +111,7 @@ class MessageQueue:
 
     # ── Consumer ──────────────────────────────────────────────────────────────
 
-    async def _handle_message(self, message: Any) -> None:
+    async def _handle_message(self, message: IncomingMessage) -> None:
         """
         Xu ly message tu RabbitMQ.
 
@@ -122,6 +128,15 @@ class MessageQueue:
         retry_count = 0
         if x_death and isinstance(x_death, list) and len(x_death) > 0:
             retry_count = int(x_death[0].get("count", 0))
+        
+        # log routing key
+        routing_key = message.routing_key
+        if routing_key is None:
+            self._logger.warning("Routing key is None!!!!")
+            return
+
+        self._logger.info("Movie consumer routing key: %s", routing_key)
+
 
         event_type = "(unknown)"
         try:

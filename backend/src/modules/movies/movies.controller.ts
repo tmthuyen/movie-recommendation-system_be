@@ -34,6 +34,14 @@ export class MoviesController {
   async create(@Body() createMovieDto: CreateMovieDto) {
     return await this.moviesService.create(createMovieDto);
   }
+  @Post('/test-created')
+  @UseGuards(JwtAuthGuard)
+  @Roles('ADMIN', 'SUPERADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Test movie created' })
+  testMovieCreated(@Body() createMovieDto: CreateMovieDto) {
+    return this.moviesService.testMovieCreated(createMovieDto);
+  }
 
   @Get()
   @ApiOperation({ summary: 'Lấy danh sách phim (Public)' })
