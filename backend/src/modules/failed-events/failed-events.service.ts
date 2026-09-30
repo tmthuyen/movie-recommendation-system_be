@@ -3,6 +3,8 @@ import { IFailedEventRepository } from './failed-events.repository';
 import { FailedEventStatus } from './entities/failed-event.entity';
 import { EventPublisherService } from '@/infrastructure/messaging/event-publisher.service';
 import { MESSAGE_BUS_CONFIG } from '@/infrastructure/messaging/messaging.constants';
+import { EventEnvelope } from '@/infrastructure/messaging/event.types';
+import { FailedEventDto } from './dtos/failed-event.dto';
 
 @Injectable()
 export class FailedEventsService {
@@ -32,7 +34,7 @@ export class FailedEventsService {
     }
 
     try {
-      this.logger.log(`Retrying event ${failedEvent.routingKey}...`);
+      this.logger.log(`Retrying event ${JSON.stringify(failedEvent)}`);
 
       let exchange = MESSAGE_BUS_CONFIG.MOVIE_EXCHANGE as string;
       if (failedEvent.routingKey.startsWith('user.')) {
@@ -59,17 +61,9 @@ export class FailedEventsService {
     }
   }
 
-  async logFailedEvent(
-    payload: any,
-    routingKey: string,
-    queueName: string,
-    errorReason: string,
-  ) {
+  async logFailedEvent(eventDto: FailedEventDto) {
     return this.repo.save({
-      payload,
-      routingKey,
-      queueName,
-      errorReason,
+      ...eventDto,
       status: FailedEventStatus.PENDING,
       retryCount: 0,
     });

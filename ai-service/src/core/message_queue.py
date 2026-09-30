@@ -55,6 +55,12 @@ class MessageQueue:
             type=ExchangeType.TOPIC,
             durable=True,
         )
+        # exchange retry 10s
+        movie_exchange_retry_10s = await self._channel.declare_exchange(
+            f'{self._settings.rabbitmq_movie_exchange}.retry.10s',
+            type=ExchangeType.DIRECT,
+            durable=True,
+        )
 
         # ── 2. Khai bao DLX (Dead Letter Exchange) ────────────────────────
         dlx = await self._channel.declare_exchange(
@@ -79,7 +85,16 @@ class MessageQueue:
             self._settings.rabbitmq_recommendation_queue,
             durable=True,
             arguments={
-                # Khi message bi nack(requeue=False), day sang DLX
+                "x-dead-letter-exchange": f'{self._settings.rabbitmq_movie_exchange}.retry.10s',
+                "x-dead-letter-routing-key": f'{self._settings.rabbitmq_recommendation_queue}.retry.10s.rk'
+            },
+        )
+        
+        recommend_queue_retry_10s = await self._channel.declare_queue(
+            f'{self._settings.rabbitmq_recommendation_queue}.retry.10s',
+            durable=True,
+            arguments={
+                "x-message-ttl": 10_000,
                 "x-dead-letter-exchange": self._settings.rabbitmq_recommendation_dlx,
                 "x-dead-letter-routing-key": self._settings.rabbitmq_recommendation_dlq_routing_key
             },
@@ -91,17 +106,26 @@ class MessageQueue:
             routing_key=self._settings.rabbitmq_movie_routing_key,  # "movie.#"
         )
 
+        await recommend_queue_retry_10s.bind(
+            exchange=movie_exchange_retry_10s,
+            routing_key=f'{self._settings.rabbitmq_recommendation_queue}.retry.10s.rk',
+        )
+
         # ── 6. Bat dau consume ────────────────────────────────────────────
         self._consumer_tag = await recommend_queue.consume(
             self._handle_message,
             no_ack=False,  # Manual ack bat buoc
         )
+        self._consumer_tag_retry_10s = await recommend_queue_retry_10s.consume(
+            self._handle_message,
+            no_ack=False,  # Manual ack bat buoc
+        )
 
         self._logger.info(
-            "MessageQueue started: exchange=%s queue=%s routing_key=%s",
-            self._settings.rabbitmq_movie_exchange,
-            self._settings.rabbitmq_recommendation_queue,
-            self._settings.rabbitmq_movie_routing_key,
+            f'Started Queues: {self._settings.rabbitmq_recommendation_queue}'
+            f'\nRetry Queues: {self._settings.rabbitmq_recommendation_queue}.retry.10s'
+            f'\nDLX: {self._settings.rabbitmq_recommendation_dlx}'
+            f'\nDLQ: {self._settings.rabbitmq_recommendation_dlq}'
         )
 
     async def close(self) -> None:
@@ -123,31 +147,28 @@ class MessageQueue:
             5. Neu loi tam thoi (timeout, DB down...) -> nack requeue=True -> retry
                Qua rabbitmq_max_retry -> nack requeue=False -> vao DLQ
         """
-        # Lay so lan da retry tu header (RabbitMQ gan tu dong qua x-death)
-        x_death = message.headers.get("x-death") if message.headers else None
-        retry_count = 0
-        if x_death and isinstance(x_death, list) and len(x_death) > 0:
-            retry_count = int(x_death[0].get("count", 0))
-        
-        # log routing key
-        routing_key = message.routing_key
-        if routing_key is None:
-            self._logger.warning("Routing key is None!!!!")
-            return
-
-        self._logger.info("Movie consumer routing key: %s", routing_key)
-
 
         event_type = "(unknown)"
         try:
+        
+            routing_key = message.routing_key
             body = json.loads(message.body.decode("utf-8"))
-            event_type = body.get("eventType", "")
-            movie_payload: dict[str, Any] = body.get("payload") or {}
 
             self._logger.info(
-                "Received: event_type=%s routing_key=%s retry=%d",
-                event_type, message.routing_key, retry_count,
+                f'Received [Message]: {message} \n'
+                f'with [Routing Key]: {routing_key} \n'
+                f'and [Event]: {body}'
             )
+            
+            # log routing key
+            if routing_key is None:
+                self._logger.warning("Routing key is None!!!!")
+                return
+
+
+            event_type = body.get("eventType", "")
+            movie_payload: dict[str, Any] = body.get("payload") or {}
+            
 
             if self._handler is None:
                 self._logger.error("MovieEventHandler chua duoc inject! Ack message de tranh loop.")
@@ -160,21 +181,14 @@ class MessageQueue:
         except (ValueError, TypeError, KeyError) as exc:
             # Loi du lieu / schema sai -> khong co ich khi retry -> vao DLQ ngay
             self._logger.error(
-                "Invalid payload event_type=%s, sending to DLQ: %s", event_type, exc
+                "[Recommendations Queue] Invalid payload event_type=%s, sending to DLQ: %s", event_type, exc
             )
             await message.nack(requeue=False)
 
         except Exception as exc:
-            # Loi tam thoi -> retry neu chua qua gioi han
-            if retry_count < self._settings.rabbitmq_max_retry:
-                self._logger.warning(
-                    "Error handling event_type=%s (retry %d/%d): %s",
-                    event_type, retry_count + 1, self._settings.rabbitmq_max_retry, exc,
-                )
-                await message.nack(requeue=True)
-            else:
-                self._logger.error(
-                    "Max retry (%d) reached for event_type=%s, sending to DLQ: %s",
-                    self._settings.rabbitmq_max_retry, event_type, exc,
-                )
-                await message.nack(requeue=False)
+            self._logger.error(
+                f"[Recommendations Queue] Error when handling message queue: {exc}"
+            )
+            await message.nack(requeue=False)
+            
+        

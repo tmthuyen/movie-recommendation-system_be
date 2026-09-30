@@ -35,8 +35,8 @@ export class MoviesController {
     return await this.moviesService.create(createMovieDto);
   }
   @Post('/test-created')
-  @UseGuards(JwtAuthGuard)
-  @Roles('ADMIN', 'SUPERADMIN')
+  // @UseGuards(JwtAuthGuard)
+  // @Roles('ADMIN', 'SUPERADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Test movie created' })
   testMovieCreated(@Body() createMovieDto: CreateMovieDto) {

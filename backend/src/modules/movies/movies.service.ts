@@ -66,16 +66,14 @@ export class MoviesService {
   }
 
   testMovieCreated(createMovieDto: CreateMovieDto) {
-    const fullMovie = createMovieDto;
-
     // Publish movie.created event
-    if (fullMovie) {
+    if (createMovieDto) {
       const payload: MovieCreatedPayload = {
         movieId: 101000,
-        title: fullMovie.title,
-        titleVi: fullMovie.titleVi || 'no title',
-        overview: fullMovie.overview || 'no overview',
-        overviewVi: fullMovie.overviewVi || 'no overview',
+        title: '',
+        titleVi: createMovieDto.titleVi || '',
+        overview: createMovieDto.overview || '',
+        overviewVi: createMovieDto.overviewVi || '',
         genres: ['test genre'],
       };
       this.movieProducer.publishMovieCreated(payload);

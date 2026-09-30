@@ -12,11 +12,20 @@ export class FailedEvent extends BaseAuditEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ name: 'source', type: 'varchar', nullable: true })
+  source?: string;
+
   @Column({ name: 'queue_name', type: 'varchar' })
   queueName: string;
 
   @Column({ name: 'routing_key', type: 'varchar' })
   routingKey: string;
+
+  @Column({ name: 'event_id', type: 'varchar', nullable: true, unique: true })
+  eventId?: string;
+
+  @Column({ name: 'event_type', type: 'varchar', nullable: true })
+  eventType?: string;
 
   @Column({ name: 'correlation_id', type: 'varchar', nullable: true })
   correlationId?: string;

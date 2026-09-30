@@ -37,6 +37,10 @@ class MovieEventHandler:
         Exception
             Re-raise moi loi khac de MessageQueue quyet dinh retry hay DLQ.
         """
+
+        if payload.get('title', '') == '' or payload.get('overview', '') == '':
+                raise Exception('Title or overview is required')
+
         if event_type == "movie.created":
             await self._on_movie_created(payload)
         elif event_type == "movie.updated":
