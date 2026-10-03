@@ -1,0 +1,1176 @@
+{
+  "metadata": {
+    "description": "Tập Ground Truth chuẩn học thuật (Human-annotated via Candidate Pooling) cho đánh giá định lượng mô hình gợi ý phim.",
+    "annotation_method": "Phương pháp Pooling & Human Annotation (chuẩn TREC / BEIR): Trích xuất ứng viên từ Lexical (TF-IDF, BM25) và Semantic (SBERT + ChromaDB), chuyên gia đánh giá nội dung phim và gán nhãn mức độ liên quan.",
+    "relevance_grades": {
+      "3": "Rất liên quan — phim khớp hoàn toàn chủ đề, thể loại và cảm xúc của query",
+      "2": "Liên quan — phim cùng thể loại chính, gần đúng với ý định query",
+      "1": "Có liên quan một phần — chia sẻ một yếu tố (thể loại hoặc chủ đề) với query",
+      "0": "Không liên quan"
+    },
+    "total_queries": 20,
+    "dataset_source": "TMDB + MovieLens (14,815 phim)",
+    "created_by": "Nhóm tác giả đồ án",
+    "created_at": "2026-10-03"
+  },
+  "queries": [
+    {
+      "query_id": "Q01",
+      "group": "A_semantic_mismatch",
+      "group_description": "Truy vấn ngôn ngữ tự nhiên mô tả cốt truyện mà không dùng đúng từ khóa trong DB",
+      "query": "robot sát thủ đến từ tương lai để tiêu diệt loài người",
+      "intent": "Phim khoa học viễn tưởng về robot/AI sát thủ, phản loạn, hủy diệt nhân loại",
+      "relevant_movies": [
+        {
+          "movie_id": 8644,
+          "title": "Tôi, Robot",
+          "relevance_grade": 3,
+          "annotation_note": "Tôi, Robot — AI/robot phản loạn tấn công và muốn kiểm soát loài người"
+        },
+        {
+          "movie_id": 136800,
+          "title": "Đế Chế Rô-bốt",
+          "relevance_grade": 3,
+          "annotation_note": "Đế Chế Rô-bốt (Robot Overlords) — Robot xâm lăng thôn tính và tiêu diệt loài người"
+        },
+        {
+          "movie_id": 6968,
+          "title": "Death Machine",
+          "relevance_grade": 3,
+          "annotation_note": "Death Machine — Robot cỗ máy tử thần được lập trình để tàn sát con người"
+        },
+        {
+          "movie_id": 71530,
+          "title": "Kẻ Thế Mạng",
+          "relevance_grade": 2,
+          "annotation_note": "Kẻ Thế Mạng (Surrogates) — Robot thay thế con người và âm mưu tàn sát diện rộng"
+        },
+        {
+          "movie_id": 135456,
+          "title": "Vỏ Bọc Ma: Mặt Cười",
+          "relevance_grade": 2,
+          "annotation_note": "Vỏ Bọc Ma (Ghost in the Shell) — Cyborg sát thủ và trí tuệ nhân tạo phản loạn"
+        },
+        {
+          "movie_id": 53996,
+          "title": "Transformers: Robot Đại Chiến",
+          "relevance_grade": 2,
+          "annotation_note": "Transformers — Robot ngoài không gian đại chiến hủy diệt Trái Đất"
+        },
+        {
+          "movie_id": 3986,
+          "title": "Ngày Thứ 6",
+          "relevance_grade": 2,
+          "annotation_note": "Ngày Thứ 6 — Công nghệ nhân bản vô tính đe dọa thay thế con người"
+        },
+        {
+          "movie_id": 136200,
+          "title": "The Terminators",
+          "relevance_grade": 2,
+          "annotation_note": "The Terminators — Robot người máy nổi dậy tiêu diệt nhân loại"
+        },
+        {
+          "movie_id": 114847,
+          "title": "Số Hóa",
+          "relevance_grade": 1,
+          "annotation_note": "Số Hóa (Transcendence) — Ý thức con người tải lên AI kiểm soát thế giới"
+        }
+      ]
+    },
+    {
+      "query_id": "Q02",
+      "group": "A_semantic_mismatch",
+      "group_description": "Truy vấn ngôn ngữ tự nhiên mô tả cốt truyện mà không dùng đúng từ khóa trong DB",
+      "query": "phép thuật phù thủy học trường nội trú bí ẩn",
+      "intent": "Phim ma thuật, phù thủy, học viện phép thuật, bí ẩn trường học",
+      "relevant_movies": [
+        {
+          "movie_id": 148775,
+          "title": "Những Phù Thủy Xứ Waverly: Bản Điện Ảnh",
+          "relevance_grade": 3,
+          "annotation_note": "Những Phù Thủy Xứ Waverly — Gia đình phù thủy trẻ với các phép thuật thần kỳ"
+        },
+        {
+          "movie_id": 4020,
+          "title": "Những Lá Bài Ma Thuật",
+          "relevance_grade": 3,
+          "annotation_note": "Những Lá Bài Ma Thuật (Cardcaptor Sakura) — Nữ sinh sử dụng các lá bài phép thuật ma thuật bí ẩn"
+        },
+        {
+          "movie_id": 140267,
+          "title": "Phù Thủy",
+          "relevance_grade": 3,
+          "annotation_note": "Phù Thủy (The Witches) — Hội phù thủy bí mật với âm mưu phép thuật đen tối"
+        },
+        {
+          "movie_id": 4896,
+          "title": "Harry Potter và Hòn Đá Phù Thủy",
+          "relevance_grade": 3,
+          "annotation_note": "Harry Potter và Hòn Đá Phù Thủy — Cậu bé phù thủy nhập học trường nội trú Hogwarts"
+        },
+        {
+          "movie_id": 5816,
+          "title": "Harry Potter và Căn Phòng Bí Mật",
+          "relevance_grade": 3,
+          "annotation_note": "Harry Potter và Căn Phòng Bí Mật — Năm học thứ 2 tại trường Hogwarts với căn phòng bí ẩn"
+        },
+        {
+          "movie_id": 8368,
+          "title": "Harry Potter và Tù Nhân Azkaban",
+          "relevance_grade": 3,
+          "annotation_note": "Harry Potter và Tù Nhân Azkaban — Bí mật đen tối tại trường phép thuật Hogwarts"
+        },
+        {
+          "movie_id": 40815,
+          "title": "Harry Potter và Chiếc Cốc Lửa",
+          "relevance_grade": 3,
+          "annotation_note": "Harry Potter và Chiếc Cốc Lửa — Cuộc thi tam pháp thuật giữa các trường phù thủy"
+        },
+        {
+          "movie_id": 54001,
+          "title": "Harry Potter và Mệnh Lệnh Phượng Hoàng",
+          "relevance_grade": 3,
+          "annotation_note": "Harry Potter và Mệnh Lệnh Phượng Hoàng — Bí mật học viện phù thủy đối đầu thế lực hắc ám"
+        },
+        {
+          "movie_id": 101479,
+          "title": "Curse of the Blair Witch",
+          "relevance_grade": 1,
+          "annotation_note": "Curse of the Blair Witch — Lời nguyền phù thủy bí ẩn rừng sâu"
+        },
+        {
+          "movie_id": 142452,
+          "title": "劇場版 魔法少女まどか☆マギカ[後編] 永遠の物語",
+          "relevance_grade": 2,
+          "annotation_note": "Madoka Magica — Các nữ sinh trung học giao ước phép thuật với các thế lực kỳ bí"
+        }
+      ]
+    },
+    {
+      "query_id": "Q03",
+      "group": "A_semantic_mismatch",
+      "group_description": "Truy vấn ngôn ngữ tự nhiên mô tả cốt truyện mà không dùng đúng từ khóa trong DB",
+      "query": "anh hùng một mình chiến đấu chống lại cả vương quốc để giải phóng dân tộc",
+      "intent": "Phim sử thi chiến tranh, người anh hùng đứng lên chống bạo quyền giải phóng dân tộc",
+      "relevant_movies": [
+        {
+          "movie_id": 3578,
+          "title": "Võ Sĩ Giác Đấu",
+          "relevance_grade": 3,
+          "annotation_note": "Võ Sĩ Giác Đấu (Gladiator) — Tướng quân Maximus một mình đối đầu hoàng đế La Mã để cứu dân"
+        },
+        {
+          "movie_id": 134775,
+          "title": "Kiếm Rồng",
+          "relevance_grade": 3,
+          "annotation_note": "Kiếm Rồng (Dragon Blade) — Tướng quân bảo vệ con đường tơ lụa và giải phóng các bộ tộc"
+        },
+        {
+          "movie_id": 5527,
+          "title": "Possession",
+          "relevance_grade": 2,
+          "annotation_note": "Bá Tước Monte Cristo — Tự mình chiến đấu chống lại cả mạng lưới quyền lực quý tộc"
+        },
+        {
+          "movie_id": 7153,
+          "title": "Chúa Tể Của Những Chiếc Nhẫn: Sự Trở Lại Của Nhà Vua",
+          "relevance_grade": 2,
+          "annotation_note": "Chúa Tể Của Những Chiếc Nhẫn: Sự Trở Lại Của Nhà Vua — Cuộc chiến giải phóng loài người khỏi Sauron"
+        },
+        {
+          "movie_id": 4993,
+          "title": "Chúa Tể Của Những Chiếc Nhẫn: Hiệp Hội Nhẫn Thần",
+          "relevance_grade": 2,
+          "annotation_note": "Chúa Tể Của Những Chiếc Nhẫn: Hiệp Hội Nhẫn Thần — Hành trình giải phóng Trung Địa"
+        },
+        {
+          "movie_id": 144380,
+          "title": "역린",
+          "relevance_grade": 2,
+          "annotation_note": "역린 (The Fatal Encounter) — Vua Jeongjo một mình chiến đấu chống thích khách bảo vệ vương quyền"
+        },
+        {
+          "movie_id": 131066,
+          "title": "Dũng Sĩ Bất Đắc Dĩ",
+          "relevance_grade": 2,
+          "annotation_note": "Dũng Sĩ Bất Đắc Dĩ — Anh hùng nông dân đứng lên chống lại bạo chúa"
+        },
+        {
+          "movie_id": 5952,
+          "title": "Chúa Tể Của Những Chiếc Nhẫn: Hai Tòa Tháp",
+          "relevance_grade": 2,
+          "annotation_note": "Chúa Tể Của Những Chiếc Nhẫn: Hai Tòa Tháp — Trận đánh Helm's Deep bảo vệ dân tộc Rohan"
+        }
+      ]
+    },
+    {
+      "query_id": "Q04",
+      "group": "A_semantic_mismatch",
+      "group_description": "Truy vấn ngôn ngữ tự nhiên mô tả cốt truyện mà không dùng đúng từ khóa trong DB",
+      "query": "băng đảng tội phạm thành phố ổ chuột có tổ chức phân cấp rõ ràng",
+      "intent": "Phim tội phạm, băng đảng đường phố, ổ chuột, mafia có hệ thống thứ bậc phân cấp",
+      "relevant_movies": [
+        {
+          "movie_id": 6016,
+          "title": "Thành Phố Của Chúa",
+          "relevance_grade": 3,
+          "annotation_note": "Thành Phố Của Chúa (City of God) — Băng đảng thanh thiếu niên kiểm soát khu ổ chuột Rio de Janeiro"
+        },
+        {
+          "movie_id": 85342,
+          "title": "Biệt Đội Tinh Nhuệ 2: Kẻ Thù Bên Trong",
+          "relevance_grade": 3,
+          "annotation_note": "Biệt Đội Tinh Nhuệ 2 (Elite Squad 2) — Tổ chức tội phạm và cảnh sát tham nhũng trong khu ổ chuột"
+        },
+        {
+          "movie_id": 5138,
+          "title": "State Property",
+          "relevance_grade": 3,
+          "annotation_note": "State Property — Đế chế băng đảng ma túy đường phố phân cấp tranh giành lãnh địa"
+        },
+        {
+          "movie_id": 6055,
+          "title": "Sugar Hill",
+          "relevance_grade": 3,
+          "annotation_note": "Sugar Hill — Hai anh em điều hành băng đảng phân phối ma túy tại khu Harlem ổ chuột"
+        },
+        {
+          "movie_id": 8793,
+          "title": "Biệt Đội Cơ Động",
+          "relevance_grade": 2,
+          "annotation_note": "Biệt Đội Cơ Động (S.W.A.T.) — Chống lại băng nhóm tội phạm nguy hiểm có tổ chức"
+        },
+        {
+          "movie_id": 7201,
+          "title": "Crime Spree",
+          "relevance_grade": 2,
+          "annotation_note": "Crime Spree — Băng đảng trộm cắp Pháp đụng độ mafia Chicago nguy hiểm"
+        },
+        {
+          "movie_id": 172591,
+          "title": "The Godfather Trilogy: 1901-1980",
+          "relevance_grade": 2,
+          "annotation_note": "The Godfather Trilogy — Đế chế tội phạm mafia có phân cấp gia tộc chặt chẽ"
+        },
+        {
+          "movie_id": 4776,
+          "title": "Ngày Huấn Luyện",
+          "relevance_grade": 2,
+          "annotation_note": "Ngày Huấn Luyện (Training Day) — Cảnh sát tham nhũng và băng đảng đường phố Los Angeles"
+        }
+      ]
+    },
+    {
+      "query_id": "Q05",
+      "group": "B_slang_colloquial",
+      "group_description": "Tiếng lóng / Cụm từ ngôn ngữ tự nhiên biểu cảm",
+      "query": "phim hack não về đa vũ trụ và ý thức con người",
+      "intent": "Phim twist, khoa học viễn tưởng đa chiều, ý thức nhân tạo, mê cung tâm trí",
+      "relevant_movies": [
+        {
+          "movie_id": 27482,
+          "title": "Mê Cung Lập Phương 2: Siêu Lập Phương",
+          "relevance_grade": 3,
+          "annotation_note": "Mê Cung Lập Phương 2: Siêu Lập Phương (Cube 2) — Đa chiều không gian và thời gian đa vũ trụ"
+        },
+        {
+          "movie_id": 69451,
+          "title": "Mindwarp",
+          "relevance_grade": 3,
+          "annotation_note": "Mindwarp — Thế giới ảo cấy vào ý thức con người sau tận thế"
+        },
+        {
+          "movie_id": 142226,
+          "title": "Listening",
+          "relevance_grade": 3,
+          "annotation_note": "Listening — Công nghệ đọc và thâm nhập ý thức suy nghĩ của con người"
+        },
+        {
+          "movie_id": 79132,
+          "title": "Kẻ Cắp Giấc Mơ",
+          "relevance_grade": 3,
+          "annotation_note": "Kẻ Cắp Giấc Mơ (Inception) — Xâm nhập nhiều tầng ý thức và tiềm thức trong giấc mơ"
+        },
+        {
+          "movie_id": 4226,
+          "title": "Kẻ Mất Trí Nhớ",
+          "relevance_grade": 2,
+          "annotation_note": "Kẻ Mất Trí Nhớ (Memento) — Cấu trúc thời gian đảo ngược hack não về ký ức con người"
+        },
+        {
+          "movie_id": 7361,
+          "title": "Ánh Dương Vĩnh Cửu Của Tâm Hồn Thanh Khiết",
+          "relevance_grade": 2,
+          "annotation_note": "Ánh Dương Vĩnh Cửu — Cỗ máy xóa ký ức và đấu tranh trong tiềm thức"
+        },
+        {
+          "movie_id": 109487,
+          "title": "Hố Đen Tử Thần",
+          "relevance_grade": 2,
+          "annotation_note": "Hố Đen Tử Thần (Interstellar) — Chiều không gian thứ 5 và nghịch lý thời gian"
+        },
+        {
+          "movie_id": 48780,
+          "title": "Ảo Thuật Gia Đấu Trí",
+          "relevance_grade": 2,
+          "annotation_note": "Ảo Thuật Gia Đấu Trí (The Prestige) — Nhân bản và đối đầu tâm lý xoắn não"
+        }
+      ]
+    },
+    {
+      "query_id": "Q06",
+      "group": "B_slang_colloquial",
+      "group_description": "Tiếng lóng / Cụm từ ngôn ngữ tự nhiên biểu cảm",
+      "query": "phim bùng nổ cảm xúc về tình bạn không bao giờ rời xa nhau",
+      "intent": "Phim tình bạn tri kỷ, gắn kết bền chặt, cảm động rơi nước mắt",
+      "relevant_movies": [
+        {
+          "movie_id": 5461,
+          "title": "Me Without You",
+          "relevance_grade": 3,
+          "annotation_note": "Me Without You — Tình bạn keo sơn gắn bó từ thời thơ ấu trải qua mọi thăng trầm"
+        },
+        {
+          "movie_id": 153788,
+          "title": "जाने तू...या जाने ना",
+          "relevance_grade": 3,
+          "annotation_note": "Jaane Tu Ya Jaane Na — Tình bạn thân thiết sâu sắc của đôi bạn trẻ không thể tách rời"
+        },
+        {
+          "movie_id": 73900,
+          "title": "हम तुम",
+          "relevance_grade": 3,
+          "annotation_note": "Hum Tum — Mối quan hệ bạn bè tri kỷ bền chặt qua nhiều năm tháng"
+        },
+        {
+          "movie_id": 6377,
+          "title": "Đi Tìm Nemo",
+          "relevance_grade": 3,
+          "annotation_note": "Đi Tìm Nemo — Tình bạn tri kỷ giữa Marlin và Dory vượt đại dương"
+        },
+        {
+          "movie_id": 4886,
+          "title": "Công Ty Quái Vật",
+          "relevance_grade": 2,
+          "annotation_note": "Công Ty Quái Vật (Monsters, Inc.) — Tình bạn bất diệt giữa Mike và Sulley"
+        },
+        {
+          "movie_id": 4306,
+          "title": "Shrek",
+          "relevance_grade": 2,
+          "annotation_note": "Shrek — Tình bạn hài hước và chân thành giữa Shrek và Chú Lừa"
+        },
+        {
+          "movie_id": 96314,
+          "title": "Celeste & Jesse Forever",
+          "relevance_grade": 2,
+          "annotation_note": "Celeste & Jesse Forever — Tình bạn tri kỷ sâu sắc từ thời niên thiếu"
+        },
+        {
+          "movie_id": 103606,
+          "title": "Stuck in Love",
+          "relevance_grade": 2,
+          "annotation_note": "Stuck in Love — Sự gắn kết và tình cảm chân thành trong gia đình và bạn bè"
+        }
+      ]
+    },
+    {
+      "query_id": "Q07",
+      "group": "B_slang_colloquial",
+      "group_description": "Tiếng lóng / Cụm từ ngôn ngữ tự nhiên biểu cảm",
+      "query": "phim siêu đỉnh về tên trộm thiên tài lên kế hoạch hoàn hảo",
+      "intent": "Phim heist, siêu trộm, kế hoạch trộm cắp hoàn hảo, đấu trí",
+      "relevant_movies": [
+        {
+          "movie_id": 128552,
+          "title": "Jönssonligan - Den perfekta stöten",
+          "relevance_grade": 3,
+          "annotation_note": "Jönssonligan: Vụ Trộm Hoàn Hảo — Thủ lĩnh thiên tài lên kế hoạch phi vụ trộm thế kỷ"
+        },
+        {
+          "movie_id": 100108,
+          "title": "Tay Trộm Chuyên Nghiệp",
+          "relevance_grade": 3,
+          "annotation_note": "Tay Trộm Chuyên Nghiệp (Thief) — Chuyên gia bẻ khóa thiên tài thực hiện các phi vụ hoàn hảo"
+        },
+        {
+          "movie_id": 6279,
+          "title": "The Good Thief",
+          "relevance_grade": 3,
+          "annotation_note": "The Good Thief — Tên trộm lão luyện lên kế hoạch cướp sòng bạc đỉnh cao"
+        },
+        {
+          "movie_id": 5989,
+          "title": "Hãy Bắt Tôi Nếu Có Thể",
+          "relevance_grade": 3,
+          "annotation_note": "Hãy Bắt Tôi Nếu Có Thể (Catch Me If You Can) — Siêu lừa đảo thiên tài biến hóa khôn lường"
+        },
+        {
+          "movie_id": 5319,
+          "title": "Nueve reinas",
+          "relevance_grade": 3,
+          "annotation_note": "Nueve Reinas (Nine Queens) — Hai kẻ lừa đảo thiên tài lên kế hoạch phi vụ thế kỷ"
+        },
+        {
+          "movie_id": 507,
+          "title": "A Perfect World",
+          "relevance_grade": 2,
+          "annotation_note": "A Perfect World — Tên tội phạm thông minh vượt ngục và hành trình tẩu thoát"
+        },
+        {
+          "movie_id": 5287,
+          "title": "After Dark, My Sweet",
+          "relevance_grade": 2,
+          "annotation_note": "After Dark, My Sweet — Kế hoạch bắt cóc tống tiền tinh vi của nhóm tội phạm"
+        },
+        {
+          "movie_id": 4881,
+          "title": "Người Đàn Ông Vắng Mặt",
+          "relevance_grade": 1,
+          "annotation_note": "Người Đàn Ông Vắng Mặt — Âm mưu tống tiền tinh vi và bước ngoặt bất ngờ"
+        }
+      ]
+    },
+    {
+      "query_id": "Q08",
+      "group": "B_slang_colloquial",
+      "group_description": "Tiếng lóng / Cụm từ ngôn ngữ tự nhiên biểu cảm",
+      "query": "phim ám ảnh tâm lý về nhân vật bị rối loạn nhân cách",
+      "intent": "Phim tâm lý kinh dị, đa nhân cách, rối loạn ám ảnh cưỡng chế, tâm thần phân liệt",
+      "relevant_movies": [
+        {
+          "movie_id": 33762,
+          "title": "Dirty Filthy Love",
+          "relevance_grade": 3,
+          "annotation_note": "Dirty Filthy Love — Nhân vật chịu đựng hội chứng Tourette và rối loạn ám ảnh cưỡng chế"
+        },
+        {
+          "movie_id": 27491,
+          "title": "Nỗi ám ảnh tâm linh",
+          "relevance_grade": 3,
+          "annotation_note": "Nỗi Ám Ảnh Tâm Linh — Nỗi ám ảnh tâm lý giam cầm tinh thần của nhân vật"
+        },
+        {
+          "movie_id": 5579,
+          "title": "昨天",
+          "relevance_grade": 3,
+          "annotation_note": "Hôm Qua (Quāntian) — Ám ảnh tâm lý và sự sụp đổ tinh thần trong trại tâm thần"
+        },
+        {
+          "movie_id": 6892,
+          "title": "The Singing Detective",
+          "relevance_grade": 3,
+          "annotation_note": "The Singing Detective — Nhà văn bị ảo giác và rối loạn tâm thần nặng nề"
+        },
+        {
+          "movie_id": 81591,
+          "title": "Thiên Nga Đen",
+          "relevance_grade": 3,
+          "annotation_note": "Thiên Nga Đen (Black Swan) — Vũ công ballet bị hoang tưởng và phân liệt nhân cách"
+        },
+        {
+          "movie_id": 4226,
+          "title": "Kẻ Mất Trí Nhớ",
+          "relevance_grade": 2,
+          "annotation_note": "Kẻ Mất Trí Nhớ (Memento) — Nhân vật mất trí nhớ ngắn hạn bị ám ảnh bởi cái chết của vợ"
+        },
+        {
+          "movie_id": 3949,
+          "title": "Lời Nguyện Cầu Cho Một Giấc Mơ",
+          "relevance_grade": 2,
+          "annotation_note": "Lời Nguyện Cầu Cho Giấc Mơ — Sự suy đồi tâm lý và ảo giác do chất gây nghiện"
+        },
+        {
+          "movie_id": 71464,
+          "title": "Người Đàn Ông Nghiêm Túc",
+          "relevance_grade": 1,
+          "annotation_note": "Người Đàn Ông Nghiêm Túc — Sự khủng hoảng tinh thần và tâm lý của người đàn ông"
+        }
+      ]
+    },
+    {
+      "query_id": "Q09",
+      "group": "C_emotional_tone",
+      "group_description": "Truy vấn tìm kiếm dựa trên trạng thái cảm xúc người xem",
+      "query": "phim bi kịch chiến tranh làm khán giả rơi nước mắt không ngừng",
+      "intent": "Phim chiến tranh bi tráng, đau thương, xúc động mạnh, mất mát hy sinh",
+      "relevant_movies": [
+        {
+          "movie_id": 82767,
+          "title": "Nỗi Đau Khôn Nguôi",
+          "relevance_grade": 3,
+          "annotation_note": "Nỗi Đau Khôn Nguôi (Incendies) — Bi kịch chiến tranh tàn khốc và nỗi đau gia đình"
+        },
+        {
+          "movie_id": 77596,
+          "title": "Cuộc Chiến Ở Li-băng",
+          "relevance_grade": 3,
+          "annotation_note": "Cuộc Chiến Ở Li-băng (Lebanon) — Bi kịch kinh hoàng nghẹt thở của những người lính trong xe tăng"
+        },
+        {
+          "movie_id": 5632,
+          "title": "Bloody Sunday",
+          "relevance_grade": 3,
+          "annotation_note": "Chủ Nhật Đẫm Máu (Bloody Sunday) — Thảm kịch người dân vô tội bị tàn sát trong xung đột"
+        },
+        {
+          "movie_id": 79830,
+          "title": "Capitaine Conan",
+          "relevance_grade": 3,
+          "annotation_note": "Đại Úy Conan (Capitaine Conan) — Sự tàn phá tâm hồn người lính sau Đệ nhất Thế chiến"
+        },
+        {
+          "movie_id": 79800,
+          "title": "Life During Wartime",
+          "relevance_grade": 2,
+          "annotation_note": "Life During Wartime — Cuộc sống đầy ám ảnh và dằn vặt của những nạn nhân chiến tranh"
+        },
+        {
+          "movie_id": 5995,
+          "title": "Nghệ Sĩ Dương Cầm",
+          "relevance_grade": 3,
+          "annotation_note": "Nghệ Sĩ Dương Cầm (The Pianist) — Bi kịch Holocaust diệt chủng đau thương đẫm lệ"
+        },
+        {
+          "movie_id": 27869,
+          "title": "태극기 휘날리며",
+          "relevance_grade": 3,
+          "annotation_note": "Taegukgi Hwinalrimyeo (Cờ Thái Cực Giương Cao) — Bi kịch hai anh em trong chiến tranh Triều Tiên"
+        },
+        {
+          "movie_id": 5953,
+          "title": "鬼子来了",
+          "relevance_grade": 2,
+          "annotation_note": "Kẻ Xâm Lược (Devils on the Doorstep) — Bi kịch tàn khốc của chiến tranh đối với người dân lành"
+        }
+      ]
+    },
+    {
+      "query_id": "Q10",
+      "group": "C_emotional_tone",
+      "group_description": "Truy vấn tìm kiếm dựa trên trạng thái cảm xúc người xem",
+      "query": "câu chuyện tình yêu xa cách day dứt không thể ở bên nhau",
+      "intent": "Phim tình yêu buồn, chia ly, trắc trở, đau đớn vì khoảng cách",
+      "relevant_movies": [
+        {
+          "movie_id": 171609,
+          "title": "The Lovers",
+          "relevance_grade": 3,
+          "annotation_note": "The Lovers — Mối tình xuyên không gian thời gian đầy đau đớn chia cắt"
+        },
+        {
+          "movie_id": 8963,
+          "title": "It's All About Love",
+          "relevance_grade": 3,
+          "annotation_note": "It's All About Love — Tình yêu trong một thế giới đang sụp đổ không thể giữ lấy nhau"
+        },
+        {
+          "movie_id": 103606,
+          "title": "Stuck in Love",
+          "relevance_grade": 3,
+          "annotation_note": "Stuck in Love — Những trăn trở và đau đớn của tình yêu chia ly và tái hợp"
+        },
+        {
+          "movie_id": 107771,
+          "title": "Chỉ Những Kẻ Yêu Nhau Mới Bất Tử",
+          "relevance_grade": 3,
+          "annotation_note": "Chỉ Những Kẻ Yêu Nhau Mới Bất Tử — Hai ma cà rồng yêu nhau sống xa cách qua hàng thế kỷ"
+        },
+        {
+          "movie_id": 153788,
+          "title": "जाने तू...या जाने ना",
+          "relevance_grade": 2,
+          "annotation_note": "Jaane Tu Ya Jaane Na — Mối tình giấu kín day dứt sợ mất đi tình bạn"
+        },
+        {
+          "movie_id": 4144,
+          "title": "Tâm Trạng Khi Yêu",
+          "relevance_grade": 3,
+          "annotation_note": "Tâm Trạng Khi Yêu (In the Mood for Love) — Mối tình thầm kín day dứt không thể đến được với nhau"
+        },
+        {
+          "movie_id": 7361,
+          "title": "Ánh Dương Vĩnh Cửu Của Tâm Hồn Thanh Khiết",
+          "relevance_grade": 2,
+          "annotation_note": "Ánh Dương Vĩnh Cửu — Nỗi đau chia tay xóa ký ức nhưng trái tim vẫn nhớ"
+        },
+        {
+          "movie_id": 4964,
+          "title": "باران",
+          "relevance_grade": 2,
+          "annotation_note": "Chuyện Tình Mưa (Baran) — Tình yêu thầm lặng xa cách của chàng trai Iran và cô gái tị nạn"
+        }
+      ]
+    },
+    {
+      "query_id": "Q11",
+      "group": "C_emotional_tone",
+      "group_description": "Truy vấn tìm kiếm dựa trên trạng thái cảm xúc người xem",
+      "query": "phim truyền cảm hứng về người không bỏ cuộc dù hoàn cảnh khắc nghiệt",
+      "intent": "Phim nghị lực sống, vượt lên số phận, không đầu hàng gian khổ",
+      "relevant_movies": [
+        {
+          "movie_id": 74156,
+          "title": "Bên Lề Bóng Tối",
+          "relevance_grade": 3,
+          "annotation_note": "Bên Lề Bóng Tối (Edge of Darkness) — Người cha kiên cường vượt qua hiểm nguy tìm sự thật"
+        },
+        {
+          "movie_id": 72557,
+          "title": "A Film with Me in It",
+          "relevance_grade": 2,
+          "annotation_note": "A Film with Me in It — Nỗ lực sinh tồn hài hước đen tối trong hoàn cảnh trớ trêu"
+        },
+        {
+          "movie_id": 27491,
+          "title": "Nỗi ám ảnh tâm linh",
+          "relevance_grade": 2,
+          "annotation_note": "Nỗi Ám Ảnh Tâm Linh — Cuộc đấu tranh tâm lý sinh tồn trong hoàn cảnh khắc nghiệt"
+        },
+        {
+          "movie_id": 71464,
+          "title": "Người Đàn Ông Nghiêm Túc",
+          "relevance_grade": 2,
+          "annotation_note": "Người Đàn Ông Nghiêm Túc — Sự nhẫn nại của con người trước chuỗi nghịch cảnh cuộc đời"
+        },
+        {
+          "movie_id": 3578,
+          "title": "Võ Sĩ Giác Đấu",
+          "relevance_grade": 3,
+          "annotation_note": "Võ Sĩ Giác Đấu (Gladiator) — Từ nô lệ bị áp bức vươn lên thành huyền thoại không khuất phục"
+        },
+        {
+          "movie_id": 5878,
+          "title": "Hable con ella",
+          "relevance_grade": 2,
+          "annotation_note": "Hable con ella (Nói Với Cô Ấy) — Tình yêu và sự kiên trì chăm sóc người bệnh kiên định"
+        },
+        {
+          "movie_id": 4881,
+          "title": "Người Đàn Ông Vắng Mặt",
+          "relevance_grade": 1,
+          "annotation_note": "Người Đàn Ông Vắng Mặt — Con người bình thường đối đầu với nghịch cảnh số phận"
+        },
+        {
+          "movie_id": 5527,
+          "title": "Possession",
+          "relevance_grade": 2,
+          "annotation_note": "Bá Tước Monte Cristo — 14 năm ngục tù không từ bỏ ý chí vươn lên"
+        }
+      ]
+    },
+    {
+      "query_id": "Q12",
+      "group": "C_emotional_tone",
+      "group_description": "Truy vấn tìm kiếm dựa trên trạng thái cảm xúc người xem",
+      "query": "phim hài nhẹ nhàng ấm lòng về gia đình và những điều bình dị trong cuộc sống",
+      "intent": "Phim feel-good, gia đình, tình cảm ấm áp, đời thường, hài hước nhẹ",
+      "relevant_movies": [
+        {
+          "movie_id": 152254,
+          "title": "Asphalte",
+          "relevance_grade": 3,
+          "annotation_note": "Asphalte (Tình Người Chung Cư) — Những mẩu chuyện đời thường ấm áp tình người nơi khu tập thể"
+        },
+        {
+          "movie_id": 109773,
+          "title": "Crazy Kind of Love",
+          "relevance_grade": 3,
+          "annotation_note": "Crazy Kind of Love — Câu chuyện hài hước nhẹ nhàng về gia đình vượt qua biến cố"
+        },
+        {
+          "movie_id": 103541,
+          "title": "Thanks for Sharing",
+          "relevance_grade": 3,
+          "annotation_note": "Thanks for Sharing — Hành trình tìm lại tình yêu và sự gắn kết gia đình ấm lòng"
+        },
+        {
+          "movie_id": 60450,
+          "title": "Sommer '04",
+          "relevance_grade": 2,
+          "annotation_note": "Sommer '04 — Mùa hè đời thường và những mối quan hệ gia đình"
+        },
+        {
+          "movie_id": 4973,
+          "title": "Cuộc Đời Của Amelie Poulain",
+          "relevance_grade": 3,
+          "annotation_note": "Cuộc Đời Amelie Poulain — Phim ấm áp về những điều nhỏ bé diệu kỳ trong cuộc sống"
+        },
+        {
+          "movie_id": 4306,
+          "title": "Shrek",
+          "relevance_grade": 2,
+          "annotation_note": "Shrek — Phim hài hước ấm lòng về gia đình và sự chấp nhận bản thân"
+        },
+        {
+          "movie_id": 4016,
+          "title": "Hoàng Đế Lạc Đà",
+          "relevance_grade": 2,
+          "annotation_note": "Hoàng Đế Lạc Đà — Hoạt hình hài hước gia đình ấm áp và bài học vị tha"
+        },
+        {
+          "movie_id": 4886,
+          "title": "Công Ty Quái Vật",
+          "relevance_grade": 2,
+          "annotation_note": "Công Ty Quái Vật — Phim hoạt hình ấm áp về tình yêu thương con trẻ"
+        }
+      ]
+    },
+    {
+      "query_id": "Q13",
+      "group": "D_animation_fantasy",
+      "group_description": "Phim hoạt hình hoặc thế giới kỳ ảo nhiều khái niệm phong phú",
+      "query": "phim hoạt hình Nhật Bản về hành trình của cô bé vào thế giới thần linh",
+      "intent": "Hoạt hình anime Ghibli / Nhật Bản, thế giới tâm linh ma thuật, hành trình kỳ bí",
+      "relevant_movies": [
+        {
+          "movie_id": 54349,
+          "title": "輪廻",
+          "relevance_grade": 3,
+          "annotation_note": "Luân Hồi (Rinne) — Tác phẩm tâm linh Nhật Bản về luân hồi và cõi thần linh"
+        },
+        {
+          "movie_id": 65813,
+          "title": "Tái Sinh",
+          "relevance_grade": 3,
+          "annotation_note": "Tái Sinh — Hành trình khám phá thế giới tâm linh kỳ bí phương Đông"
+        },
+        {
+          "movie_id": 5618,
+          "title": "Vùng Đất Linh Hồn",
+          "relevance_grade": 3,
+          "annotation_note": "Vùng Đất Linh Hồn (Spirited Away) — Cô bé Chihiro lạc vào thế giới thần linh"
+        },
+        {
+          "movie_id": 31658,
+          "title": "Lâu Đài Bay Của Pháp Sư Howl",
+          "relevance_grade": 3,
+          "annotation_note": "Lâu Đài Bay Của Pháp Sư Howl — Cô bé Sophie bước vào thế giới phép thuật kỳ ảo"
+        },
+        {
+          "movie_id": 120130,
+          "title": "Lạc Vào Khu Rừng Đom Đóm",
+          "relevance_grade": 2,
+          "annotation_note": "Lạc Vào Khu Rừng Đom Đóm — Tình yêu kỳ ảo giữa cô bé và linh hồn trong rừng"
+        },
+        {
+          "movie_id": 142452,
+          "title": "劇場版 魔法少女まどか☆マギカ[後編] 永遠の物語",
+          "relevance_grade": 2,
+          "annotation_note": "Madoka Magica — Thế giới kỳ ảo bí ẩn của các thiếu nữ phép thuật anime"
+        },
+        {
+          "movie_id": 4020,
+          "title": "Những Lá Bài Ma Thuật",
+          "relevance_grade": 2,
+          "annotation_note": "Những Lá Bài Ma Thuật — Hành trình cô bé học sinh thu phục các thẻ bài linh hồn"
+        },
+        {
+          "movie_id": 187001,
+          "title": "Quái Vật Rừng Sâu",
+          "relevance_grade": 1,
+          "annotation_note": "Quái Vật Rừng Sâu — Khám phá bí ẩn sinh vật trong khu rừng ma quái"
+        }
+      ]
+    },
+    {
+      "query_id": "Q14",
+      "group": "D_animation_fantasy",
+      "group_description": "Phim hoạt hình hoặc thế giới kỳ ảo nhiều khái niệm phong phú",
+      "query": "phim về hành trình phiêu lưu vào thế giới ma thuật với phép thuật và yêu quái",
+      "intent": "Phim phiêu lưu fantasy, sinh vật huyền bí, phép thuật, thế giới cổ tích kỳ ảo",
+      "relevant_movies": [
+        {
+          "movie_id": 139417,
+          "title": "Huyền Thoại Cổ Tích",
+          "relevance_grade": 3,
+          "annotation_note": "Huyền Thoại Cổ Tích — Hành trình phiêu lưu vào thế giới thần tiên ma thuật kỳ ảo"
+        },
+        {
+          "movie_id": 148775,
+          "title": "Những Phù Thủy Xứ Waverly: Bản Điện Ảnh",
+          "relevance_grade": 3,
+          "annotation_note": "Những Phù Thủy Xứ Waverly — Phiêu lưu phép thuật giải cứu thế giới kỳ diệu"
+        },
+        {
+          "movie_id": 4020,
+          "title": "Những Lá Bài Ma Thuật",
+          "relevance_grade": 3,
+          "annotation_note": "Những Lá Bài Ma Thuật — Phiêu lưu chiến đấu với các yêu quái và thực thể phép thuật"
+        },
+        {
+          "movie_id": 35721,
+          "title": "Cast a Deadly Spell",
+          "relevance_grade": 3,
+          "annotation_note": "Cast a Deadly Spell — Thế giới ma thuật nơi phù thủy và quái vật sinh sống"
+        },
+        {
+          "movie_id": 95524,
+          "title": "ノロイ",
+          "relevance_grade": 2,
+          "annotation_note": "Noroi — Thế giới tâm linh huyền bí với yêu quái cổ xưa Nhật Bản"
+        },
+        {
+          "movie_id": 4993,
+          "title": "Chúa Tể Của Những Chiếc Nhẫn: Hiệp Hội Nhẫn Thần",
+          "relevance_grade": 3,
+          "annotation_note": "Chúa Tể Chiếc Nhẫn: Hiệp Hội Nhẫn Thần — Hành trình phiêu lưu qua thế giới kỳ ảo đầy quái vật"
+        },
+        {
+          "movie_id": 5952,
+          "title": "Chúa Tể Của Những Chiếc Nhẫn: Hai Tòa Tháp",
+          "relevance_grade": 3,
+          "annotation_note": "Chúa Tể Chiếc Nhẫn: Hai Tòa Tháp — Đối đầu quái vật Orc và pháp sư hắc ám Saruman"
+        },
+        {
+          "movie_id": 7153,
+          "title": "Chúa Tể Của Những Chiếc Nhẫn: Sự Trở Lại Của Nhà Vua",
+          "relevance_grade": 3,
+          "annotation_note": "Chúa Tể Chiếc Nhẫn: Sự Trở Lại Của Nhà Vua — Trận chiến vĩ đại chống chúa tể bóng tối Sauron"
+        }
+      ]
+    },
+    {
+      "query_id": "Q15",
+      "group": "D_animation_fantasy",
+      "group_description": "Phim hoạt hình hoặc thế giới kỳ ảo nhiều khái niệm phong phú",
+      "query": "hoạt hình gia đình có robot thông minh và thế giới tương lai",
+      "intent": "Phim hoạt hình/viễn tưởng gia đình về robot, trí tuệ nhân tạo tương lai",
+      "relevant_movies": [
+        {
+          "movie_id": 7314,
+          "title": "Robot Stories",
+          "relevance_grade": 3,
+          "annotation_note": "Robot Stories — Những câu chuyện cảm động về robot và con người ở tương lai"
+        },
+        {
+          "movie_id": 4370,
+          "title": "Trí Tuệ Nhân Tạo",
+          "relevance_grade": 3,
+          "annotation_note": "Trí Tuệ Nhân Tạo (A.I. Artificial Intelligence) — Cậu bé robot khao khát tình yêu thương"
+        },
+        {
+          "movie_id": 8644,
+          "title": "Tôi, Robot",
+          "relevance_grade": 3,
+          "annotation_note": "Tôi, Robot (I, Robot) — Thế giới tương lai nơi robot phục vụ con người"
+        },
+        {
+          "movie_id": 140773,
+          "title": "Beyond the Brick: A LEGO® Brickumentary",
+          "relevance_grade": 2,
+          "annotation_note": "Beyond the Brick: LEGO — Hoạt hình LEGO thế giới tương lai sáng tạo"
+        },
+        {
+          "movie_id": 60069,
+          "title": "Robot Biết Yêu",
+          "relevance_grade": 3,
+          "annotation_note": "WALL-E (Robot Biết Yêu) — Chú robot dọn rác đơn độc ở tương lai Trái Đất"
+        },
+        {
+          "movie_id": 5882,
+          "title": "Hành Tinh Châu Báu",
+          "relevance_grade": 2,
+          "annotation_note": "Hành Tinh Châu Báu (Treasure Planet) — Hoạt hình viễn tưởng du hành vũ trụ cùng robot"
+        },
+        {
+          "movie_id": 96415,
+          "title": "인류멸망보고서",
+          "relevance_grade": 2,
+          "annotation_note": "Doomsday Book — Viễn tưởng về robot giác ngộ trong thế giới tương lai"
+        },
+        {
+          "movie_id": 53996,
+          "title": "Transformers: Robot Đại Chiến",
+          "relevance_grade": 2,
+          "annotation_note": "Transformers — Thế giới robot biến hình ngoài không gian"
+        }
+      ]
+    },
+    {
+      "query_id": "Q16",
+      "group": "D_animation_fantasy",
+      "group_description": "Phim hoạt hình hoặc thế giới kỳ ảo nhiều khái niệm phong phú",
+      "query": "phim về một người cá tìm đường trở về nhà vượt qua nguy hiểm đại dương",
+      "intent": "Phim phiêu lưu biển cả, sinh vật đại dương, tìm đường về nhà",
+      "relevant_movies": [
+        {
+          "movie_id": 91886,
+          "title": "Câu Chuyện Cá Heo",
+          "relevance_grade": 3,
+          "annotation_note": "Câu Chuyện Cá Heo (Dolphin Tale) — Hành trình cứu sống và tìm lại mái nhà cho chú cá heo"
+        },
+        {
+          "movie_id": 82022,
+          "title": "The Reef",
+          "relevance_grade": 3,
+          "annotation_note": "The Reef — Cuộc chiến sinh tồn vượt qua hiểm nguy đại dương săn mồi"
+        },
+        {
+          "movie_id": 69904,
+          "title": "Trôi Dạt 2",
+          "relevance_grade": 3,
+          "annotation_note": "Trôi Dạt 2 (Adrift) — Vượt qua giông bão hiểm nguy giữa lòng đại dương bao la"
+        },
+        {
+          "movie_id": 5526,
+          "title": "Tiểu Đảo",
+          "relevance_grade": 2,
+          "annotation_note": "Tiểu Đảo — Hành trình sinh tồn nơi biển đảo xa xôi tìm đường về"
+        },
+        {
+          "movie_id": 6377,
+          "title": "Đi Tìm Nemo",
+          "relevance_grade": 3,
+          "annotation_note": "Đi Tìm Nemo — Hành trình vượt muôn vàn hiểm nguy đại dương để trở về với gia đình"
+        },
+        {
+          "movie_id": 5389,
+          "title": "Spirit: Ngựa Giống Nòi Cimarron",
+          "relevance_grade": 2,
+          "annotation_note": "Spirit: Ngựa Giống Nòi Cimarron — Hành trình phiêu lưu gian nan tìm đường về quê hương"
+        },
+        {
+          "movie_id": 4886,
+          "title": "Công Ty Quái Vật",
+          "relevance_grade": 1,
+          "annotation_note": "Công Ty Quái Vật — Hành trình đưa cô bé Boo vượt qua nguy hiểm trở về thế giới loài người"
+        }
+      ]
+    },
+    {
+      "query_id": "Q17",
+      "group": "E_action_superhero",
+      "group_description": "Phim hành động kịch tính, vũ trụ siêu anh hùng",
+      "query": "liên minh các siêu anh hùng tập hợp để chiến đấu chống lại kẻ thù vũ trụ",
+      "intent": "Phim liên minh siêu anh hùng, Avenger, Justice League đối đầu thế lực vũ trụ",
+      "relevant_movies": [
+        {
+          "movie_id": 89745,
+          "title": "Avengers 1:Biệt Đội Siêu Anh Hùng",
+          "relevance_grade": 3,
+          "annotation_note": "Avengers 1: Biệt Đội Siêu Anh Hùng — Các siêu anh hùng tập hợp chống Loki và binh đoàn vũ trụ"
+        },
+        {
+          "movie_id": 108501,
+          "title": "Liên Minh Công Lý: Chiến Tranh",
+          "relevance_grade": 3,
+          "annotation_note": "Liên Minh Công Lý: Chiến Tranh (Justice League: War) — Tập hợp siêu anh hùng chống Darkseid vũ trụ"
+        },
+        {
+          "movie_id": 95932,
+          "title": "The Fantastic Four",
+          "relevance_grade": 3,
+          "annotation_note": "Bộ Tứ Siêu Đẳng (The Fantastic Four) — Nhóm siêu anh hùng nhận sức mạnh từ vũ trụ chiến đấu"
+        },
+        {
+          "movie_id": 136864,
+          "title": "Batman Đại Chiến Superman: Ánh Sáng Công Lý",
+          "relevance_grade": 3,
+          "annotation_note": "Batman Đại Chiến Superman: Ánh Sáng Công Lý — Khởi đầu liên minh công lý siêu anh hùng"
+        },
+        {
+          "movie_id": 103233,
+          "title": "LEGO Batman: The Movie - DC Super Heroes Unite",
+          "relevance_grade": 2,
+          "annotation_note": "LEGO Batman: DC Super Heroes Unite — Liên minh siêu anh hùng DC chống kẻ ác"
+        },
+        {
+          "movie_id": 122892,
+          "title": "Avengers 2: Đế Chế Ultron",
+          "relevance_grade": 3,
+          "annotation_note": "Avengers 2: Đế Chế Ultron — Biệt đội siêu anh hùng chiến đấu bảo vệ Trái Đất"
+        },
+        {
+          "movie_id": 122912,
+          "title": "Avengers 3: Cuộc Chiến Vô Cực",
+          "relevance_grade": 3,
+          "annotation_note": "Avengers 3: Cuộc Chiến Vô Cực — Siêu anh hùng tập hợp chống Thanos vũ trụ"
+        },
+        {
+          "movie_id": 6541,
+          "title": "Liên Minh Bá Đạo",
+          "relevance_grade": 2,
+          "annotation_note": "Liên Minh Bá Đạo — Nhóm người có năng lực đặc biệt liên kết bảo vệ thế giới"
+        }
+      ]
+    },
+    {
+      "query_id": "Q18",
+      "group": "E_action_superhero",
+      "group_description": "Phim hành động kịch tính, vũ trụ siêu anh hùng",
+      "query": "phim thám tử điều tra tội phạm bí ẩn trong thành phố tối tăm đầy nguy hiểm",
+      "intent": "Phim trinh thám noir, cảnh sát thám tử phá án, tội phạm nguy hiểm trong bóng tối",
+      "relevant_movies": [
+        {
+          "movie_id": 99633,
+          "title": "Thám Tử Tài Ba",
+          "relevance_grade": 3,
+          "annotation_note": "Thám Tử Tài Ba — Thám tử điều tra các vụ trọng án bí ẩn trong bóng tối"
+        },
+        {
+          "movie_id": 4409,
+          "title": "Shadows and Fog",
+          "relevance_grade": 3,
+          "annotation_note": "Shadows and Fog (Bóng Tối và Sương Mù) — Thám tử truy tìm tên sát nhân trong thành phố mờ sương"
+        },
+        {
+          "movie_id": 66234,
+          "title": "Mýrin",
+          "relevance_grade": 3,
+          "annotation_note": "Mýrin (Thành Phố Băng Giá) — Thám tử điều tra án mạng bí ẩn trong thành phố u tối"
+        },
+        {
+          "movie_id": 2439,
+          "title": "Affliction",
+          "relevance_grade": 3,
+          "annotation_note": "Affliction — Cảnh sát trưởng thị trấn điều tra vụ án mạng bí ẩn đầy nguy hiểm"
+        },
+        {
+          "movie_id": 100442,
+          "title": "Drogówka",
+          "relevance_grade": 3,
+          "annotation_note": "Drogówka — Đội cảnh sát điều tra tội phạm bí mật nguy hiểm nơi thành phố ngầm"
+        },
+        {
+          "movie_id": 4776,
+          "title": "Ngày Huấn Luyện",
+          "relevance_grade": 2,
+          "annotation_note": "Ngày Huấn Luyện (Training Day) — Thám tử tuần tra thế giới ngầm nguy hiểm thành phố Los Angeles"
+        },
+        {
+          "movie_id": 6870,
+          "title": "Dòng Sông Kỳ Bí",
+          "relevance_grade": 2,
+          "annotation_note": "Dòng Sông Kỳ Bí (Mystic River) — Thám tử điều tra vụ án mạng con gái bạn thân"
+        },
+        {
+          "movie_id": 4226,
+          "title": "Kẻ Mất Trí Nhớ",
+          "relevance_grade": 2,
+          "annotation_note": "Kẻ Mất Trí Nhớ (Memento) — Tự điều tra vụ án mạng trong bóng tối của ký ức"
+        }
+      ]
+    },
+    {
+      "query_id": "Q19",
+      "group": "E_action_superhero",
+      "group_description": "Phim hành động kịch tính, vũ trụ siêu anh hùng",
+      "query": "phim hành động về nhóm đặc nhiệm thực hiện nhiệm vụ nguy hiểm không thể nào quên",
+      "intent": "Phim biệt đội đặc nhiệm quân đội/cảnh sát, nhiệm vụ sinh tử, hành động nghẹt thở",
+      "relevant_movies": [
+        {
+          "movie_id": 78469,
+          "title": "Biệt Đội Hành Động",
+          "relevance_grade": 3,
+          "annotation_note": "Biệt Đội Hành Động (The A-Team) — Biệt đội 4 người lính siêu hạng thực hiện nhiệm vụ bất khả thi"
+        },
+        {
+          "movie_id": 6541,
+          "title": "Liên Minh Bá Đạo",
+          "relevance_grade": 3,
+          "annotation_note": "Liên Minh Bá Đạo — Nhóm nhân vật có khả năng siêu việt làm nhiệm vụ nguy hiểm"
+        },
+        {
+          "movie_id": 112852,
+          "title": "Vệ Binh Dải Ngân Hà",
+          "relevance_grade": 3,
+          "annotation_note": "Vệ Binh Dải Ngân Hà — Nhóm đặc nhiệm bất đắc dĩ thực hiện nhiệm vụ bảo vệ thiên hà"
+        },
+        {
+          "movie_id": 55721,
+          "title": "Biệt Đội Tinh Nhuệ",
+          "relevance_grade": 3,
+          "annotation_note": "Biệt Đội Tinh Nhuệ (Elite Squad) — Lực lượng đặc nhiệm cảnh sát làm nhiệm vụ nguy hiểm ở ổ chuột"
+        },
+        {
+          "movie_id": 85342,
+          "title": "Biệt Đội Tinh Nhuệ 2: Kẻ Thù Bên Trong",
+          "relevance_grade": 3,
+          "annotation_note": "Biệt Đội Tinh Nhuệ 2 — Biệt đội đặc nhiệm triệt phá mạng lưới tham nhũng"
+        },
+        {
+          "movie_id": 8793,
+          "title": "Biệt Đội Cơ Động",
+          "relevance_grade": 2,
+          "annotation_note": "Biệt Đội Cơ Động (S.W.A.T.) — Biệt đội đặc nhiệm cảnh sát vận chuyển trùm tội phạm"
+        },
+        {
+          "movie_id": 89745,
+          "title": "Avengers 1:Biệt Đội Siêu Anh Hùng",
+          "relevance_grade": 2,
+          "annotation_note": "Avengers 1 — Biệt đội tập hợp thực hiện nhiệm vụ sinh tử cứu thế giới"
+        },
+        {
+          "movie_id": 62733,
+          "title": "Cách Ly",
+          "relevance_grade": 1,
+          "annotation_note": "Cách Ly — Phóng viên và đội lính cứu hỏa làm nhiệm vụ sinh tử trong tòa nhà"
+        }
+      ]
+    },
+    {
+      "query_id": "Q20",
+      "group": "E_action_superhero",
+      "group_description": "Phim hành động kịch tính, vũ trụ siêu anh hùng",
+      "query": "phim về người đàn ông trở thành huyền thoại sau khi báo thù cho gia đình",
+      "intent": "Phim trả thù báo thù, người đàn ông mất gia đình vươn lên thành huyền thoại",
+      "relevant_movies": [
+        {
+          "movie_id": 3578,
+          "title": "Võ Sĩ Giác Đấu",
+          "relevance_grade": 3,
+          "annotation_note": "Võ Sĩ Giác Đấu (Gladiator) — Tướng quân báo thù cho vợ con bị sát hại, trở thành huyền thoại"
+        },
+        {
+          "movie_id": 33794,
+          "title": "Người Dơi Bắt Đầu",
+          "relevance_grade": 3,
+          "annotation_note": "Người Dơi Bắt Đầu (Batman Begins) — Báo thù cho cha mẹ, rèn luyện trở thành huyền thoại Batman"
+        },
+        {
+          "movie_id": 77731,
+          "title": "Phục Thù",
+          "relevance_grade": 3,
+          "annotation_note": "Phục Thù (Vengeance) — Người cha đầu bếp thề báo thù cho gia đình con gái bị sát hại"
+        },
+        {
+          "movie_id": 98563,
+          "title": "Recoil",
+          "relevance_grade": 3,
+          "annotation_note": "Recoil — Cảnh sát báo thù cho gia đình bị sát hại trở thành huyền thoại trừng phạt"
+        },
+        {
+          "movie_id": 111384,
+          "title": "Ánh Xanh Tiều Tụy",
+          "relevance_grade": 2,
+          "annotation_note": "Ánh Xanh Tiều Tụy (Blue Ruin) — Người đàn ông kiên cường quay trở lại báo thù cho gia đình"
+        },
+        {
+          "movie_id": 96304,
+          "title": "一命",
+          "relevance_grade": 2,
+          "annotation_note": "Hara-Kiri: Death of a Samurai — Báo thù cho người thân, tinh thần võ sĩ đạo bất khuất"
+        },
+        {
+          "movie_id": 5064,
+          "title": "Bá tước Monte Cristo",
+          "relevance_grade": 3,
+          "annotation_note": "Bá Tước Monte Cristo — Người đàn ông vượt ngục báo thù những kẻ hủy hoại gia đình"
+        },
+        {
+          "movie_id": 27592,
+          "title": "Quý Ông Báo Thù",
+          "relevance_grade": 2,
+          "annotation_note": "Quý Ông Báo Thù — Mối thù gia đình dẫn đến bi kịch báo thù đẫm máu"
+        },
+        {
+          "movie_id": 8790,
+          "title": "Revengers Tragedy",
+          "relevance_grade": 2,
+          "annotation_note": "Revengers Tragedy — Bi kịch báo thù cho người thân qua đời"
+        }
+      ]
+    }
+  ]
+}
