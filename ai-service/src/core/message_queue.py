@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 from aio_pika import IncomingMessage
 
 import json
@@ -12,6 +12,7 @@ from utils.logger import setup_logger
 
 if TYPE_CHECKING:
     from services.movie_event_handler import MovieEventHandler
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MessageQueue — RabbitMQ consumer cho AI Service
@@ -155,9 +156,9 @@ class MessageQueue:
             body = json.loads(message.body.decode("utf-8"))
 
             self._logger.info(
-                f'Received [Message]: {message} \n'
+                f'Received [Message]: message \n'
                 f'with [Routing Key]: {routing_key} \n'
-                f'and [Event]: {body}'
+                f'and [Event]: body'
             )
             
             # log routing key
@@ -190,5 +191,4 @@ class MessageQueue:
                 f"[Recommendations Queue] Error when handling message queue: {exc}"
             )
             await message.nack(requeue=False)
-            
-        
+

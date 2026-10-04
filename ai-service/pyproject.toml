@@ -47,6 +47,11 @@ dependencies = [
 
     # jwt
     "python-jose[cryptography]>=3.3.0",
+
+    # Hybrid Model & Storage
+    "implicit>=0.7.0",
+    "boto3>=1.34.0",
+    "pyarrow>=15.0.0",
 ]
 
 [project.optional-dependencies]

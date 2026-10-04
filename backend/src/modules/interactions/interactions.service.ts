@@ -3,6 +3,7 @@ import { CreateInteractionDto } from './dto/create-interaction.dto';
 import { UpdateInteractionDto } from './dto/update-interaction.dto';
 import { IInteractionRepository } from './interactions.repository';
 import { PaginationDto } from '@/common/dtos/pagination.dto';
+import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
 import {
   InteractionScoreMap,
   InteractionType,
@@ -13,6 +14,7 @@ export class InteractionsService {
   constructor(
     @Inject(IInteractionRepository)
     private readonly repo: IInteractionRepository,
+    private readonly interactionProducer: InteractionProducer,
   ) {}
 
   async create(userId: string, createInteractionDto: CreateInteractionDto) {
@@ -36,6 +38,19 @@ export class InteractionsService {
       movie: { id: movieId } as any,
       user: { id: userId } as any,
     });
+
+    // Publish to AI Service for real-time vector update
+    try {
+      this.interactionProducer.publishInteractionCreated({
+        userId,
+        movieId,
+        action: type.toLowerCase(),
+        rating: score,
+      });
+    } catch (e) {
+      // Log and continue, don't break main API flow
+      console.error('Failed to publish interaction event', e);
+    }
 
     return { success: true, action: 'added', type, data: newInteraction };
   }

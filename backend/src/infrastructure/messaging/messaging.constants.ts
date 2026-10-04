@@ -8,6 +8,7 @@ export const MESSAGE_EVENTS = {
   MOVIE_UPDATED: 'movie.updated',
   MOVIE_DELETED: 'movie.deleted',
   USER_INTERACTION_CREATED: 'user.interaction.created',
+  USER_TRAINING_BATCH: 'training.batch',
 } as const;
 
 export const MESSAGE_BUS_CONFIG = {
@@ -27,4 +28,13 @@ export const MESSAGE_BUS_CONFIG = {
   USER_EXCHANGE: 'user.exchange',
   USER_QUEUE: 'user.queue',
   USER_ROUTING_KEY: 'user.#',
+
+  // interaction
+  INTERACTION_EXCHANGE: 'interaction.exchange',
+  INTERACTION_QUEUE: 'interaction.queue',
+  INTERACTION_EVENT_RK: 'interaction.event',
+  INTERACTION_TRAINING_BATCH_RK: 'training.batch',
+  INTERACTION_DLX: 'interaction.queue.dlx',
+  INTERACTION_DLQ: 'interaction.queue.dlq',
+  INTERACTION_DLQ_ROUTING_KEY: 'interaction.queue.dlq.rk',
 } as const;

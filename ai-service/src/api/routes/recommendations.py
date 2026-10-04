@@ -16,7 +16,7 @@ settings = get_settings()
 
 logger = setup_logger(name='FastAPI-Recommendations', filename=__name__)
 
-async def _get_recommend_service(request: Request) -> RecommendService:
+async def  _get_recommend_service(request: Request) -> RecommendService:
     '''Lấy hoặc khởi tạo RecommendService từ app.state.'''
     svc = getattr(request.app.state, 'recommend_service', None)
     if svc is not None:
@@ -106,12 +106,12 @@ async def hybrid_search(
         CurrentUser,
         Depends(get_current_user)
     ],
+    app_request: Request
 ) -> dict:
     """search API"""
     logger.info("hybrid search API called")
     logger.info(f'hybrid search req: {request}')
     logger.info(f'hybrid search user: {current_user.sub}')
-
 
     if current_user.sub != request.userId:
         raise HTTPException(
@@ -122,14 +122,36 @@ async def hybrid_search(
             },
         )
 
-    # Replace this placeholder with the baseline/main model service.
-    return paginated([], 0, request.page, request.limit, "Search completed")
+    svc = await _get_recommend_service(app_request)
+    data = await svc.hybrid_recommendation(user_uuid=request.userId, top_k=request.limit)
+    
+    return paginated(data, len(data), request.page, request.limit, "Hybrid Recommendations generated")
 
 
 
 # ===================
 # DEBUG APIs
 # ===================
+
+@router.get("/hybrid/debug")
+async def hybrid_search_debug(
+    userId: str,
+    app_request: Request,
+    top_k: int = 10,
+) -> dict:
+    """Debug API: Lấy Hybrid Recommendation cho bất kỳ User ID nào (không cần token JWT)"""
+    logger.info(f"hybrid debug search API called for user: {userId}")
+
+    svc = await _get_recommend_service(app_request)
+    for i in range(950, 1001):
+        logger.info(f"hybrid debug search API called for user: {str(i)}")
+        data = await svc.hybrid_recommendation(user_uuid=str(i), top_k=top_k)
+        logger.info(f"Data: {data}")
+    
+    data = await svc.hybrid_recommendation(user_uuid=userId, top_k=top_k)
+    return paginated(data, len(data), 1, top_k, "Debug Hybrid Recommendations generated")
+
+
 
 @router.get("/tracing")
 async def tracing(req: Request) -> dict:

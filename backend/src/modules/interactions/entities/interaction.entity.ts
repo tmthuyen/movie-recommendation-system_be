@@ -1,7 +1,7 @@
+import { BaseAuditEntity } from '@/common/audits/baseaudit.entity';
 import { Movie } from '@/modules/movies/entities/movie.entity';
 import { User } from '@/modules/users/entities/user.entity';
 import {
-  BaseEntity,
   Column,
   Entity,
   Index,
@@ -31,7 +31,7 @@ export const InteractionScoreMap: Record<InteractionType, number> = {
 };
 @Entity('interactions')
 @Index(['user', 'movie', 'type'], { unique: true })
-export class Interaction extends BaseEntity {
+export class Interaction extends BaseAuditEntity {
   @PrimaryGeneratedColumn()
   id: number;
 

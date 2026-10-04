@@ -5,10 +5,15 @@ import { MESSAGE_BUS_CLIENT, MESSAGE_BUS_CONFIG } from './messaging.constants';
 import { EventPublisherService } from './event-publisher.service';
 import { UserProducer } from './producers/user.producer';
 import { MovieProducer } from './producers/movie.producer';
+import { InteractionProducer } from './producers/interaction.producer';
 import {
   RecommendationConsumer,
   RecommendationHandler,
 } from './consumers/recommendation-dlq.consumer';
+import {
+  InteractionConsumer,
+  InteractionHandler,
+} from './consumers/interaction-dlq.consumer';
 import { FailedEventsModule } from '@/modules/failed-events/failed-events.module';
 
 @Global()
@@ -40,6 +45,11 @@ import { FailedEventsModule } from '@/modules/failed-events/failed-events.module
                 'topic',
                 { durable: true },
               ),
+              channel.assertExchange(
+                MESSAGE_BUS_CONFIG.INTERACTION_EXCHANGE,
+                'topic',
+                { durable: true },
+              ),
             ]);
           },
         });
@@ -50,10 +60,13 @@ import { FailedEventsModule } from '@/modules/failed-events/failed-events.module
     EventPublisherService,
     RecommendationConsumer,
     RecommendationHandler,
+    InteractionConsumer,
+    InteractionHandler,
     UserProducer,
     MovieProducer,
+    InteractionProducer,
   ],
-  exports: [EventPublisherService, MESSAGE_BUS_CLIENT],
+  exports: [EventPublisherService, MESSAGE_BUS_CLIENT, InteractionProducer],
 })
 export class MessagingModule implements OnModuleDestroy {
   constructor() {}

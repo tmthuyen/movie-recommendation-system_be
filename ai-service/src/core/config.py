@@ -37,6 +37,14 @@ class Settings(BaseSettings):
     # Routing key AI Service subscribe
     rabbitmq_movie_routing_key: str = "movie.#"
 
+    # Interaction Exchange & Queue
+    rabbitmq_interaction_exchange: str = "interaction.exchange"
+    rabbitmq_interaction_queue: str = "interaction.queue"
+    rabbitmq_interaction_dlx: str = "interaction.queue.dlx"
+    rabbitmq_interaction_dlq: str = "interaction.queue.dlq"
+    rabbitmq_interaction_dlq_routing_key: str = "interaction.queue.dlq.rk"
+    rabbitmq_interaction_routing_key: str = "interaction.event"
+
 
 
     redis_url: str = "redis://localhost:6379/0"
@@ -48,8 +56,16 @@ class Settings(BaseSettings):
     # Set to "chroma" | "qdrant" | "redis" | "memory"
     vector_db_provider: str = "chroma"
     vector_collection: str = "movies"
+    
+    # AI Collaborative & Hybrid Collections
+    vector_user_cf_collection: str = "user_cf_vectors"
+    vector_movie_cf_collection: str = "movie_cf_vectors"
+    vector_user_profile_collection: str = "user_profile_vectors"
+    
     # Dimension of paraphrase-multilingual-MiniLM-L12-v2 (multilingual, 384-dim)
     vector_size: int = 384
+    cf_vector_size: int = 64 # Kích thước vector của ALS model (implicit)
+    
     vector_db_enabled: bool = True
 
     # ChromaDB — persistent storage directory (relative to ai-service working dir)
@@ -60,6 +76,16 @@ class Settings(BaseSettings):
 
     model_train_cron: str = "0 3 * * 0"
     model_train_enabled: bool = False
+
+    # Storage R2 Configuration
+    s3_region: str = "auto"
+    s3_token: str = ""
+    s3_endpoint: str = ""
+    s3_access_key: str = ""
+    s3_secret_key: str = ""
+    s3_bucket_name: str = "movie-recommendation"
+    s3_public_url: str = ""
+
 
     model_config = SettingsConfigDict(
         env_file=(".env", ".env.development", ".env.production"),

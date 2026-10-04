@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, Logger } from '@nestjs/common';
 import { CreateMovieDto } from './dto/create-movie.dto';
 import { UpdateMovieDto } from './dto/update-movie.dto';
 import { IMovieRepository } from './movies.repository';
@@ -20,9 +20,12 @@ import {
   MovieCreatedPayload,
   MovieUpdatedPayload,
 } from '@/infrastructure/messaging/event.types';
+import { PaginatedResult } from '@/common/dtos/paginated-result.interface';
 
 @Injectable()
 export class MoviesService {
+  private readonly logger = new Logger(MoviesService.name);
+
   constructor(
     @Inject(IMovieRepository)
     private readonly repo: IMovieRepository,
@@ -78,6 +81,37 @@ export class MoviesService {
       };
       this.movieProducer.publishMovieCreated(payload);
     }
+  }
+
+  async seedMovies() {
+    this.logger.log('Seeding movies...');
+    const MAX_PAGE = 15;
+    let page = 1;
+    let cnt = 0;
+    while (page <= MAX_PAGE) {
+      const result = await this.repo.findAll({
+        page: page,
+        limit: 1000,
+      });
+      for (const movie of result.data) {
+        const payload: MovieCreatedPayload = {
+          movieId: movie.id,
+          title: movie.title,
+          titleVi: movie.titleVi,
+          overview: movie.overview,
+          overviewVi: movie.overviewVi,
+          genres: movie.genres?.map(g => g.name) || [],
+        };
+        this.movieProducer.publishMovieCreated(payload);
+      }
+
+      page++;
+      cnt += result.data.length;
+      // sleep 5s
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+
+    this.logger.log(`Published ${cnt} movie.created events.`);
   }
 
   async create(createMovieDto: CreateMovieDto) {

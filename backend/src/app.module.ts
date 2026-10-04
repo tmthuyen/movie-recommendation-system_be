@@ -3,6 +3,7 @@ import { ClsModule } from 'nestjs-cls';
 import { WinstonModule } from 'nest-winston';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from '@/app.controller';
 import { AppService } from '@/app.service';
 import { RolesModule } from '@/modules/roles/roles.module';
@@ -85,6 +86,7 @@ import { Interaction } from './modules/interactions/entities/interaction.entity'
       middleware: { mount: true },
     }),
     WinstonModule.forRoot(loggerConfig),
+    ScheduleModule.forRoot(),
 
     // infra modules
     RedisModule,

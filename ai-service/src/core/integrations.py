@@ -12,6 +12,7 @@ from qdrant_client.models import Distance, PointStruct, VectorParams
 from api.schemas import TrainRequest
 from .config import Settings
 from utils import setup_logger
+from services.model_training_service import ModelTrainingService
 
 
 logger = setup_logger(name='FastAPI-Recommendations', filename=__name__)
@@ -27,17 +28,17 @@ class VectorBackend(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def upsert(self, movie_id: int, vector: list[float], payload: dict[str, Any]) -> None:
+    async def upsert(self, movie_id: int, vector: list[float], payload: dict[str, Any], collection_name: str | None = None) -> None:
         raise NotImplementedError
 
     @abstractmethod
     async def query(
-        self, vector: list[float], top_k: int = 10, where: dict | None = None
+        self, vector: list[float], top_k: int = 10, where: dict | None = None, collection_name: str | None = None
     ) -> list[dict[str, Any]]:
         """Return top_k nearest neighbours as [{id, score, payload}]."""
         raise NotImplementedError
 
-    async def get_by_id(self, movie_id: int) -> dict | None:
+    async def get_by_id(self, movie_id: int, collection_name: str | None = None) -> dict | None:
         return None
 
     @abstractmethod
@@ -54,11 +55,11 @@ class MemoryVectorBackend(VectorBackend):
     async def start(self) -> None:
         return None
 
-    async def upsert(self, movie_id: int, vector: list[float], payload: dict[str, Any]) -> None:
+    async def upsert(self, movie_id: int, vector: list[float], payload: dict[str, Any], collection_name: str | None = None) -> None:
         self.items[movie_id] = {"vector": vector, "payload": payload}
 
     async def query(
-        self, vector: list[float], top_k: int = 10, where: dict | None = None
+        self, vector: list[float], top_k: int = 10, where: dict | None = None, collection_name: str | None = None
     ) -> list[dict[str, Any]]:
         import numpy as np
 
@@ -86,14 +87,14 @@ class RedisVectorBackend(VectorBackend):
     async def start(self) -> None:
         self.client = Redis.from_url(self.settings.redis_url, decode_responses=True)
 
-    async def upsert(self, movie_id: int, vector: list[float], payload: dict[str, Any]) -> None:
+    async def upsert(self, movie_id: int, vector: list[float], payload: dict[str, Any], collection_name: str | None = None) -> None:
         if self.client is None:
             raise RuntimeError("Redis vector backend has not started")
         key = f"{self.settings.redis_key_prefix}vector:{movie_id}"
         await self.client.set(key, json.dumps({"vector": vector, "payload": payload}))
 
     async def query(
-        self, vector: list[float], top_k: int = 10, where: dict | None = None
+        self, vector: list[float], top_k: int = 10, where: dict | None = None, collection_name: str | None = None
     ) -> list[dict[str, Any]]:
         logger.warning("RedisVectorBackend does not support ANN query; returning empty list.")
         return []
@@ -124,21 +125,21 @@ class QdrantVectorBackend(VectorBackend):
                 ),
             )
 
-    async def upsert(self, movie_id: int, vector: list[float], payload: dict[str, Any]) -> None:
+    async def upsert(self, movie_id: int, vector: list[float], payload: dict[str, Any], collection_name: str | None = None) -> None:
         if self.client is None:
             raise RuntimeError("Qdrant vector backend has not started")
         await self.client.upsert(
-            collection_name=self.settings.vector_collection,
+            collection_name=collection_name or self.settings.vector_collection,
             points=[PointStruct(id=movie_id, vector=vector, payload=payload)],
         )
 
     async def query(
-        self, vector: list[float], top_k: int = 10, where: dict | None = None
+        self, vector: list[float], top_k: int = 10, where: dict | None = None, collection_name: str | None = None
     ) -> list[dict[str, Any]]:
         if self.client is None:
             raise RuntimeError("Qdrant vector backend has not started")
         hits = await self.client.search(
-            collection_name=self.settings.vector_collection,
+            collection_name=collection_name or self.settings.vector_collection,
             query_vector=vector,
             limit=top_k,
         )
@@ -167,7 +168,7 @@ class ChromaVectorBackend(VectorBackend):
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self._client = None
-        self._collection = None
+        self._collections = {}
 
     # ── lifecycle ────────────────────────────────────────────────────────────
 
@@ -175,17 +176,24 @@ class ChromaVectorBackend(VectorBackend):
         import chromadb  # lazy so app starts even if chromadb is not installed
 
         self._client = chromadb.PersistentClient(path=self.settings.chroma_persist_dir)
-        self._collection = self._client.get_or_create_collection(
-            name=self.settings.vector_collection,
-            metadata={"hnsw:space": "cosine"},
-        )
-        count = self._collection.count()
-        logger.info(
-            "ChromaDB ready  persist_dir=%s  collection=%s  vectors=%d",
-            self.settings.chroma_persist_dir,
-            self.settings.vector_collection,
-            count,
-        )
+        # Initialize default collection
+        self._get_collection(self.settings.vector_collection)
+        
+        # Pre-initialize hybrid collections
+        self._get_collection(self.settings.vector_user_cf_collection)
+        self._get_collection(self.settings.vector_movie_cf_collection)
+        self._get_collection(self.settings.vector_user_profile_collection)
+        
+        logger.info("ChromaDB ready  persist_dir=%s", self.settings.chroma_persist_dir)
+
+    def _get_collection(self, name: str):
+        if self._client is None:
+            raise RuntimeError("ChromaVectorBackend has not started")
+        if name not in self._collections:
+            self._collections[name] = self._client.get_or_create_collection(
+                name=name, metadata={"hnsw:space": "cosine"}
+            )
+        return self._collections[name]
 
     async def start(self) -> None:
         await asyncio.to_thread(self._sync_start)
@@ -199,25 +207,23 @@ class ChromaVectorBackend(VectorBackend):
             for k, v in payload.items()
         }
 
-    def _sync_upsert(self, movie_id: int, vector: list[float], payload: dict[str, Any]) -> None:
-        if self._collection is None:
-            raise RuntimeError("ChromaVectorBackend has not started")
-        self._collection.upsert(
+    def _sync_upsert(self, movie_id: int, vector: list[float], payload: dict[str, Any], collection_name: str | None = None) -> None:
+        collection = self._get_collection(collection_name or self.settings.vector_collection)
+        collection.upsert(
             ids=[str(movie_id)],
             embeddings=[vector],
             metadatas=[self._sanitise_meta(payload)],
         )
 
-    async def upsert(self, movie_id: int, vector: list[float], payload: dict[str, Any]) -> None:
-        await asyncio.to_thread(self._sync_upsert, movie_id, vector, payload)
+    async def upsert(self, movie_id: int, vector: list[float], payload: dict[str, Any], collection_name: str | None = None) -> None:
+        await asyncio.to_thread(self._sync_upsert, movie_id, vector, payload, collection_name)
 
     # ── read ─────────────────────────────────────────────────────────────────
 
     def _sync_query(
-        self, vector: list[float], top_k: int, where: dict | None
+        self, vector: list[float], top_k: int, where: dict | None, collection_name: str | None = None
     ) -> list[dict[str, Any]]:
-        if self._collection is None:
-            raise RuntimeError("ChromaVectorBackend has not started")
+        collection = self._get_collection(collection_name or self.settings.vector_collection)
         kwargs: dict[str, Any] = {
             "query_embeddings": [vector],
             "n_results": top_k,
@@ -225,7 +231,7 @@ class ChromaVectorBackend(VectorBackend):
         }
         if where:
             kwargs["where"] = where
-        results = self._collection.query(**kwargs)
+        results = collection.query(**kwargs)
         output: list[dict[str, Any]] = []
         for rid, dist, meta in zip(
             results.get("ids", [[]])[0],
@@ -237,14 +243,13 @@ class ChromaVectorBackend(VectorBackend):
         return output
 
     async def query(
-        self, vector: list[float], top_k: int = 10, where: dict | None = None
+        self, vector: list[float], top_k: int = 10, where: dict | None = None, collection_name: str | None = None
     ) -> list[dict[str, Any]]:
-        return await asyncio.to_thread(self._sync_query, vector, top_k, where)
+        return await asyncio.to_thread(self._sync_query, vector, top_k, where, collection_name)
 
-    def _sync_get_by_id(self, movie_id: int) -> dict | None:
-        if self._collection is None:
-            return None
-        res = self._collection.get(ids=[str(movie_id)], include=["embeddings", "metadatas"])
+    def _sync_get_by_id(self, movie_id: int, collection_name: str | None = None) -> dict | None:
+        collection = self._get_collection(collection_name or self.settings.vector_collection)
+        res = collection.get(ids=[str(movie_id)], include=["embeddings", "metadatas"])
         if res and res.get("ids") and len(res["ids"]) > 0:
             embeddings = res.get("embeddings")
             metadatas = res.get("metadatas")
@@ -257,20 +262,19 @@ class ChromaVectorBackend(VectorBackend):
             return {"id": movie_id, "vector": vec, "payload": meta}
         return None
 
-    async def get_by_id(self, movie_id: int) -> dict | None:
-        return await asyncio.to_thread(self._sync_get_by_id, movie_id)
+    async def get_by_id(self, movie_id: int, collection_name: str | None = None) -> dict | None:
+        return await asyncio.to_thread(self._sync_get_by_id, movie_id, collection_name)
 
-    def get_collection_count(self) -> int:
+    def get_collection_count(self, collection_name: str | None = None) -> int:
         """Synchronous helper — safe to call from one-off scripts."""
-        if self._collection is None:
-            return 0
-        return self._collection.count()
+        collection = self._get_collection(collection_name or self.settings.vector_collection)
+        return collection.count()
 
     # ── teardown ─────────────────────────────────────────────────────────────
 
     async def close(self) -> None:
         # PersistentClient persists on every write; no explicit flush needed.
-        self._collection = None
+        self._collections.clear()
         self._client = None
 
 
@@ -301,23 +305,23 @@ class VectorStore:
         if self.settings.vector_db_enabled:
             await self.backend.start()
 
-    async def upsert(self, movie_id: int, vector: list[float], payload: dict[str, Any]) -> None:
+    async def upsert(self, movie_id: int, vector: list[float], payload: dict[str, Any], collection_name: str | None = None) -> None:
         if not self.settings.vector_db_enabled:
             logger.info("Vector DB disabled; accepted vector for movie %s", movie_id)
             return
-        await self.backend.upsert(movie_id, vector, payload)
+        await self.backend.upsert(movie_id, vector, payload, collection_name)
 
     async def query(
-        self, vector: list[float], top_k: int = 10, where: dict | None = None
+        self, vector: list[float], top_k: int = 10, where: dict | None = None, collection_name: str | None = None
     ) -> list[dict[str, Any]]:
         if not self.settings.vector_db_enabled:
             return []
-        return await self.backend.query(vector, top_k, where)
+        return await self.backend.query(vector, top_k, where, collection_name)
 
-    async def get_by_id(self, movie_id: int) -> dict | None:
+    async def get_by_id(self, movie_id: int, collection_name: str | None = None) -> dict | None:
         if not self.settings.vector_db_enabled:
             return None
-        return await self.backend.get_by_id(movie_id)
+        return await self.backend.get_by_id(movie_id, collection_name)
 
     async def close(self) -> None:
         if self.settings.vector_db_enabled:
@@ -329,9 +333,11 @@ class VectorStore:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TrainingScheduler:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, app_state: Any = None) -> None:
         self.settings = settings
         self.scheduler: AsyncIOScheduler | None = None
+        self.app_state = app_state
+        self.is_training = False
 
     async def start(self) -> None:
         if not self.settings.model_train_enabled:
@@ -351,10 +357,23 @@ class TrainingScheduler:
 
     async def enqueue(self, request: TrainRequest) -> str:
         logger.info("Training requested for model=%s force=%s", request.modelName, request.force)
+        # trigger immediately in background
+        asyncio.create_task(self.train_main_model())
         return f"training-{request.modelName}-queued"
 
     async def train_main_model(self) -> None:
-        logger.info("Main model training job started; implementation pending")
+        if self.is_training:
+            logger.info("Training is already in progress, skipping this request.")
+            return
+            
+        self.is_training = True
+        logger.info("Main model training job started")
+        if self.app_state and hasattr(self.app_state, 'vector_store'):
+            svc = ModelTrainingService(vector_store=self.app_state.vector_store)
+            await svc.run_training_pipeline()
+        else:
+            logger.error("Cannot run training pipeline: vector_store not found in app_state")
+        self.is_training = False
 
     async def close(self) -> None:
         if self.scheduler:

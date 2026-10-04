@@ -42,6 +42,15 @@ export class MoviesController {
   testMovieCreated(@Body() createMovieDto: CreateMovieDto) {
     return this.moviesService.testMovieCreated(createMovieDto);
   }
+  // @Post('/seed-created-movie')
+  // // @UseGuards(JwtAuthGuard)
+  // // @Roles('ADMIN', 'SUPERADMIN')
+  // @ApiBearerAuth()
+  // @ApiOperation({ summary: 'Seed movie created' })
+  // async seedCreatedMovie() {
+  //   await this.moviesService.seedMovies();
+  //   return { message: 'Movies seeded successfully' };
+  // }
 
   @Get()
   @ApiOperation({ summary: 'Lấy danh sách phim (Public)' })

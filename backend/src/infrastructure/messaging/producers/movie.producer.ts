@@ -14,10 +14,13 @@ export class MovieProducer {
   constructor(private readonly eventPublisher: EventPublisherService) {}
 
   publishMovieCreated(payload: MovieCreatedPayload, correlationId?: string) {
+    // this.logger.debug(
+    //   `Publishing movie.created event with payload: ${JSON.stringify(
+    //     payload,
+    //   )} with [Trace ID] : ${correlationId}`,
+    // );
     this.logger.debug(
-      `Publishing movie.created event with payload: ${JSON.stringify(
-        payload,
-      )} with [Trace ID] : ${correlationId}`,
+      `Publishing movie.created event with movie id: ${payload.movieId} with [Trace ID] : ${correlationId}`,
     );
 
     this.eventPublisher.publish(
