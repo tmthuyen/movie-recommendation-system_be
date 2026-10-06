@@ -1,5 +1,5 @@
 export const appConfig = {
-  name: "IELTS 8.0 Master",
-} as const
-
-
+  name: 'Movie App',
+  description: 'A movie recommendation app',
+  version: '1.0.0',
+} as const;

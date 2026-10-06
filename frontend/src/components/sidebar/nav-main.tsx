@@ -3,6 +3,7 @@
 import {
   BarChart2,
   BarChart4,
+  Bell,
   Clock,
   ContactRound,
   Film,
@@ -14,6 +15,7 @@ import {
   ListCheck,
   MessageSquare,
   Palette,
+  RollerCoaster,
   Star,
   Swords,
   Tag,
@@ -41,14 +43,24 @@ const dataBar = {
       },
     ],
   },
-  admin: {
-    groupLabel: 'Administration',
+  auth: {
+    groupLabel: 'Auth',
     items: [
       {
         title: 'Tài khoản',
         url: '/admin/users',
         icon: ContactRound,
       },
+      {
+        title: 'Vai trò',
+        url: '/admin/roles',
+        icon: BarChart4,
+      },
+    ],
+  },
+  admin: {
+    groupLabel: 'Movie',
+    items: [
       {
         title: 'Phim',
         url: '/admin/movies',
@@ -104,6 +116,16 @@ const dataBar = {
         url: '/setting/theme',
         icon: Palette,
       },
+      {
+        title: 'Hồ sơ',
+        url: '/profile',
+        icon: ContactRound,
+      },
+      {
+        title: 'Thông báo',
+        url: '/admin/notifications',
+        icon: Bell,
+      },
     ],
   },
 };
@@ -120,8 +142,29 @@ export function NavMain() {
             <SidebarMenuItem key={it.title}>
               <SidebarMenuButton
                 asChild
-                className={`${pathname === it.url ? 'bg-accent text-accent-foreground dark:bg-accent/40' : ''
-                  } hover:bg-accent/70 dark:hover:bg-accent/40 hover:text-accent-foreground cursor-pointer transition-transform hover:scale-105`}
+                className={`${
+                  pathname === it.url ? 'bg-accent text-accent-foreground dark:bg-accent/40' : ''
+                } hover:bg-accent/70 dark:hover:bg-accent/40 hover:text-accent-foreground cursor-pointer transition-transform hover:scale-105`}
+              >
+                <Link href={it.url}>
+                  <it.icon />
+                  <span>{it.title}</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      </SidebarGroup>
+      <SidebarGroup>
+        <SidebarGroupLabel>{dataBar.auth.groupLabel}</SidebarGroupLabel>
+        <SidebarMenu>
+          {dataBar.auth.items.map((it) => (
+            <SidebarMenuItem key={it.title}>
+              <SidebarMenuButton
+                asChild
+                className={`${
+                  pathname === it.url ? 'bg-accent text-accent-foreground dark:bg-accent/40' : ''
+                } hover:bg-accent/70 dark:hover:bg-accent/40 hover:text-accent-foreground cursor-pointer transition-transform hover:scale-105`}
               >
                 <Link href={it.url}>
                   <it.icon />
@@ -139,8 +182,9 @@ export function NavMain() {
             <SidebarMenuItem key={it.title}>
               <SidebarMenuButton
                 asChild
-                className={`${pathname === it.url ? 'bg-accent text-accent-foreground dark:bg-accent/40' : ''
-                  } hover:bg-accent/70 dark:hover:bg-accent/40 hover:text-accent-foreground cursor-pointer transition-transform hover:scale-105`}
+                className={`${
+                  pathname === it.url ? 'bg-accent text-accent-foreground dark:bg-accent/40' : ''
+                } hover:bg-accent/70 dark:hover:bg-accent/40 hover:text-accent-foreground cursor-pointer transition-transform hover:scale-105`}
               >
                 <Link href={it.url}>
                   <it.icon />
@@ -158,8 +202,9 @@ export function NavMain() {
             <SidebarMenuItem key={it.title}>
               <SidebarMenuButton
                 asChild
-                className={`${pathname === it.url ? 'bg-accent text-accent-foreground dark:bg-accent/40' : ''
-                  } hover:bg-accent/70 dark:hover:bg-accent/40 hover:text-accent-foreground cursor-pointer transition-transform hover:scale-105`}
+                className={`${
+                  pathname === it.url ? 'bg-accent text-accent-foreground dark:bg-accent/40' : ''
+                } hover:bg-accent/70 dark:hover:bg-accent/40 hover:text-accent-foreground cursor-pointer transition-transform hover:scale-105`}
               >
                 <Link href={it.url}>
                   <it.icon />
@@ -177,8 +222,9 @@ export function NavMain() {
             <SidebarMenuItem key={it.title}>
               <SidebarMenuButton
                 asChild
-                className={`${pathname === it.url ? 'bg-accent text-accent-foreground dark:bg-accent/40' : ''
-                  } hover:bg-accent/70 dark:hover:bg-accent/40 hover:text-accent-foreground cursor-pointer transition-transform hover:scale-105`}
+                className={`${
+                  pathname === it.url ? 'bg-accent text-accent-foreground dark:bg-accent/40' : ''
+                } hover:bg-accent/70 dark:hover:bg-accent/40 hover:text-accent-foreground cursor-pointer transition-transform hover:scale-105`}
               >
                 <Link href={it.url}>
                   <it.icon />

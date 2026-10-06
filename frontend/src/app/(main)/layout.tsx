@@ -1,7 +1,7 @@
 'use client';
 
 import { AppSidebar } from '@/components/sidebar/app-sidebar';
-import Header from '@/components/header/header';
+import Header from '@/components/header/admin-header';
 import { Button } from '@/components/ui/button';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { Bell, Flame, PlusCircle } from 'lucide-react';
