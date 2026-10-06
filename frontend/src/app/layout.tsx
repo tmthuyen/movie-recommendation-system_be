@@ -5,6 +5,7 @@ import { Toaster } from '@/components/ui/sonner';
 import AppContext from '@/contexts/AppContext';
 import ReactQueryProvider from '@/lib/ReactQueryProvider';
 import { ThemeProvider } from 'next-themes';
+import { AuthInit } from '@/components/auth/InitAuth';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -34,6 +35,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <ReactQueryProvider>
+            <AuthInit />
             <AppContext>{children}</AppContext>
             <Toaster richColors position="top-right" />
           </ReactQueryProvider>

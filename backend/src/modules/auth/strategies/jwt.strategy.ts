@@ -26,15 +26,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         `blacklist:${payload.jti}`,
       );
       if (isBlacklisted) {
-        throw new UnauthorizedException('Token đã bị thu hồi (đăng xuất)');
+        throw new UnauthorizedException('Token không hợp lệ.');
       }
     }
 
-    return {
-      userId: payload.sub,
-      fullName: payload.fullName,
-      email: payload.email,
-      scopes: payload.scopes,
-    };
+    return payload;
   }
 }

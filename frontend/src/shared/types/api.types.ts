@@ -24,8 +24,23 @@ export type ApiErrorResponse = {
   errors?: string[];
 };
 
+export type BaseDto = {
+  createdAt: Date;
+  createdBy: string;
+  updatedAt: Date;
+  updatedBy: string;
+};
+
+// role
+export interface Role extends BaseDto {
+  id: string;
+  name: string;
+  code: string;
+  description?: string;
+}
+
 // User
-export interface User {
+export interface User extends BaseDto {
   id: string;
   email: string;
   fullName: string;
@@ -33,12 +48,7 @@ export interface User {
   avatarUrl?: string;
   gender?: string;
   status: string;
-  roleCodes: string[];
-
-  createdAt: Date;
-  createdBy: string;
-  updatedAt: Date;
-  updatedBy: string;
+  roles: Role[];
 }
 
 // Old

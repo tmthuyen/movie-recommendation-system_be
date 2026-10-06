@@ -23,6 +23,8 @@ import { EyeIcon, EyeOffIcon } from 'lucide-react';
 import LoginGoogle from '@/app/auth/login/google-button';
 import { authApi } from '@/apis/auth.api';
 import { useAuthStore } from '@/stores/auth.store';
+import { User } from '@/shared/types/api.types';
+import { roleUtil } from '@/shared/utils/roleUtil';
 
 const loginEmailPasswordSchema = z.object({
   username: z.email('Vui lòng nhập email hợp lệ'),
@@ -30,6 +32,7 @@ const loginEmailPasswordSchema = z.object({
 });
 
 function LoginForm() {
+  const user = useAuthStore((state) => state.user);
   const [mounted, setMounted] = useState(false);
 
   const router = useRouter();
@@ -52,6 +55,11 @@ function LoginForm() {
     return <div className="m-auto text-center text-lg">Loading...</div>;
   }
 
+  if (user) {
+    router.push(roleUtil.getHomeRouteByRole(user.roles));
+    return <div className="m-auto text-center text-lg">Đang chuyển trang...</div>;
+  }
+
   const {
     control,
     reset,
@@ -64,6 +72,7 @@ function LoginForm() {
     const { username, password } = data;
 
     try {
+      // API login
       const res = await authApi.login({ username, password });
       if (!res.success) {
         const errorMessage = res.message || 'Đăng nhập thất bại. Vui lòng thử lại.';
@@ -77,14 +86,31 @@ function LoginForm() {
       }
       useAuthStore.getState().setAccessToken(res.result.accessToken);
 
+      // API get me
+      const meRes = await authApi.getMe();
+      const user: User = meRes.result;
+      if (!meRes.success || !meRes.result) {
+        toast.error(
+          'Đăng nhập thất bại.' + (meRes.message || 'Không thể lấy thông tin người dùng.')
+        );
+        return;
+      }
+      useAuthStore.getState().setUser(meRes.result);
+
+      // reset form
       reset({
         username: '',
         password: '',
       });
 
-      toast.success(res.message || 'Đăng nhập thành công', { duration: 900 });
+      toast.success((res.message || 'Đăng nhập thành công.') + 'Đang chuyển trang...', {
+        duration: 900,
+      });
+
+      // chuyển trang theo role
+      router.push(roleUtil.getHomeRouteByRole(user.roles));
     } catch (error: any) {
-      setError('Lỗi khi đăng nhập.' + error?.message || 'Vui lòng thử lại.');
+      setError('Lỗi khi đăng nhập. ' + error?.message || 'Vui lòng thử lại.');
       console.error('Login error:', error);
     }
   };

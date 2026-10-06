@@ -13,6 +13,7 @@ import {
   UnauthorizedException,
   Get,
   Patch,
+  Logger,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
@@ -33,6 +34,7 @@ import { LoginResultDto } from '@/common/dtos/auth/login-result.dto';
 @Controller('auth')
 @UseGuards(JwtAuthGuard)
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
   constructor(
     private authService: AuthService,
     private sessionService: SessionService,
@@ -128,8 +130,16 @@ export class AuthController {
   ) {
     const refreshToken = req.cookies?.refreshToken as string;
     const deviceId = req.cookies?.deviceId as string;
+    this.logger.log(
+      `[Refresh Token] ${refreshToken ? 'Present' : 'Missing'} [Device ID] ${deviceId ? 'Present' : 'Missing'}`,
+    );
 
     if (!refreshToken || !deviceId) {
+      this.logger.error(`[Refresh Token] Missing refreshToken or deviceId`);
+      // cookie check
+      this.logger.error(
+        `[Refresh Token] Cookies: ${JSON.stringify(req.cookies)}`,
+      );
       throw new UnauthorizedException('Phiên đăng nhập không hợp lệ');
     }
 
@@ -265,7 +275,13 @@ export class AuthController {
   @Get('me')
   async getMe(@Req() req: Request) {
     const userPayload = req.user as JwtPayload;
+
+    if (!userPayload) {
+      throw new UnauthorizedException('Người dùng chưa đăng nhập');
+    }
+
     const user = await this.authService.getMe(userPayload.sub);
+
     return {
       success: true,
       statusCode: HttpStatus.OK,

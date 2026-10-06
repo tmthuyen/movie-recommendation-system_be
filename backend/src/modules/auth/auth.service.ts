@@ -200,6 +200,9 @@ export class AuthService {
 
   // get me
   async getMe(userId: string) {
+    if (!userId) {
+      throw new UnauthorizedException('Người dùng chưa đăng nhập');
+    }
     const user = await this.usersService.findByIdWithRoles(userId);
     if (!user) {
       throw new UnauthorizedException('Người dùng không tồn tại');

@@ -9,11 +9,16 @@ import { CamelCaseInterceptor } from '@/common/interceptors/camel-case.intercept
 import { LoggingInterceptor } from '@/common/interceptors/logging.interceptor';
 import { HttpExceptionFilter } from '@/common/filters/http-exception.filter';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
+import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
   });
+
+  // cookie
+  app.use(cookieParser());
+
   const winstonLogger = app.get(WINSTON_MODULE_NEST_PROVIDER);
   app.useLogger(winstonLogger);
 
