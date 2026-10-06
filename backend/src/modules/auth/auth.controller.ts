@@ -27,6 +27,8 @@ import { Public } from '@/common/decorators/public.decorator';
 import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 
 import { JwtService } from '@nestjs/jwt';
+import { ApiResponse } from '@/common/dtos/api-response.dto';
+import { LoginResultDto } from '@/common/dtos/auth/login-result.dto';
 
 @Controller('auth')
 @UseGuards(JwtAuthGuard)
@@ -52,7 +54,7 @@ export class AuthController {
     @Ip() ip: string,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
-  ) {
+  ): Promise<ApiResponse<LoginResultDto>> {
     const user = await this.authService.validateUser(loginDto);
     const tokenData = this.authService.login(user);
 

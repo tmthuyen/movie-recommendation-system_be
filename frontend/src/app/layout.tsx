@@ -3,7 +3,7 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { Toaster } from '@/components/ui/sonner';
 import AppContext from '@/contexts/AppContext';
-import ReactQueryProvider from '@/contexts/ReactQueryProvider';
+import ReactQueryProvider from '@/lib/ReactQueryProvider';
 import { ThemeProvider } from 'next-themes';
 
 const inter = Inter({
@@ -27,17 +27,17 @@ export default function RootLayout({
         className={`${inter.variable} font-sans antialiased transition-colors`}
         suppressHydrationWarning
       >
-        <ReactQueryProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <ReactQueryProvider>
             <AppContext>{children}</AppContext>
             <Toaster richColors position="top-right" />
-          </ThemeProvider>
-        </ReactQueryProvider>
+          </ReactQueryProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

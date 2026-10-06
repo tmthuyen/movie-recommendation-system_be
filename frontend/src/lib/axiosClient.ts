@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { keysToCamel } from '@/shared/utils/snakeToCamel';
+import { useAuthStore } from '@/stores/auth.store';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
@@ -22,31 +23,32 @@ const processQueue = (error: any, token: string | null = null) => {
   failedQueue = [];
 };
 
-export const injectAuthFunctions = (setTokenFn: (token: string | null) => void) => {
-  setAuthTokenInContext = setTokenFn;
-};
+// export const injectAuthFunctions = (setTokenFn: (token: string | null) => void) => {
+//   setAuthTokenInContext = setTokenFn;
+// };
 
-export const updateToken = (token: string | null) => {
-  currentAccessToken = token;
-  if (setAuthTokenInContext) {
-    setAuthTokenInContext(token);
-  }
-};
+// export const updateToken = (token: string | null) => {
+//   currentAccessToken = token;
+//   if (setAuthTokenInContext) {
+//     setAuthTokenInContext(token);
+//   }
+// };
 
-export const getCurrentToken = () => {
-  return currentAccessToken;
-};
+// export const getCurrentToken = () => {
+//   return currentAccessToken;
+// };
 
 // Request Interceptor
 axiosClient.interceptors.request.use(
   (config) => {
-    const token = getCurrentToken();
+    const token = useAuthStore.getState().accessToken;
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`;
     }
     return config;
   },
   (error) => {
+    console.error('[Axios] Request error:', error);
     return Promise.reject(error);
   }
 );
@@ -64,7 +66,7 @@ axiosClient.interceptors.response.use(
     const originalRequest = error.config;
 
     if (originalRequest.url.includes('/auth/refresh')) {
-      updateToken(null);
+      useAuthStore.getState().setAccessToken(null);
       processQueue(error, null);
       console.log('Failed to refresh token');
       return Promise.reject(error);
@@ -92,7 +94,7 @@ axiosClient.interceptors.response.use(
         const { accessToken: newAccessToken } = response.data.data;
         // console.log("newAccessToken", newAccessToken)
 
-        updateToken(newAccessToken);
+        useAuthStore.getState().setAccessToken(newAccessToken);
 
         processQueue(null, newAccessToken);
 
@@ -100,7 +102,7 @@ axiosClient.interceptors.response.use(
         return axiosClient(originalRequest);
       } catch (refreshError) {
         console.log('Refresh Error: ', refreshError);
-        updateToken(null);
+        useAuthStore.getState().setAccessToken(null);
         processQueue(refreshError, null);
         return Promise.reject(refreshError);
       } finally {

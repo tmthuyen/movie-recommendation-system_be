@@ -1,4 +1,4 @@
-_format_version: "3.0"
+_format_version: '3.0'
 
 _transform: true
 
@@ -33,13 +33,11 @@ services:
           - http
           - https
 
-
 # ==============================================
 # Global Plugins
 # ==============================================
 
 plugins:
-
   # --------------------------------------------
   # CORS
   # --------------------------------------------
@@ -47,7 +45,7 @@ plugins:
     config:
       origins:
         - http://localhost:5173
-        - http://localhost:3001
+        - http://localhost:3002
       methods:
         - GET
         - POST
@@ -70,7 +68,6 @@ plugins:
 
       max_age: 3600
 
-
   # --------------------------------------------
   # Request ID
   # --------------------------------------------
@@ -80,7 +77,6 @@ plugins:
       header_name: X-Request-ID
       generator: uuid
 
-
   # --------------------------------------------
   # Rate Limit
   # --------------------------------------------
@@ -89,4 +85,3 @@ plugins:
     config:
       minute: 120
       policy: local
-      

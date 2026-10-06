@@ -1,15 +1,22 @@
 export interface Pagination {
   totalItems: number;
+
   totalPages: number;
+
   currentPage: number;
+
   pageSize: number;
 }
 export interface ApiResponse<T> {
+  success: boolean;
+
   statusCode: number;
+
   message: string;
-  data: T;
+
+  result: T;
 }
 
 export interface ApiResponseWithPagination<T> extends ApiResponse<T> {
-  metadata: Pagination;
+  pagination: Pagination;
 }

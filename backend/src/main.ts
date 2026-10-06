@@ -3,7 +3,6 @@ import '@config/tracing.config'; // Import cấu hình tracing trước khi kh�
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { CamelCaseInterceptor } from '@/common/interceptors/camel-case.interceptor';
@@ -38,7 +37,14 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter(winstonLogger));
 
   // cors
-  app.enableCors();
+  // http://localhost:3000, http://localhost:3001, http://localhost:3002
+  const allowedOrigins =
+    process.env.FRONTEND_ORIGINS?.split(',').map(origin => origin.trim()) || [];
+  console.log('Allowed origins for CORS:', allowedOrigins);
+  app.enableCors({
+    origin: allowedOrigins,
+    credentials: true,
+  });
 
   // swagger
   // 1. Khởi tạo cấu hình cơ bản cho Swagger

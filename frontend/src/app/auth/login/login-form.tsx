@@ -20,10 +20,13 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { EyeIcon, EyeOffIcon } from 'lucide-react';
+import LoginGoogle from '@/app/auth/login/google-button';
+import { authApi } from '@/apis/auth.api';
+import { useAuthStore } from '@/stores/auth.store';
 
 const loginEmailPasswordSchema = z.object({
-  email: z.email('Invalid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  username: z.email('Vui lòng nhập email hợp lệ'),
+  password: z.string().min(6, 'Mật khẩu phải có ít nhất 6 ký tự'),
 });
 
 function LoginForm() {
@@ -36,7 +39,7 @@ function LoginForm() {
     resolver: zodResolver(loginEmailPasswordSchema),
     mode: 'onChange',
     defaultValues: {
-      email: 'admin@gmail.com',
+      username: 'admin@gmail.com',
       password: '123456',
     },
   });
@@ -57,33 +60,41 @@ function LoginForm() {
   } = loginForm;
 
   const onSubmit = async (data: z.infer<typeof loginEmailPasswordSchema>) => {
-    // setError(null);
-    // const { email, password } = data;
+    setError(null);
+    const { username, password } = data;
 
-    // // const res = await login({ email, password });
-    // if (!res.success) {
-    //   const errorMessage = res.message || 'Failed to sign in';
-    //   const errorDetails = res.details ? ` \nDetails: ${res.details.join(', ')}` : '';
-    //   setError(errorMessage + errorDetails);
-    //   return;
-    // }
+    try {
+      const res = await authApi.login({ username, password });
+      if (!res.success) {
+        const errorMessage = res.message || 'Đăng nhập thất bại. Vui lòng thử lại.';
+        setError(errorMessage);
+        return;
+      }
 
-    // reset({
-    //   email: '',
-    //   password: '',
-    // });
-    // toast.success('Signed in successfully', { duration: 900, position: 'top-right' });
-    // setTimeout(() => {
-    //   router.replace('/home');
-    // }, 1000);
+      if (!res.result.accessToken) {
+        setError('Đăng nhập thất bại. Không nhận được access token.');
+        return;
+      }
+      useAuthStore.getState().setAccessToken(res.result.accessToken);
+
+      reset({
+        username: '',
+        password: '',
+      });
+
+      toast.success(res.message || 'Đăng nhập thành công', { duration: 900 });
+    } catch (error: any) {
+      setError('Lỗi khi đăng nhập.' + error?.message || 'Vui lòng thử lại.');
+      console.error('Login error:', error);
+    }
   };
 
   return (
     <Card className="w-full max-w-md">
       <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
+        <CardTitle className="text-2xl font-bold">Đăng nhập</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-col gap-4">
         <form id="login-form" onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           {/* API err message */}
           {error && (
@@ -93,19 +104,19 @@ function LoginForm() {
           )}
           <FieldGroup>
             <Controller
-              name="email"
+              name="username"
               control={control}
               render={({ field, fieldState }) => (
                 <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor="email" className="cursor-pointer">
-                    Email
+                  <FieldLabel htmlFor="username" className="cursor-pointer">
+                    Tài khoản (Email)
                   </FieldLabel>
                   <Input
                     {...field}
-                    id="email"
+                    id="username"
                     aria-invalid={fieldState.invalid}
                     placeholder="you@example.com"
-                    autoComplete="email"
+                    autoComplete="username"
                   />
                   {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
                 </Field>
@@ -117,7 +128,7 @@ function LoginForm() {
               render={({ field, fieldState }) => (
                 <Field data-invalid={fieldState.invalid}>
                   <FieldLabel htmlFor="password" className="cursor-pointer">
-                    Password
+                    Mật khẩu
                   </FieldLabel>
                   <InputGroup>
                     <InputGroupInput
@@ -144,21 +155,26 @@ function LoginForm() {
             />
           </FieldGroup>
         </form>
-      </CardContent>
-
-      <CardFooter className="flex-col text-center">
         <Button
           type="submit"
           form="login-form"
-          className={`w-full shadow-lg ${!isValid || isSubmitting ? 'opacity-50' : 'cursor-pointer'}`}
+          className={`mt-4 w-full shadow-lg ${!isValid || isSubmitting ? 'opacity-50' : 'cursor-pointer'}`}
           disabled={!isValid || isSubmitting}
         >
-          {isSubmitting ? 'Signing in...' : 'Sign in'}
+          {isSubmitting ? 'Đang đăng nhập...' : 'Đăng nhập'}
         </Button>
-        <div className="mt-4 text-center text-sm">
-          <span className="text-muted-foreground">Don&apos;t have an account? </span>
+
+        <div className="text-center text-sm">
+          <span className="text-muted-foreground">Đăng nhập bằng tài khoản khác</span>
+        </div>
+        <LoginGoogle />
+      </CardContent>
+
+      <CardFooter className="flex-col text-center">
+        <div className="text-center text-sm">
+          <span className="text-muted-foreground">Chưa có tài khoản? </span>
           <Link href="/auth/signup" className="text-primary font-medium hover:underline">
-            Sign up
+            Đăng ký
           </Link>
         </div>
       </CardFooter>
