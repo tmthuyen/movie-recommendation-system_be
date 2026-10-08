@@ -1,6 +1,6 @@
 import React from 'react';
 
-const metadata = {
+export const metadata = {
   title: 'Thể loại',
   description: 'Thể loại các phim và người dùng quan tâm',
 };

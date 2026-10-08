@@ -1,8 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { RedisService } from '@/infrastructure/redis/redis.service';
 import * as crypto from 'crypto';
 
-export interface SessionData {
+export type SessionData = {
   userId: string;
   refreshToken: string;
   deviceId: string;
@@ -11,105 +11,168 @@ export interface SessionData {
   createdAt: number;
   expiresAt: number;
   lastActivityAt: number;
-  jti?: string;
-}
+  sessionId: string;
+  jti: string;
+};
 
 @Injectable()
 export class SessionService {
+  private readonly logger = new Logger(SessionService.name);
   constructor(private readonly redisService: RedisService) {}
 
-  private getSessionKey(userId: string, deviceId: string): string {
-    return `session:${userId}:${deviceId}`;
+  private getSessionKey(sessionId: string): string {
+    return `auth:session:${sessionId}`;
+  }
+
+  private getBlacklistKey(jti: string): string {
+    return `auth:blacklist:${jti}`;
+  }
+
+  private getUserSessionsKey(userId: string): string {
+    return `auth:user:${userId}:sessions`;
   }
 
   generateOpaqueToken(): string {
     return crypto.randomBytes(40).toString('hex');
   }
 
-  generateRefreshToken(userId: string): string {
-    return `${userId}.${crypto.randomBytes(40).toString('hex')}`;
+  generateRefreshToken(sessionId: string): string {
+    return `${sessionId}.${this.generateOpaqueToken()}`;
   }
 
   async createSession(
     userId: string,
     ip: string,
     userAgent: string,
-    deviceId?: string,
-    jti?: string,
+    deviceId: string,
+    sessionId: string,
+    jti: string,
   ): Promise<SessionData> {
-    const dId = deviceId || crypto.randomUUID();
-    const refreshToken = this.generateRefreshToken(userId);
+    const refreshToken = this.generateRefreshToken(sessionId);
     const ttlSeconds = 30 * 24 * 60 * 60; // 30 days
     const now = Date.now();
 
     const session: SessionData = {
       userId,
       refreshToken,
-      deviceId: dId,
+      deviceId,
       ip,
       userAgent,
       createdAt: now,
       expiresAt: now + ttlSeconds * 1000,
       lastActivityAt: now,
+      sessionId,
       jti,
     };
 
+    // auth:session:<sessionId> -> SessionData
     await this.redisService.set(
-      this.getSessionKey(userId, dId),
+      this.getSessionKey(sessionId),
       JSON.stringify(session),
+      ttlSeconds,
+    );
+
+    // auth:user:<userId>:sessions -> Set of sessionIds
+    await this.redisService.sadd(
+      this.getUserSessionsKey(userId),
+      sessionId,
       ttlSeconds,
     );
     return session;
   }
 
-  async getSession(
-    userId: string,
-    deviceId: string,
-  ): Promise<SessionData | null> {
-    const data = await this.redisService.get(
-      this.getSessionKey(userId, deviceId),
-    );
+  async getSession(sessionId: string): Promise<SessionData | null> {
+    const data = await this.redisService.get(this.getSessionKey(sessionId));
     if (!data) return null;
     return JSON.parse(data) as SessionData;
   }
 
-  async updateLastActivity(
-    userId: string,
-    deviceId: string,
-    sessionData: SessionData,
-  ): Promise<void> {
-    sessionData.lastActivityAt = Date.now();
-    const remainingTtl = Math.floor(
-      (sessionData.expiresAt - Date.now()) / 1000,
-    );
-    if (remainingTtl > 0) {
-      await this.redisService.set(
-        this.getSessionKey(userId, deviceId),
-        JSON.stringify(sessionData),
-        remainingTtl,
+  // async updateLastActivity(
+  //   userId: string,
+  //   deviceId: string,
+  //   sessionData: SessionData,
+  // ): Promise<void> {
+  //   sessionData.lastActivityAt = Date.now();
+  //   const remainingTtl = Math.floor(
+  //     (sessionData.expiresAt - Date.now()) / 1000,
+  //   );
+  //   if (remainingTtl > 0) {
+  //     await this.redisService.set(
+  //       this.getSessionKey(userId, deviceId),
+  //       JSON.stringify(sessionData),
+  //       remainingTtl,
+  //     );
+  //   }
+  // }
+
+  async removeSession(sessionId: string): Promise<void> {
+    const session = await this.getSession(sessionId);
+    if (!session) {
+      this.logger.warn(
+        `[Session Remove] No session found for sessionId: ${sessionId}`,
       );
+      return;
     }
-  }
-
-  async removeSession(userId: string, deviceId: string): Promise<void> {
-    const session = await this.getSession(userId, deviceId);
     if (session && session.jti) {
-      await this.redisService.set(`blacklist:${session.jti}`, 'true', 3600); // Blacklist for 1h
+      await this.redisService.set(
+        this.getBlacklistKey(session.jti),
+        'true',
+        3600,
+      ); // Blacklist for 1h
     }
-    await this.redisService.del(this.getSessionKey(userId, deviceId));
+
+    // Remove the session from Redis
+    await this.redisService.del(this.getSessionKey(sessionId));
+    this.logger.log(
+      `[Session Removed] Session: ${this.getSessionKey(sessionId)} removed.`,
+    );
+
+    // Remove the sessionId from the user's session set
+    this.logger.log(
+      '[Before Sessions]' +
+        JSON.stringify(
+          await this.redisService.smembers(
+            this.getUserSessionsKey(session.userId),
+          ),
+        ),
+    );
+    const userSessionsKey = this.getUserSessionsKey(session.userId);
+    await this.redisService.srem(userSessionsKey, sessionId);
+    this.logger.log(
+      '[After Sessions]' +
+        JSON.stringify(
+          await this.redisService.smembers(
+            this.getUserSessionsKey(session.userId),
+          ),
+        ),
+    );
+
+    this.logger.log(
+      `[Session Removed] Session: ${this.getSessionKey(sessionId)} removed.`,
+    );
   }
 
-  async removeAllSessions(userId: string): Promise<void> {
-    const keys = await this.redisService.getKeys(`session:${userId}:*`);
-    for (const key of keys) {
-      const data = await this.redisService.get(key);
-      if (data) {
-        const session = JSON.parse(data) as SessionData;
-        if (session.jti) {
-          await this.redisService.set(`blacklist:${session.jti}`, 'true', 3600); // Blacklist for 1h
-        }
+  // all sessions of a user
+  async getAllSessionsForUser(userId: string): Promise<SessionData[]> {
+    const sessionIds = await this.redisService.smembers(
+      this.getUserSessionsKey(userId),
+    );
+    const sessions: SessionData[] = [];
+    for (const sessionId of sessionIds) {
+      const session = await this.getSession(sessionId);
+      if (session) {
+        sessions.push(session);
       }
     }
-    await this.redisService.delByPattern(`session:${userId}:*`);
+    return sessions;
+  }
+
+  // Remove all sessions for a user
+  async removeAllSessions(userId: string): Promise<void> {
+    const userSessionsKey = this.getUserSessionsKey(userId);
+    const sessionIds = await this.redisService.smembers(userSessionsKey);
+    for (const sessionId of sessionIds) {
+      await this.removeSession(sessionId);
+    }
   }
 }

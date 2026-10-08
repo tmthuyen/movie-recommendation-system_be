@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { UsersService } from '@/modules/users/users.service';
@@ -18,6 +19,7 @@ import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   constructor(
     private usersService: UsersService,
     private rolesService: RolesService,
@@ -54,19 +56,34 @@ export class AuthService {
   }
 
   // 2. Tạo và cấp JWT Token
-  login(user: User) {
+  async login(user: User, userAgent: string, ip: string, deviceId: string) {
+    if (!deviceId) {
+      deviceId = crypto.randomUUID();
+    }
+
+    const sessionId = crypto.randomUUID();
     const jti = crypto.randomUUID();
     const payload = {
       sub: String(user.id),
       fullName: user.fullName,
       email: user.email,
       scopes: user.roles.map(r => r.code.toUpperCase()),
-      jti,
+      sessionId: sessionId,
+      jti: jti,
     };
+
+    const session = await this.sessionService.createSession(
+      user.id,
+      ip,
+      userAgent,
+      deviceId,
+      sessionId,
+      jti,
+    );
 
     return {
       accessToken: this.jwtService.sign(payload),
-      jti,
+      session,
     };
   }
 
@@ -112,17 +129,28 @@ export class AuthService {
   }
   // 4. Refresh Token
   async refreshToken(
-    userId: string,
     refreshToken: string,
     deviceId: string,
     userAgent: string,
     ip: string,
   ) {
-    const session = await this.sessionService.getSession(userId, deviceId);
+    if (!refreshToken) {
+      throw new UnauthorizedException('Đã đăng xuất');
+    }
+    const sessionId = refreshToken.split('.')[0];
+    if (!sessionId) {
+      throw new UnauthorizedException('Token không hợp lệ');
+    }
+    const session = await this.sessionService.getSession(sessionId);
+
     if (!session || session.refreshToken !== refreshToken) {
+      // this.logger.warn('[Session]', JSON.stringify(session));
+      this.logger.log('[Session Token]', session?.refreshToken);
+      this.logger.log('[Refresh Token]', refreshToken);
       throw new UnauthorizedException('Token không hợp lệ hoặc đã hết hạn');
     }
 
+    const userId = session.userId;
     const user = await this.usersService.findByIdWithRoles(userId);
     if (
       !user ||
@@ -132,17 +160,32 @@ export class AuthService {
       throw new UnauthorizedException('Tài khoản bị khóa hoặc không tồn tại');
     }
 
-    await this.sessionService.removeSession(userId, deviceId);
-    const tokenData = this.login(user);
+    // revoke the old session data
+    await this.sessionService.removeSession(sessionId);
+
+    const newJti = crypto.randomUUID();
+    const newAccessToken = this.jwtService.sign({
+      sub: String(user.id),
+      fullName: user.fullName,
+      email: user.email,
+      scopes: user.roles.map(r => r.code.toUpperCase()),
+      sessionId: sessionId,
+      jti: newJti,
+    });
+
     const newSession = await this.sessionService.createSession(
-      userId,
+      user.id,
       ip,
       userAgent,
       deviceId,
-      tokenData.jti,
+      sessionId,
+      newJti,
     );
 
-    return { tokenData, newSession };
+    return {
+      accessToken: newAccessToken,
+      refreshToken: newSession.refreshToken,
+    };
   }
 
   // 5. Xác thực email
@@ -234,6 +277,21 @@ export class AuthService {
     await this.usersService.updatePassword(userId, hashedPassword);
 
     // Logout all as requested by user
+    await this.sessionService.removeAllSessions(userId);
+  }
+
+  // sessions
+  async getAllSessionsForUser(userId: string) {
+    return this.sessionService.getAllSessionsForUser(userId);
+  }
+
+  // logout and logout session
+  async logoutBySessionId(sessionId: string) {
+    await this.sessionService.removeSession(sessionId);
+  }
+
+  // logout all
+  async logoutAll(userId: string) {
     await this.sessionService.removeAllSessions(userId);
   }
 }

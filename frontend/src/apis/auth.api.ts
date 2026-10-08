@@ -1,4 +1,4 @@
-import { ApiResponse, User } from '@/shared/types/api.types';
+import { ApiResponse, UpdatePasswordData, User } from '@/shared/types/api.types';
 import axiosClient from '../lib/axiosClient';
 
 export const authApi = {
@@ -46,15 +46,26 @@ export const authApi = {
     return data;
   },
 
+  getSessions: async (): Promise<ApiResponse<any[]>> => {
+    const { data } = await axiosClient.get('/auth/sessions');
+
+    return data;
+  },
+
   logout: async (): Promise<void> => {
     return axiosClient.post('/auth/logout');
   },
 
   logoutBySession: async (data: { sessionId: string }): Promise<void> => {
-    return axiosClient.post('/auth/logout-session', data);
+    return axiosClient.post(`/auth/logout-session/${data.sessionId}`);
   },
 
   logoutAll: async (): Promise<void> => {
     return axiosClient.post('/auth/logout-all');
+  },
+
+  updatePassword: async (updatePasswordData: UpdatePasswordData): Promise<ApiResponse<any>> => {
+    const { data } = await axiosClient.patch('/auth/change-password', updatePasswordData);
+    return data;
   },
 };

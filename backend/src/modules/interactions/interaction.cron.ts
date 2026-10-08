@@ -20,7 +20,7 @@ export class InteractionCronService {
   ) {}
 
   // Run every 2 minutes for testing, you can change to a longer interval in production
-  @Cron('0 */120 * * * *')
+  @Cron('0 */1440 * * * *')
   async handleBatchTrainingUpload() {
     if (this.isProcessing) {
       this.logger.warn(

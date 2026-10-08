@@ -1,12 +1,23 @@
 import React from 'react';
 
-const metadata = {
+export const metadata = {
   title: 'Dashboard',
   description:
     'Trang tổng quan của hệ thống, nơi hiển thị các thông tin quan trọng và các chỉ số liên quan đến hoạt động của ứng dụng.',
 };
 
-export default function DashBoardPage() {
+// fake async function to simulate data fetching
+const fetchData = async () => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve('Data fetched successfully');
+    }, 1000);
+  });
+};
+
+export default async function DashBoardPage() {
+  const data = await fetchData();
+
   return (
     <div className="flex h-full w-full flex-col gap-4">
       {/* title */}

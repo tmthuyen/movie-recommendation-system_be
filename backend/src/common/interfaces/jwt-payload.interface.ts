@@ -3,5 +3,6 @@ export interface JwtPayload {
   email: string;
   fullName: string;
   scopes: string[];
-  jti?: string;
+  sessionId: string;
+  jti: string;
 }

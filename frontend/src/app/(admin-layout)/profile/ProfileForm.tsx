@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -20,18 +20,44 @@ import {
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAuth } from '@/hooks/useAuth';
 import { userApi } from '@/apis/user.api';
+import { authApi } from '@/apis/auth.api';
+import { useAuthStore } from '@/stores/auth.store';
+import { Role } from '@/shared/types/api.types';
+import { mapUserStatus } from '@/shared/utils/mapStatus';
+import { useRouter } from 'next/navigation';
 
-export const ProfileForm = () => {
-  const { user } = useAuth();
+// props
+interface ProfileFormProps {
+  metadata: {
+    title: string;
+    description: string;
+  };
+  children?: React.ReactNode;
+}
+
+interface UpdatePasswordData {
+  oldPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+export const ProfileForm = ({ metadata, children }: ProfileFormProps) => {
+  const user = useAuthStore((state) => state.user);
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!user) {
+      router.push('/login');
+    }
+  }, [user]);
 
   const [formData, setFormData] = useState({
-    name: user?.full_name || '',
+    name: user?.fullName || '',
     email: user?.email || '',
   });
 
-  const [passwordData, setPasswordData] = useState({
+  const [passwordData, setPasswordData] = useState<UpdatePasswordData>({
     oldPassword: '',
     newPassword: '',
     confirmPassword: '',
@@ -47,12 +73,14 @@ export const ProfileForm = () => {
 
   const { data: sessionsData, isLoading: isLoadingSessions } = useQuery({
     queryKey: ['sessions'],
-    queryFn: () => userApi.getSessions(),
+    queryFn: () => authApi.getSessions(),
+    staleTime: 3 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
   });
 
   const sessions = React.useMemo(() => {
-    if (!sessionsData?.data?.data) return [];
-    return sessionsData.data.data.reduce((acc: any[], session: any) => {
+    if (!sessionsData?.result) return [];
+    return sessionsData.result.reduce((acc: any[], session: any) => {
       const existingSession = acc.find((s) => s.userAgent === session.userAgent);
       if (!existingSession || !session.isRevoked) {
         acc.push(session);
@@ -64,7 +92,7 @@ export const ProfileForm = () => {
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await userApi.updateProfile({ full_name: formData.name });
+      await userApi.updateProfile({ fullName: formData.name });
       toast.success('Cập nhật thông tin thành công!', { position: 'top-right' });
     } catch (error: any) {
       console.error(error);
@@ -72,23 +100,35 @@ export const ProfileForm = () => {
     }
   };
 
+  // tanstack query mutation
+  const mutation = useMutation({
+    mutationFn: (data: UpdatePasswordData) => authApi.updatePassword(data),
+    onSuccess: () => {
+      toast.success('Cập nhật mật khẩu thành công!', { position: 'top-right' });
+      setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
+    },
+    onError: (error: any) => {
+      console.error(error);
+      toast.error(error.response?.data?.message || 'Có lỗi xảy ra', { position: 'top-right' });
+    },
+  });
+
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       toast.error('Mật khẩu xác nhận không khớp!', { position: 'top-right' });
       return;
     }
-    try {
-      await userApi.updatePassword({
-        oldPassword: passwordData.oldPassword,
-        newPassword: passwordData.newPassword,
-      });
-      toast.success('Cập nhật mật khẩu thành công!', { position: 'top-right' });
-      setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
-    } catch (error: any) {
-      console.error(error);
-      toast.error(error.response?.data?.message || 'Có lỗi xảy ra', { position: 'top-right' });
-    }
+    // try {
+    //   await authApi.updatePassword(passwordData);
+    //   toast.success('Cập nhật mật khẩu thành công!', { position: 'top-right' });
+    //   setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
+    // } catch (error: any) {
+    //   console.error(error);
+    //   toast.error(error.response?.data?.message || 'Có lỗi xảy ra', { position: 'top-right' });
+    // }
+
+    mutation.mutate(passwordData);
   };
 
   const handleRevokeSession = (sessionId: number) => {
@@ -153,37 +193,38 @@ export const ProfileForm = () => {
     setIsConfirmOpen(false);
   };
 
+  const status = mapUserStatus(user?.status || 'INACTIVE');
+
   return (
-    <div className="animate-fade-in space-y-6 pb-10">
+    <div className="animate-fade-in w-full space-y-6 pb-10">
       <div className="flex flex-col gap-2">
-        <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white">Hồ sơ cá nhân</h2>
-        <p className="text-gray-500 dark:text-gray-400">
-          Quản lý thông tin, bảo mật và các thiết bị đăng nhập.
-        </p>
+        <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white">{metadata.title}</h2>
+        <p className="text-gray-500 dark:text-gray-400">{metadata.description}</p>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Cột trái: Thông tin cơ bản */}
-        <div className="space-y-6 lg:col-span-1">
-          <Card className="overflow-hidden border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <div className={`h-24 border-b border-gray-100 dark:border-slate-800`}></div>
-            <CardContent className="relative pt-0">
+        <div className="w-full space-y-6 lg:col-span-1">
+          <Card className="w-full overflow-hidden border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div
+              className={`relative flex items-center justify-center border-b border-gray-100 dark:border-slate-800`}
+            >
               <div
-                className="group absolute -top-12 left-6 flex h-24 w-24 cursor-pointer items-center justify-center overflow-hidden rounded-full border-4 border-white bg-gray-200 shadow-md dark:border-slate-900"
+                className="group mb2 flex h-24 w-24 cursor-pointer items-center justify-center overflow-hidden rounded-full border-4 border-white bg-gray-200 shadow-md dark:border-slate-900"
                 onClick={handleAvatarClick}
               >
-                {user?.avatar_url ? (
-                  <img src={user.avatar_url} alt="Avatar" className="h-full w-full object-cover" />
+                {user?.avatarUrl ? (
+                  <img src={user.avatarUrl} alt="Avatar" className="h-full w-full object-cover" />
                 ) : (
                   <div
                     className={`flex h-full w-full items-center justify-center text-3xl font-bold text-white uppercase`}
                   >
-                    {user?.full_name?.charAt(0) || 'U'}
+                    {user?.fullName?.charAt(0) || 'U'}
                   </div>
                 )}
 
                 {/* Overlay for uploading */}
-                <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                <div className="absolute inset-0 right-0 left-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
                   {isUploadingAvatar ? (
                     <Loader2 className="h-6 w-6 animate-spin text-white" />
                   ) : (
@@ -198,24 +239,28 @@ export const ProfileForm = () => {
                 accept="image/*"
                 className="hidden"
               />
-              <div className="mt-14 mb-4">
+            </div>
+            <CardContent className="pt-0">
+              <div className="mb-4 flex flex-col gap-1">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                  {user?.full_name || 'Người dùng ẩn danh'}
+                  {user?.fullName || 'Người dùng ẩn danh'}
                 </h3>
                 <p className="text-sm text-gray-500 dark:text-gray-300">{user?.email}</p>
+                <div className={`mt-2 flex items-center gap-2`}>
+                  <span className={`rounded-md px-2 py-1 text-xs font-semibold ${status.color}`}>
+                    {status.label}
+                  </span>
+                </div>
                 <div className="mt-3 flex gap-2">
-                  {user?.role_codes.map((role: string) => (
+                  {user?.roles.map((role: Role) => (
                     <Badge
-                      key={role}
-                      variant={role === 'ADMIN' ? 'destructive' : 'default'}
-                      className="text-[10px] uppercase"
+                      key={role.code}
+                      variant={role.code === 'ADMIN' ? 'destructive' : 'default'}
+                      className="text-sm uppercase"
                     >
-                      {role}
+                      {role.code}
                     </Badge>
                   ))}
-                  <Badge variant="outline" className={``}>
-                    Active
-                  </Badge>
                 </div>
               </div>
 
@@ -346,7 +391,7 @@ export const ProfileForm = () => {
                     </p>
                   )}
                   {sessions.map((session: any) => (
-                    <div key={session.id} className="flex items-center justify-between py-4">
+                    <div key={session.sessionId} className="flex items-center justify-between py-4">
                       <div className="flex items-center gap-4">
                         <div
                           className={`rounded-full p-3 ${!session.isRevoked ? `text-accent` : 'bg-gray-100 text-gray-500 dark:bg-slate-900'}`}
@@ -365,7 +410,7 @@ export const ProfileForm = () => {
                             )}
                           </p>
                           <p className="flex items-center gap-2 text-sm text-gray-500">
-                            <span>{session.ipAddress}</span> •{' '}
+                            <span>{session.ip}</span> •{' '}
                             <span>{new Date(session.createdAt).toLocaleDateString('vi-VN')}</span>
                           </p>
                         </div>
@@ -374,7 +419,7 @@ export const ProfileForm = () => {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleRevokeSession(session.id)}
+                          onClick={() => handleRevokeSession(session.sessionId)}
                           className="text-red-500 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-900/20"
                           title="Đăng xuất thiết bị này"
                         >

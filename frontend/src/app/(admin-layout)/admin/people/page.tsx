@@ -1,6 +1,6 @@
 import React from 'react';
 
-const metadata = {
+export const metadata = {
   title: 'Diễn viên / Đạo diễn',
   description: 'Quản lý diễn viên và đạo diễn',
 };

@@ -13,6 +13,12 @@ import { Monitor, Moon, Sun } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import React from 'react';
 
+// SEO
+// export const metadata = {
+//   title: 'Theme Settings',
+//   description: 'Manage your theme settings',
+// };
+
 function ThemePage() {
   const { theme, setTheme } = useTheme();
   const { color, changeColor } = useColor();
@@ -23,26 +29,22 @@ function ThemePage() {
   }, []);
 
   if (!mounted) {
-    return (
-      <div className="mx-auto max-w-3xl animate-pulse space-y-6 p-4">
-        Loading your preferences...
-      </div>
-    );
+    return <div className="mx-auto animate-pulse space-y-6 p-4">Loading your preferences...</div>;
   }
 
   // console.log('Current theme:', theme);
 
   return (
-    <div className="mx-auto mt-4 mb-8 max-w-3xl space-y-6">
+    <div className="mx-auto mt-4 mb-8 w-full space-y-6">
       {/* Theme mode: light, dark, system */}
       <div className="">
         <div className="mb-3 flex-col items-start gap-2">
-          <h2 className="text-lg font-semibold">Theme Mode</h2>
-          <p className="text-muted-foreground text-sm">Choose your preferred theme mode.</p>
+          <h2 className="text-lg font-semibold">Chế độ</h2>
+          <p className="text-muted-foreground text-sm">Chọn chế độ chủ đề bạn ưa thích.</p>
         </div>
         <RadioGroup
           defaultValue={theme}
-          className="max-w-3xl grid-cols-1 sm:grid-cols-3"
+          className="grid-cols-1 sm:grid-cols-3"
           onValueChange={(value) => setTheme(value)}
         >
           <FieldLabel htmlFor="light" className="cursor-pointer">
@@ -81,12 +83,12 @@ function ThemePage() {
       {/* Theme color: rose, emerald, blue, violet, orange */}
       <div className="">
         <div className="mb-3 flex-col items-start gap-2">
-          <h2 className="block text-lg font-semibold">Theme Color</h2>
-          <p className="text-muted-foreground block text-sm">Choose your preferred theme color.</p>
+          <h2 className="block text-lg font-semibold">Màu chủ đạo</h2>
+          <p className="text-muted-foreground block text-sm">Chọn màu chủ đạo bạn ưa thích.</p>
         </div>
         <RadioGroup
           defaultValue={color}
-          className="max-w-3xl grid-cols-1 sm:grid-cols-2"
+          className="grid-cols-1 sm:grid-cols-2"
           onValueChange={(value) =>
             changeColor(value as 'rose' | 'emerald' | 'blue' | 'violet' | 'orange')
           }

@@ -26,8 +26,6 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
 import { Public } from '@/common/decorators/public.decorator';
 import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
-
-import { JwtService } from '@nestjs/jwt';
 import { ApiResponse } from '@/common/dtos/api-response.dto';
 import { LoginResultDto } from '@/common/dtos/auth/login-result.dto';
 
@@ -35,11 +33,7 @@ import { LoginResultDto } from '@/common/dtos/auth/login-result.dto';
 @UseGuards(JwtAuthGuard)
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
-  constructor(
-    private authService: AuthService,
-    private sessionService: SessionService,
-    private jwtService: JwtService,
-  ) {}
+  constructor(private authService: AuthService) {}
 
   @Public()
   @RateLimit({
@@ -58,19 +52,16 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<ApiResponse<LoginResultDto>> {
     const user = await this.authService.validateUser(loginDto);
-    const tokenData = this.authService.login(user);
 
     const userAgent = req.headers['user-agent'] || '';
     const deviceIdCookie = req.cookies?.deviceId;
 
-    const session = await this.sessionService.createSession(
-      user.id,
-      ip,
+    const { accessToken, session } = await this.authService.login(
+      user,
       userAgent,
+      ip,
       deviceIdCookie,
-      tokenData.jti,
     );
-
     res.cookie('refreshToken', session.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -90,7 +81,7 @@ export class AuthController {
       statusCode: HttpStatus.OK,
       message: 'Đăng nhập thành công',
       result: {
-        accessToken: tokenData.accessToken,
+        accessToken: accessToken,
         refreshToken: session.refreshToken,
       },
     };
@@ -124,41 +115,25 @@ export class AuthController {
     windowMs: 60000,
   })
   @Post('refresh')
+  @HttpCode(HttpStatus.OK)
   async refresh(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const refreshToken = req.cookies?.refreshToken as string;
+    const oldRefreshToken = req.cookies?.refreshToken as string;
     const deviceId = req.cookies?.deviceId as string;
     this.logger.log(
-      `[Refresh Token] ${refreshToken ? 'Present' : 'Missing'} [Device ID] ${deviceId ? 'Present' : 'Missing'}`,
+      `[Refresh Token] ${oldRefreshToken ? 'Present' : 'Missing'} [Device ID] ${deviceId}`,
     );
 
-    if (!refreshToken || !deviceId) {
-      this.logger.error(`[Refresh Token] Missing refreshToken or deviceId`);
-      // cookie check
-      this.logger.error(
-        `[Refresh Token] Cookies: ${JSON.stringify(req.cookies)}`,
-      );
-      throw new UnauthorizedException('Phiên đăng nhập không hợp lệ');
-    }
-
-    const userIdStr = refreshToken.split('.')[0];
-    const userId = userIdStr;
-
-    if (!userId) {
-      throw new UnauthorizedException('Token không hợp lệ');
-    }
-
-    const { tokenData, newSession } = await this.authService.refreshToken(
-      userId,
-      refreshToken,
+    const { accessToken, refreshToken } = await this.authService.refreshToken(
+      oldRefreshToken,
       deviceId,
       req.headers['user-agent'] || '',
       req.ip || '',
     );
 
-    res.cookie('refreshToken', newSession.refreshToken, {
+    res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
@@ -170,9 +145,22 @@ export class AuthController {
       statusCode: HttpStatus.OK,
       message: 'Làm mới token thành công',
       result: {
-        accessToken: tokenData.accessToken,
-        refreshToken: newSession.refreshToken,
+        accessToken: accessToken,
+        refreshToken: refreshToken,
       },
+    };
+  }
+
+  // all sessions for user
+  @Get('sessions')
+  async getAllSessions(@Req() req: Request) {
+    const user = req.user as JwtPayload;
+    const sessions = await this.authService.getAllSessionsForUser(user.sub);
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Lấy danh sách phiên đăng nhập thành công',
+      result: sessions,
     };
   }
 
@@ -181,10 +169,10 @@ export class AuthController {
   @Post('logout')
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const user = req.user as JwtPayload;
-    const deviceIdCookie = req.cookies?.deviceId;
 
-    if (user && deviceIdCookie) {
-      await this.sessionService.removeSession(user.sub, deviceIdCookie);
+    if (user) {
+      const sessionId = user.sessionId;
+      await this.authService.logoutBySessionId(sessionId);
     }
 
     res.clearCookie('refreshToken');
@@ -204,7 +192,7 @@ export class AuthController {
   ) {
     const user = req.user as JwtPayload;
     if (user) {
-      await this.sessionService.removeAllSessions(user.sub);
+      await this.authService.logoutAll(user.sub);
     }
     res.clearCookie('refreshToken');
     return {
@@ -217,16 +205,19 @@ export class AuthController {
 
   // logout with session id: user owner
   @HttpCode(HttpStatus.OK)
-  @Delete('logout/:deviceId')
-  async logoutDevice(@Req() req: Request, @Param('deviceId') deviceId: string) {
+  @Post('logout-session/:sessionId')
+  async logoutDevice(
+    @Req() req: Request,
+    @Param('sessionId') sessionId: string,
+  ) {
     const user = req.user as JwtPayload;
     if (user) {
-      await this.sessionService.removeSession(user.sub, deviceId);
+      await this.authService.logoutBySessionId(sessionId);
     }
     return {
       success: true,
       statusCode: HttpStatus.OK,
-      message: 'Đăng xuất thiết bị thành công',
+      message: 'Đăng xuất phiên thành công',
       result: {},
     };
   }

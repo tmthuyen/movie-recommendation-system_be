@@ -11,6 +11,7 @@ interface AuthState {
   bootstrap: () => Promise<User | null>;
   setAccessToken: (token: string | null) => void;
   setUser: (user: User) => void;
+  refreshUser: () => Promise<User | null>;
   clearAuth: () => void;
   logout: () => Promise<void>;
 }
@@ -26,6 +27,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   // F5 / social callback: refresh → me
   bootstrap: () => {
     bootstrapping ??= (async () => {
+      set({ isLoading: true });
       try {
         // refresh token
         const refreshResult = await authApi.refresh();
@@ -60,6 +62,23 @@ export const useAuthStore = create<AuthState>((set) => ({
   setAccessToken: (accessToken) => set({ accessToken }),
 
   setUser: (user) => set({ user }),
+
+  refreshUser: async () => {
+    try {
+      const { result: data } = await authApi.getMe();
+      if (!data) {
+        set({ user: null, isAuthenticated: false });
+        toast.error('Không thể lấy thông tin người dùng. Vui lòng đăng nhập lại.');
+        return null;
+      }
+      set({ user: data });
+      set({ isAuthenticated: true });
+      return data;
+    } catch {
+      set({ user: null, isAuthenticated: false });
+      return null;
+    }
+  },
 
   clearAuth: () =>
     set({

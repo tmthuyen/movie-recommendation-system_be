@@ -1,6 +1,6 @@
 import React from 'react';
 
-const metadata = {
+export const metadata = {
   title: 'Người dùng',
   description: 'Quản lý người dùng',
 };

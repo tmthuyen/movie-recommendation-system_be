@@ -25,6 +25,8 @@ import { authApi } from '@/apis/auth.api';
 import { useAuthStore } from '@/stores/auth.store';
 import { User } from '@/shared/types/api.types';
 import { roleUtil } from '@/shared/utils/roleUtil';
+import Spining from '@/components/loading/spining';
+import Redirecting from '@/components/loading/redirecting';
 
 const loginEmailPasswordSchema = z.object({
   username: z.email('Vui lòng nhập email hợp lệ'),
@@ -51,13 +53,18 @@ function LoginForm() {
     setMounted(true);
   }, []);
 
+  useEffect(() => {
+    if (user) {
+      router.push(roleUtil.getHomeRouteByRole(user.roles));
+    }
+  }, [user, router]);
+
   if (!mounted) {
-    return <div className="m-auto text-center text-lg">Loading...</div>;
+    return <Spining />;
   }
 
   if (user) {
-    router.push(roleUtil.getHomeRouteByRole(user.roles));
-    return <div className="m-auto text-center text-lg">Đang chuyển trang...</div>;
+    return <Redirecting />;
   }
 
   const {

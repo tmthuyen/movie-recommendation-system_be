@@ -51,6 +51,13 @@ export interface User extends BaseDto {
   roles: Role[];
 }
 
+// update password
+export interface UpdatePasswordData {
+  oldPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
 // Old
 // =============
 export type ApiErrorBody = {
