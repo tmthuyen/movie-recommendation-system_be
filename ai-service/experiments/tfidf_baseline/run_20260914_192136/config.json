@@ -1,5 +1,0 @@
-{
-    "model_class": "TFIDFRecommender",
-    "tokenizer": "underthesea",
-    "max_features": 10000
-}

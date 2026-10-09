@@ -1,4 +1,0 @@
-{
-    "model_class": "BM25Recommender",
-    "tokenizer": "underthesea"
-}
