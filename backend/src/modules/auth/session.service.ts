@@ -13,6 +13,7 @@ export type SessionData = {
   lastActivityAt: number;
   sessionId: string;
   jti: string;
+  isCurrentSession?: boolean;
 };
 
 @Injectable()

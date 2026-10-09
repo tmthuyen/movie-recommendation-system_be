@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { keysToCamel } from '@/shared/utils/snakeToCamel';
 import { useAuthStore } from '@/stores/auth.store';
+import { ApiErrorResponse } from '@/shared/types/api.types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
@@ -8,6 +9,31 @@ const axiosClient = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
 });
+
+export const parseAxiosError = (
+  error: any,
+  customMessage?: string
+): { statusCode: number; message: string } => {
+  let statusCode = 500;
+  if (axios.isAxiosError(error)) {
+    console.error('[Axios] Error response:', error.response);
+    const serverResponse: ApiErrorResponse = error.response?.data;
+    if (serverResponse && serverResponse.message) {
+      return {
+        statusCode: error.response?.status || serverResponse.statusCode || 500,
+        message: customMessage || serverResponse.message || 'Có lỗi xảy ra',
+      };
+    }
+    return {
+      statusCode: error.response?.status || serverResponse?.statusCode || 500,
+      message: customMessage || 'Có lỗi xảy ra',
+    };
+  }
+  return {
+    statusCode,
+    message: customMessage || 'Có lỗi xảy ra',
+  };
+};
 
 let setAuthTokenInContext: ((token: string | null) => void) | null = null;
 let currentAccessToken: string | null = null;

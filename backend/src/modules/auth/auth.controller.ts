@@ -155,7 +155,11 @@ export class AuthController {
   @Get('sessions')
   async getAllSessions(@Req() req: Request) {
     const user = req.user as JwtPayload;
-    const sessions = await this.authService.getAllSessionsForUser(user.sub);
+    const currentSessionId = user.sessionId;
+    const sessions = await this.authService.getAllSessionsForUser(
+      user.sub,
+      currentSessionId,
+    );
     return {
       success: true,
       statusCode: HttpStatus.OK,

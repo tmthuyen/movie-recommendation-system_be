@@ -281,8 +281,13 @@ export class AuthService {
   }
 
   // sessions
-  async getAllSessionsForUser(userId: string) {
-    return this.sessionService.getAllSessionsForUser(userId);
+  async getAllSessionsForUser(userId: string, currentSessionId: string) {
+    const sessions = await this.sessionService.getAllSessionsForUser(userId);
+    // Mark the current session
+    sessions.forEach(session => {
+      session.isCurrentSession = session.sessionId === currentSessionId;
+    });
+    return sessions;
   }
 
   // logout and logout session

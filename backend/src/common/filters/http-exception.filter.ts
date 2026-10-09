@@ -65,9 +65,15 @@ export class HttpExceptionFilter implements ExceptionFilter<
           error?: string;
         };
 
-        message = Array.isArray(data.message)
-          ? 'Validation failed'
-          : (data.message ?? exception.message);
+        if (data.message && Array.isArray(data.message)) {
+          message = data.message.join(', ');
+        } else {
+          message = data.message ?? exception.message;
+        }
+
+        // message = Array.isArray(data.message)
+        //   ? 'Validation failed'
+        //   : (data.message ?? exception.message);
 
         errorCode = data.error;
       }

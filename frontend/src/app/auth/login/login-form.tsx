@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -27,6 +27,7 @@ import { User } from '@/shared/types/api.types';
 import { roleUtil } from '@/shared/utils/roleUtil';
 import Spining from '@/components/loading/spining';
 import Redirecting from '@/components/loading/redirecting';
+import { parseAxiosError } from '@/lib/axiosClient';
 
 const loginEmailPasswordSchema = z.object({
   username: z.email('Vui lòng nhập email hợp lệ'),
@@ -34,6 +35,8 @@ const loginEmailPasswordSchema = z.object({
 });
 
 function LoginForm() {
+  const searchParams = useSearchParams();
+  const returnPage = searchParams.get('return-page') || null;
   const user = useAuthStore((state) => state.user);
   const [mounted, setMounted] = useState(false);
 
@@ -55,7 +58,7 @@ function LoginForm() {
 
   useEffect(() => {
     if (user) {
-      router.push(roleUtil.getHomeRouteByRole(user.roles));
+      router.push(returnPage || roleUtil.getHomeRouteByRole(user.roles));
     }
   }, [user, router]);
 
@@ -115,10 +118,11 @@ function LoginForm() {
       });
 
       // chuyển trang theo role
-      router.push(roleUtil.getHomeRouteByRole(user.roles));
+      const toRoute = returnPage || roleUtil.getHomeRouteByRole(user.roles);
+      router.push(toRoute);
     } catch (error: any) {
-      setError('Lỗi khi đăng nhập. ' + error?.message || 'Vui lòng thử lại.');
-      console.error('Login error:', error);
+      const { statusCode, message } = parseAxiosError(error);
+      setError('Lỗi khi đăng nhập. ' + message || 'Vui lòng thử lại.');
     }
   };
 

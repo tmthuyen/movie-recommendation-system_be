@@ -2,7 +2,6 @@ import axiosClient from '../lib/axiosClient';
 
 export const userApi = {
   getSessions: () => axiosClient.get('/users/me/sessions'),
-  revokeSession: (sessionId: number) => axiosClient.delete(`/users/me/sessions/${sessionId}`),
   updateProfile: (data: any) => axiosClient.put('/users/me', data),
   uploadAvatar: (formData: FormData) =>
     axiosClient.post('/users/me/avatar', formData, {

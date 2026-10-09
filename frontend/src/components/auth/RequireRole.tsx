@@ -4,7 +4,7 @@ import Redirecting from '@/components/loading/redirecting';
 import Spining from '@/components/loading/spining';
 import { roleUtil } from '@/shared/utils/roleUtil';
 import { useAuthStore } from '@/stores/auth.store';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import React, { useEffect, useState } from 'react';
 
 interface RequireRoleProps {
@@ -26,6 +26,7 @@ export default function RequireRole({ requiredRoles, children }: RequireRoleProp
   // auth user
   const user = useAuthStore((state) => state.user);
   const router = useRouter();
+  const pathname = usePathname();
 
   // mounted
   const [isMounted, setIsMounted] = useState(false);
@@ -37,7 +38,7 @@ export default function RequireRole({ requiredRoles, children }: RequireRoleProp
   // useeffect to redirect to login if user is not authenticated
   useEffect(() => {
     if (!isLoading && !user) {
-      router.push('/auth/login');
+      router.push(`/auth/login?return-page=${encodeURIComponent(pathname)}`);
     }
   }, [isLoading, user, router]);
 
