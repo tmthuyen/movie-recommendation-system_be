@@ -15,7 +15,7 @@ export const loggerConfig: WinstonModuleOptions = {
             format.colorize(),
             format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
             format.printf(({ timestamp, level, message, context }) => {
-              return `[Nest] ${timestamp}  ${level}: [${context || 'App'}] ${message}`;
+              return `[Nest] ${String(timestamp)}  ${level}: [${String(context) || 'App'}] ${String(message)}`;
             }),
           ),
     }),

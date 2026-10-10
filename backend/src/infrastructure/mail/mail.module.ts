@@ -1,6 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { MailService } from './mail.service';
+import { IMailService, MailService } from './mail.service';
 import { NodemailerProvider } from './providers/nodemailer.provider';
 
 @Global()
@@ -11,8 +11,11 @@ import { NodemailerProvider } from './providers/nodemailer.provider';
       provide: 'MAIL_PROVIDER',
       useClass: NodemailerProvider,
     },
-    MailService,
+    {
+      provide: IMailService,
+      useClass: MailService,
+    },
   ],
-  exports: [MailService],
+  exports: [IMailService],
 })
 export class MailModule {}

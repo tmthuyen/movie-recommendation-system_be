@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   Logger,
   UnauthorizedException,
@@ -10,7 +11,7 @@ import * as bcrypt from 'bcrypt';
 import { LoginRequestDto } from './dto/login.dto';
 import { RegisterDto } from '@/modules/auth/dto/register.dto';
 import { User, UserStatus } from '@/modules/users/entities/user.entity';
-import { MailService } from '@/infrastructure/mail/mail.service';
+import { IMailService, MailService } from '@/infrastructure/mail/mail.service';
 import { SessionService } from './session.service';
 import { RedisService } from '@/infrastructure/redis/redis.service';
 import { RolesService } from '@/modules/roles/roles.service';
@@ -24,11 +25,11 @@ export class AuthService {
     private usersService: UsersService,
     private rolesService: RolesService,
     private jwtService: JwtService,
-    private mailService: MailService,
     private sessionService: SessionService,
     private redisService: RedisService,
     private userProducer: UserProducer,
     private configService: ConfigService,
+    @Inject(IMailService) private readonly mailService: IMailService,
   ) {}
 
   // 1. Xác thực thông tin người dùng
@@ -106,26 +107,41 @@ export class AuthService {
     });
 
     // Tạo mã xác nhận và lưu vào Redis (hết hạn trong 1 ngày)
+    await this.sendVerificationEmail(String(user.id), user.email);
+
+    return {
+      message: 'Đăng ký thành công, vui lòng kiểm tra email để xác nhận',
+    };
+  }
+
+  async sendVerificationEmail(userId: string, email: string) {
+    // check verified
+    const user = await this.usersService.findByIdWithRoles(userId);
+    if (!user) {
+      throw new BadRequestException('Người dùng không tồn tại');
+    }
+
+    // đã xác thực hoặc email sai thì không gửi email xác thực
+    if (user.isVerified || user.email !== email) {
+      return;
+    }
+
     const verifyToken = this.sessionService.generateOpaqueToken();
     await this.redisService.set(
-      `verify_email:${verifyToken}`,
-      String(user.id),
+      `auth:verify_email:${verifyToken}`,
+      userId,
       24 * 60 * 60,
     );
 
     if (this.configService.get<string>('ASYNC_MAIL_ENABLED') === 'true') {
       this.userProducer.publishEmailVerificationRequested({
-        userId: user.id,
-        email: user.email,
+        userId: userId,
+        email: email,
         verificationToken: verifyToken,
       });
     } else {
-      await this.mailService.sendVerificationEmail(user.email, verifyToken);
+      await this.mailService.sendVerificationEmail(email, verifyToken);
     }
-
-    return {
-      message: 'Đăng ký thành công, vui lòng kiểm tra email để xác nhận',
-    };
   }
   // 4. Refresh Token
   async refreshToken(
@@ -190,14 +206,14 @@ export class AuthService {
 
   // 5. Xác thực email
   async verifyEmail(token: string) {
-    const userIdStr = await this.redisService.get(`verify_email:${token}`);
+    const userIdStr = await this.redisService.get(`auth:verify_email:${token}`);
     if (!userIdStr) {
       throw new BadRequestException('Mã xác thực không hợp lệ hoặc đã hết hạn');
     }
 
     const userId = userIdStr;
-    await this.usersService.updateStatus(userId, UserStatus.ACTIVE);
-    await this.redisService.del(`verify_email:${token}`);
+    await this.usersService.updateStatus(userId, UserStatus.ACTIVE, true);
+    await this.redisService.del(`auth:verify_email:${token}`);
     this.userProducer.publishEmailVerified(userIdStr);
   }
 
@@ -210,7 +226,7 @@ export class AuthService {
 
     const resetToken = this.sessionService.generateOpaqueToken();
     await this.redisService.set(
-      `reset_password:${resetToken}`,
+      `auth:reset_password:${resetToken}`,
       String(user.id),
       15 * 60,
     );
@@ -227,7 +243,7 @@ export class AuthService {
     }
 
     const userIdStr = await this.redisService.get(
-      `reset_password:${resetDto.token}`,
+      `auth:reset_password:${resetDto.token}`,
     );
     if (!userIdStr) {
       throw new BadRequestException('Mã xác thực không hợp lệ hoặc đã hết hạn');
@@ -238,7 +254,7 @@ export class AuthService {
     await this.usersService.updatePassword(userId, hashedPassword);
 
     await this.sessionService.removeAllSessions(userId);
-    await this.redisService.del(`reset_password:${resetDto.token}`);
+    await this.redisService.del(`auth:reset_password:${resetDto.token}`);
   }
 
   // get me

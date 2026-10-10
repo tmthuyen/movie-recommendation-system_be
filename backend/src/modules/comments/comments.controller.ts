@@ -19,6 +19,11 @@ import { Roles } from '@/common/decorators/roles.decorator';
 import { PaginationDto } from '@/common/dtos/pagination.dto';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
 import type { Request } from 'express';
+import {
+  ApiResponse,
+  ApiResponseWithPagination,
+} from '@/common/dtos/api-response.dto';
+import { Comment } from '@/modules/comments/entities/comment.entity';
 
 @ApiTags('Comments')
 @Controller('comments')
@@ -34,13 +39,33 @@ export class CommentsController {
     @Body() createCommentDto: CreateCommentDto,
   ) {
     const { sub } = req.user as JwtPayload;
-    return await this.commentsService.create(sub, createCommentDto);
+    const result = await this.commentsService.create(sub, createCommentDto);
+
+    return {
+      success: true,
+
+      statusCode: 201,
+
+      message: 'Success',
+
+      result,
+    };
   }
 
   @Get()
   @ApiOperation({ summary: 'Lấy tất cả bình luận (Public)' })
-  async findAll(@Query() paginationDto: PaginationDto) {
-    return await this.commentsService.findAll(paginationDto);
+  async findAll(
+    @Query() paginationDto: PaginationDto,
+  ): Promise<ApiResponseWithPagination<Comment[]>> {
+    const comments = await this.commentsService.findAll(paginationDto);
+    const { data, ...pagination } = comments;
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Lấy danh sách bình luận thành công',
+      result: data,
+      pagination: pagination,
+    };
   }
 
   @Get('movie/:movieId')
@@ -50,17 +75,50 @@ export class CommentsController {
     @Query() paginationDto: PaginationDto,
     @Query('parentId') parentId?: string,
   ) {
-    return await this.commentsService.findByMovie(
+    const result = await this.commentsService.findByMovie(
       +movieId,
       paginationDto,
       parentId ? +parentId : undefined,
     );
+
+    return {
+      success: true,
+
+      statusCode: 200,
+
+      message: 'Success',
+
+      result: result.data || result,
+
+      pagination:
+        result.total !== undefined
+          ? {
+              total: result.total,
+
+              page: result.page,
+
+              limit: result.limit,
+
+              totalPages: result.totalPages,
+            }
+          : undefined,
+    };
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Lấy chi tiết bình luận (Public)' })
   async findOne(@Param('id') id: string) {
-    return await this.commentsService.findOne(+id);
+    const result = await this.commentsService.findOne(+id);
+
+    return {
+      success: true,
+
+      statusCode: 200,
+
+      message: 'Success',
+
+      result,
+    };
   }
 
   @Patch(':id')
@@ -72,7 +130,17 @@ export class CommentsController {
     @Body() updateCommentDto: UpdateCommentDto,
   ) {
     // Note: should check if comment belongs to user
-    return await this.commentsService.update(+id, updateCommentDto);
+    const result = await this.commentsService.update(+id, updateCommentDto);
+
+    return {
+      success: true,
+
+      statusCode: 200,
+
+      message: 'Success',
+
+      result,
+    };
   }
 
   @Delete(':id')
@@ -81,6 +149,16 @@ export class CommentsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Xoá bình luận (Chỉ dành cho ADMIN)' })
   async remove(@Param('id') id: string) {
-    return await this.commentsService.remove(+id);
+    const result = await this.commentsService.remove(+id);
+
+    return {
+      success: true,
+
+      statusCode: 200,
+
+      message: 'Success',
+
+      result,
+    };
   }
 }

@@ -27,20 +27,44 @@ export class PeoplesController {
   @Roles('ADMIN', 'SUPERADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Thêm người mới (Chỉ dành cho ADMIN)' })
-  create(@Body() createPeopleDto: CreatePeopleDto) {
-    return this.peoplesService.create(createPeopleDto);
+  async create(@Body() createPeopleDto: CreatePeopleDto) {
+    const result = await this.peoplesService.create(createPeopleDto);
+    return {
+      success: true,
+      statusCode: 201,
+      message: 'Tạo thành công',
+      result,
+    };
   }
 
   @Get()
   @ApiOperation({ summary: 'Lấy danh sách (Public)' })
-  findAll(@Query() paginationDto: PaginationDto) {
-    return this.peoplesService.findAll(paginationDto);
+  async findAll(@Query() paginationDto: PaginationDto) {
+    const result = await this.peoplesService.findAll(paginationDto);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Thành công',
+      result: result.data,
+      pagination: {
+        total: result.total,
+        page: result.page,
+        limit: result.limit,
+        totalPages: result.totalPages,
+      },
+    };
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Lấy chi tiết (Public)' })
-  findOne(@Param('id') id: string) {
-    return this.peoplesService.findOne(+id);
+  async findOne(@Param('id') id: string) {
+    const result = await this.peoplesService.findOne(+id);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Thành công',
+      result,
+    };
   }
 
   @Patch(':id')
@@ -48,8 +72,17 @@ export class PeoplesController {
   @Roles('ADMIN', 'SUPERADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Cập nhật thông tin (Chỉ dành cho ADMIN)' })
-  update(@Param('id') id: string, @Body() updatePeopleDto: UpdatePeopleDto) {
-    return this.peoplesService.update(+id, updatePeopleDto);
+  async update(
+    @Param('id') id: string,
+    @Body() updatePeopleDto: UpdatePeopleDto,
+  ) {
+    const result = await this.peoplesService.update(+id, updatePeopleDto);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Cập nhật thành công',
+      result,
+    };
   }
 
   @Delete(':id')
@@ -57,7 +90,13 @@ export class PeoplesController {
   @Roles('ADMIN', 'SUPERADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Xoá (Chỉ dành cho ADMIN)' })
-  remove(@Param('id') id: string) {
-    return this.peoplesService.remove(+id);
+  async remove(@Param('id') id: string) {
+    const result = await this.peoplesService.remove(+id);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Xoá thành công',
+      result,
+    };
   }
 }

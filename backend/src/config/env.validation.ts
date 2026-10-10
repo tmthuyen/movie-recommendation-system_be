@@ -71,6 +71,43 @@ export class EnvironmentVariables {
   @IsBoolean()
   ASYNC_MAIL_ENABLED: boolean;
 
+  /**
+   * MAIL_PROVIDER=smtp # smtp, sendgrid, aes
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_SECURE=false
+MAIL_USER=tranthuyen2222@gmail.com
+MAIL_PASS=mwnkkzbvvbfriyha
+MAIL_FROM=tranthuyen2222@gmail.com
+   */
+  @IsNotEmpty()
+  @IsString()
+  MAIL_PROVIDER: string;
+
+  @IsNotEmpty()
+  @IsString()
+  MAIL_HOST: string;
+
+  @IsNotEmpty()
+  @IsNumber()
+  MAIL_PORT: number;
+
+  @IsNotEmpty()
+  @IsBoolean()
+  MAIL_SECURE: boolean;
+
+  @IsNotEmpty()
+  @IsString()
+  MAIL_USER: string;
+
+  @IsNotEmpty()
+  @IsString()
+  MAIL_PASS: string;
+
+  @IsNotEmpty()
+  @IsString()
+  MAIL_FROM: string;
+
   // --- S3 / R2 STORAGE ---
   @IsNotEmpty()
   @IsString()

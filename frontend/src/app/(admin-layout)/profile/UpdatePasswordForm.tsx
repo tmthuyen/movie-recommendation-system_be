@@ -46,18 +46,12 @@ export default function UpdatePasswordForm() {
     formState: { isValid, isSubmitting },
   } = updatePasswordForm;
 
-  const [passwordData, setPasswordData] = useState<UpdatePasswordData>({
-    oldPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  });
-
   // tanstack query mutation
   const passwordMutation = useMutation({
     mutationFn: (data: UpdatePasswordData) => authApi.updatePassword(data),
     onSuccess: () => {
-      toast.success('Cập nhật mật khẩu thành công!', { position: 'top-right' });
-      setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
+      toast.success('Cập nhật mật khẩu thành công!');
+      reset();
 
       // clear auth state
       useAuthStore.getState().clearAuth();
@@ -68,7 +62,7 @@ export default function UpdatePasswordForm() {
     onError: (error: any) => {
       const { statusCode, message } = parseAxiosError(error);
       setError(message || 'Lỗi khi cập nhật mật khẩu. Vui lòng thử lại.');
-      // toast.error(message, { position: 'top-right' });
+      // toast.error(message);
     },
   });
 
@@ -81,17 +75,7 @@ export default function UpdatePasswordForm() {
       return;
     }
 
-    passwordMutation.mutate({ oldPassword, newPassword, confirmPassword });
-  };
-
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      toast.error('Mật khẩu xác nhận không khớp!', { position: 'top-right' });
-      return;
-    }
-
-    passwordMutation.mutate(passwordData);
+    return await passwordMutation.mutateAsync({ oldPassword, newPassword, confirmPassword });
   };
 
   return (

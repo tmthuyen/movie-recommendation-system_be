@@ -44,11 +44,30 @@ export interface User extends BaseDto {
   id: string;
   email: string;
   fullName: string;
+  status: string;
+  isVerified: boolean;
   phoneNumber?: string;
   avatarUrl?: string;
   gender?: string;
-  status: string;
+  preferenceData?: Record<string, string[]>;
+  birthDate?: Date;
+  address?: string;
   roles: Role[];
+}
+
+// genres
+export interface Genre {
+  id: string;
+  name: string;
+}
+
+export interface UpdateProfileDto {
+  fullName?: string;
+  avatarUrl?: string;
+  phoneNumber?: string;
+  birthDate?: Date;
+  gender?: string;
+  preferenceData?: Record<string, any>;
 }
 
 // update password

@@ -62,30 +62,20 @@ export class S3StorageService implements IStorageService {
   }
 
   async deleteFile(fileUrl: string): Promise<void> {
-    try {
-      const urlPath = fileUrl.replace(`${this.publicUrl}/`, '');
-      const command = new DeleteObjectCommand({
-        Bucket: this.bucket,
-        Key: urlPath,
-      });
-      await this.s3Client.send(command);
-    } catch (error) {
-      this.logger.error(`Error deleting file from S3/R2: ${error.message}`);
-      throw error;
-    }
+    const urlPath = fileUrl.replace(`${this.publicUrl}/`, '');
+    const command = new DeleteObjectCommand({
+      Bucket: this.bucket,
+      Key: urlPath,
+    });
+    await this.s3Client.send(command);
   }
 
   async getUrl(key: string): Promise<string> {
-    try {
-      const command = new GetObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-      });
-      const data = await this.s3Client.send(command);
-      return data.Body as any;
-    } catch (error) {
-      this.logger.error(`Error getting file from S3/R2: ${error.message}`);
-      throw error;
-    }
+    const command = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+    });
+    const data = await this.s3Client.send(command);
+    return data.Body as any;
   }
 }

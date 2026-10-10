@@ -27,20 +27,48 @@ export class CountriesController {
   @Roles('ADMIN', 'SUPERADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Tạo quốc gia mới (Chỉ dành cho ADMIN)' })
-  create(@Body() createCountryDto: CreateCountryDto) {
-    return this.countriesService.create(createCountryDto);
+  async create(@Body() createCountryDto: CreateCountryDto) {
+    const result = await this.countriesService.create(createCountryDto);
+
+    return {
+      success: true,
+
+      statusCode: 201,
+
+      message: 'Success',
+
+      result,
+    };
   }
 
   @Get()
   @ApiOperation({ summary: 'Lấy danh sách quốc gia (Public)' })
-  findAll(@Query() paginationDto: PaginationDto) {
-    return this.countriesService.findAll(paginationDto);
+  async findAll(@Query() paginationDto: PaginationDto) {
+    const { data, ...pagination } =
+      await this.countriesService.findAll(paginationDto);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Lấy danh sách quốc gia thành công',
+      result: data,
+      pagination: pagination,
+    };
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Lấy chi tiết quốc gia (Public)' })
-  findOne(@Param('id') id: string) {
-    return this.countriesService.findOne(+id);
+  async findOne(@Param('id') id: string) {
+    const result = await this.countriesService.findOne(+id);
+
+    return {
+      success: true,
+
+      statusCode: 200,
+
+      message: 'Success',
+
+      result,
+    };
   }
 
   @Patch(':id')
@@ -48,8 +76,21 @@ export class CountriesController {
   @Roles('ADMIN', 'SUPERADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Cập nhật thông tin quốc gia (Chỉ dành cho ADMIN)' })
-  update(@Param('id') id: string, @Body() updateCountryDto: UpdateCountryDto) {
-    return this.countriesService.update(+id, updateCountryDto);
+  async update(
+    @Param('id') id: string,
+    @Body() updateCountryDto: UpdateCountryDto,
+  ) {
+    const result = await this.countriesService.update(+id, updateCountryDto);
+
+    return {
+      success: true,
+
+      statusCode: 200,
+
+      message: 'Success',
+
+      result,
+    };
   }
 
   @Delete(':id')
@@ -57,7 +98,17 @@ export class CountriesController {
   @Roles('ADMIN', 'SUPERADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Xoá quốc gia (Chỉ dành cho ADMIN)' })
-  remove(@Param('id') id: string) {
-    return this.countriesService.remove(+id);
+  async remove(@Param('id') id: string) {
+    const result = await this.countriesService.remove(+id);
+
+    return {
+      success: true,
+
+      statusCode: 200,
+
+      message: 'Success',
+
+      result,
+    };
   }
 }

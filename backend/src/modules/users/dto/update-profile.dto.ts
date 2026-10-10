@@ -34,5 +34,5 @@ export class UpdateProfileDto {
   })
   @IsOptional()
   @IsObject()
-  preferenceData?: Record<string, any>;
+  preferenceData?: Record<string, string[]>;
 }

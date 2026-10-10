@@ -46,6 +46,17 @@ export const authApi = {
     return data;
   },
 
+  sendVerificationEmail: async (): Promise<ApiResponse<any>> => {
+    const { data } = await axiosClient.post('/auth/send-verification-email');
+
+    return data;
+  },
+  verifyEmail: async (token: string): Promise<ApiResponse<any>> => {
+    const { data } = await axiosClient.post(`/auth/verify-email`, { token });
+
+    return data;
+  },
+
   getSessions: async (): Promise<ApiResponse<any[]>> => {
     const { data } = await axiosClient.get('/auth/sessions');
 

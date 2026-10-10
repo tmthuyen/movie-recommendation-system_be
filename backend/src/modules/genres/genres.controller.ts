@@ -27,20 +27,40 @@ export class GenresController {
   @Roles('ADMIN', 'SUPERADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Tạo thể loại mới (Chỉ dành cho ADMIN)' })
-  create(@Body() createGenreDto: CreateGenreDto) {
-    return this.genresService.create(createGenreDto);
+  async create(@Body() createGenreDto: CreateGenreDto) {
+    const result = await this.genresService.create(createGenreDto);
+    return {
+      success: true,
+      statusCode: 201,
+      message: 'Thành công',
+      result,
+    };
   }
 
   @Get()
   @ApiOperation({ summary: 'Lấy danh sách thể loại (Public)' })
-  findAll(@Query() paginationDto: PaginationDto) {
-    return this.genresService.findAll(paginationDto);
+  async findAll(@Query() paginationDto: PaginationDto) {
+    const { data, ...pagination } =
+      await this.genresService.findAll(paginationDto);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Lấy danh sách thể loại thành công',
+      result: data,
+      pagination: pagination,
+    };
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Lấy chi tiết thể loại (Public)' })
-  findOne(@Param('id') id: string) {
-    return this.genresService.findOne(+id);
+  async findOne(@Param('id') id: string) {
+    const result = await this.genresService.findOne(+id);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Thành công',
+      result,
+    };
   }
 
   @Patch(':id')
@@ -48,8 +68,17 @@ export class GenresController {
   @Roles('ADMIN', 'SUPERADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Cập nhật thể loại (Chỉ dành cho ADMIN)' })
-  update(@Param('id') id: string, @Body() updateGenreDto: UpdateGenreDto) {
-    return this.genresService.update(+id, updateGenreDto);
+  async update(
+    @Param('id') id: string,
+    @Body() updateGenreDto: UpdateGenreDto,
+  ) {
+    const result = await this.genresService.update(+id, updateGenreDto);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Thành công',
+      result,
+    };
   }
 
   @Delete(':id')
@@ -57,7 +86,13 @@ export class GenresController {
   @Roles('ADMIN', 'SUPERADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Xoá thể loại (Chỉ dành cho ADMIN)' })
-  remove(@Param('id') id: string) {
-    return this.genresService.remove(+id);
+  async remove(@Param('id') id: string) {
+    const result = await this.genresService.remove(+id);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Thành công',
+      result,
+    };
   }
 }

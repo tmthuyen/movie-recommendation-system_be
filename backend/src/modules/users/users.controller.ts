@@ -10,17 +10,28 @@ import {
   Query,
   UseGuards,
   Req,
+  Put,
+  UseInterceptors,
+  BadRequestException,
+  UploadedFile,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { PaginationDto } from '@/common/dtos/pagination.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles } from '@/common/decorators/roles.decorator';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiBody,
+} from '@nestjs/swagger';
 import { type Request } from 'express';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
+import { UserMapper } from '@/modules/users/user.mapper';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 @ApiTags('Users')
 @Controller('users')
@@ -38,11 +49,11 @@ export class UsersController {
       success: true,
       statusCode: HttpStatus.OK,
       message: 'Lấy thông tin profile thành công',
-      result,
+      result: UserMapper.toResponse(result),
     };
   }
 
-  @Patch('me')
+  @Put('me')
   @ApiOperation({
     summary: 'Cập nhật thông tin profile cá nhân (kể cả preferences)',
   })
@@ -56,7 +67,7 @@ export class UsersController {
       success: true,
       statusCode: HttpStatus.OK,
       message: 'Cập nhật profile thành công',
-      result,
+      result: UserMapper.toResponse(result),
     };
   }
 
@@ -68,7 +79,7 @@ export class UsersController {
       success: true,
       statusCode: HttpStatus.CREATED,
       message: 'Tạo user thành công',
-      result,
+      result: UserMapper.toResponse(result),
     };
   }
 
@@ -80,7 +91,7 @@ export class UsersController {
       success: true,
       statusCode: HttpStatus.OK,
       message: 'Lấy danh sách user thành công',
-      result: result.data,
+      result: UserMapper.toResponseList(result.data),
       pagination: {
         total: result.total,
         page: result.page,
@@ -98,19 +109,22 @@ export class UsersController {
       success: true,
       statusCode: HttpStatus.OK,
       message: 'Lấy thông tin user thành công',
-      result,
+      result: UserMapper.toResponse(result),
     };
   }
 
   @Roles('ADMIN', 'SUPERADMIN')
-  @Patch(':id')
-  async update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
+  @Put(':id')
+  async update(
+    @Param('id') id: string,
+    @Body() updateUserDto: UpdateProfileDto,
+  ) {
     const result = await this.usersService.update(id, updateUserDto);
     return {
       success: true,
       statusCode: HttpStatus.OK,
       message: 'Cập nhật user thành công',
-      result,
+      result: UserMapper.toResponse(result),
     };
   }
 
@@ -122,7 +136,7 @@ export class UsersController {
       success: true,
       statusCode: HttpStatus.OK,
       message: 'Xóa user thành công',
-      result,
+      result: UserMapper.toResponse(result),
     };
   }
 
@@ -137,7 +151,64 @@ export class UsersController {
       success: true,
       statusCode: HttpStatus.OK,
       message: 'Cập nhật role cho user thành công',
-      result,
+      result: UserMapper.toResponse(result),
+    };
+  }
+
+  // avatar
+
+  @Post('avatar')
+  @Roles('ADMIN', 'SUPERADMIN', 'USER')
+  @ApiOperation({ summary: 'Upload file lên Object Storage (S3/R2)' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: {
+        fileSize: 5 * 1024 * 1024, // 5MB limit
+      },
+      fileFilter: (req, file, cb) => {
+        if (!file.mimetype.match(/\/(jpg|jpeg|png|webp)$/)) {
+          return cb(
+            new BadRequestException(
+              'Chỉ cho phép định dạng ảnh (jpg, png, webp)',
+            ),
+            false,
+          );
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  async updateAvatar(
+    @Req() req: Request,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('Không tìm thấy file');
+    }
+    const { sub: userId } = req.user as JwtPayload;
+    const url = await this.usersService.updateAvatar(
+      userId,
+      file,
+      'uploads/avatars',
+    );
+
+    return {
+      success: true,
+      statusCode: HttpStatus.CREATED,
+      message: 'Upload thành công',
+      result: { url },
     };
   }
 }

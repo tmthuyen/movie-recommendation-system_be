@@ -7,9 +7,10 @@ import { RolesModule } from '@/modules/roles/roles.module';
 
 import { IUserRepository, UserRepository } from './users.repository';
 import { UserProducer } from '@/infrastructure/messaging/producers/user.producer';
+import { StorageModule } from '@/infrastructure/storage/storage.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User]), RolesModule],
+  imports: [TypeOrmModule.forFeature([User]), RolesModule, StorageModule],
   controllers: [UsersController],
   providers: [
     {

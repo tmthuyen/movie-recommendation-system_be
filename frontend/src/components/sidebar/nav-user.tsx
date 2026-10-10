@@ -21,17 +21,18 @@ import {
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useAuthStore } from '@/stores/auth.store';
 
 export function NavUser() {
   const router = useRouter();
   const { isMobile } = useSidebar();
-  const { user: authUser } = useAuth();
+  const user = useAuthStore((state) => state.user);
 
-  if (!authUser) return <>Chưa có người dùng</>;
+  if (!user) return <>Chưa có người dùng</>;
 
   const handleLogout = async () => {
+    await useAuthStore.getState().logout();
     router.push('/auth/login');
-    router.refresh();
   };
 
   return (
@@ -44,12 +45,12 @@ export function NavUser() {
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground cursor-pointer"
             >
               <Avatar className="h-8 w-8 rounded-lg">
-                <AvatarImage src={authUser?.avatar_url} alt={authUser?.full_name} />
+                <AvatarImage src={user?.avatarUrl} alt={user?.fullName} />
                 <AvatarFallback className="rounded-lg">CN</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{authUser?.full_name}</span>
-                <span className="truncate text-xs">{authUser?.email}</span>
+                <span className="truncate font-medium">{user?.fullName}</span>
+                <span className="truncate text-xs">{user?.email}</span>
               </div>
               <ChevronsUpDown className="ml-auto size-4" />
             </SidebarMenuButton>
@@ -63,12 +64,12 @@ export function NavUser() {
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={authUser?.avatar_url} alt={authUser?.full_name} />
+                  <AvatarImage src={user?.avatarUrl} alt={user?.fullName} />
                   <AvatarFallback className="rounded-lg">CN</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">{authUser?.full_name}</span>
-                  <span className="truncate text-xs">{authUser?.email}</span>
+                  <span className="truncate font-medium">{user?.fullName}</span>
+                  <span className="truncate text-xs">{user?.email}</span>
                 </div>
               </div>
             </DropdownMenuLabel>
@@ -76,7 +77,7 @@ export function NavUser() {
             <DropdownMenuGroup>
               <DropdownMenuItem className="cursor-pointer transition-transform hover:scale-105">
                 <User className="focus:text-primary mr-2 h-4 w-4" />
-                <Link href="/profile">Profile</Link>
+                <Link href="/profile">Hồ sơ</Link>
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
@@ -86,7 +87,7 @@ export function NavUser() {
               className="cursor-pointer transition-transform hover:scale-105"
             >
               <LogOut className="text-destructive focus:text-primary mr-2 h-4 w-4" />
-              Log out
+              Đăng xuất
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

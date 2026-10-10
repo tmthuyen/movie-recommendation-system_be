@@ -90,7 +90,12 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: async (): Promise<void> => {
     await authApi.logout();
-    set({ accessToken: null, user: null });
+    set({
+      accessToken: null,
+      user: null,
+      isLoading: false,
+      isAuthenticated: false,
+    });
     return Promise.resolve();
   },
 }));

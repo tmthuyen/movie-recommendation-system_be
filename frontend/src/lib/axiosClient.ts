@@ -18,6 +18,14 @@ export const parseAxiosError = (
   if (axios.isAxiosError(error)) {
     console.error('[Axios] Error response:', error.response);
     const serverResponse: ApiErrorResponse = error.response?.data;
+
+    statusCode = error.response?.status || serverResponse?.statusCode || 500;
+    if (statusCode >= 500) {
+      return {
+        statusCode,
+        message: 'Lỗi máy chủ, vui lòng thử lại sau.',
+      };
+    }
     if (serverResponse && serverResponse.message) {
       return {
         statusCode: error.response?.status || serverResponse.statusCode || 500,

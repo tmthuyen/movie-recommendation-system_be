@@ -31,13 +31,46 @@ export class RatingsController {
   @ApiOperation({ summary: 'Thêm đánh giá mới (Yêu cầu đăng nhập)' })
   async create(@Req() req: Request, @Body() createRatingDto: CreateRatingDto) {
     const { sub } = req.user as JwtPayload;
-    return await this.ratingsService.create(sub, createRatingDto);
+    const result = await this.ratingsService.create(sub, createRatingDto);
+
+    return {
+      success: true,
+
+      statusCode: 201,
+
+      message: 'Success',
+
+      result,
+    };
   }
 
   @Get()
   @ApiOperation({ summary: 'Lấy tất cả đánh giá (Public)' })
   async findAll(@Query() paginationDto: PaginationDto) {
-    return await this.ratingsService.findAll(paginationDto);
+    const result = await this.ratingsService.findAll(paginationDto);
+
+    return {
+      success: true,
+
+      statusCode: 200,
+
+      message: 'Success',
+
+      result: result.data || result,
+
+      pagination:
+        result.total !== undefined
+          ? {
+              total: result.total,
+
+              page: result.page,
+
+              limit: result.limit,
+
+              totalPages: result.totalPages,
+            }
+          : undefined,
+    };
   }
 
   @Get('movie/:movieId')
@@ -46,13 +79,49 @@ export class RatingsController {
     @Param('movieId') movieId: string,
     @Query() paginationDto: PaginationDto,
   ) {
-    return await this.ratingsService.findByMovie(+movieId, paginationDto);
+    const result = await this.ratingsService.findByMovie(
+      +movieId,
+      paginationDto,
+    );
+
+    return {
+      success: true,
+
+      statusCode: 200,
+
+      message: 'Success',
+
+      result: result.data || result,
+
+      pagination:
+        result.total !== undefined
+          ? {
+              total: result.total,
+
+              page: result.page,
+
+              limit: result.limit,
+
+              totalPages: result.totalPages,
+            }
+          : undefined,
+    };
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Lấy chi tiết đánh giá (Public)' })
   async findOne(@Param('id') id: string) {
-    return await this.ratingsService.findOne(+id);
+    const result = await this.ratingsService.findOne(+id);
+
+    return {
+      success: true,
+
+      statusCode: 200,
+
+      message: 'Success',
+
+      result,
+    };
   }
 
   @Patch(':id')
@@ -64,7 +133,17 @@ export class RatingsController {
     @Body() updateRatingDto: UpdateRatingDto,
   ) {
     // Note: should check if rating belongs to user
-    return await this.ratingsService.update(+id, updateRatingDto);
+    const result = await this.ratingsService.update(+id, updateRatingDto);
+
+    return {
+      success: true,
+
+      statusCode: 200,
+
+      message: 'Success',
+
+      result,
+    };
   }
 
   @Delete(':id')
@@ -73,6 +152,16 @@ export class RatingsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Xoá đánh giá (Chỉ dành cho ADMIN)' })
   async remove(@Param('id') id: string) {
-    return await this.ratingsService.remove(+id);
+    const result = await this.ratingsService.remove(+id);
+
+    return {
+      success: true,
+
+      statusCode: 200,
+
+      message: 'Success',
+
+      result,
+    };
   }
 }

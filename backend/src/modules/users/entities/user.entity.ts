@@ -33,6 +33,9 @@ export class User extends BaseAuditEntity {
   @Column({ nullable: false })
   email: string;
 
+  @Column({ name: 'is_verified', default: false })
+  isVerified: boolean;
+
   @Column()
   password: string;
 

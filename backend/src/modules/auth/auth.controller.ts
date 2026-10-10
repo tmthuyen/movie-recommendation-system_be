@@ -17,7 +17,6 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
-import { SessionService } from './session.service';
 import { LoginRequestDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -250,6 +249,19 @@ export class AuthController {
       success: true,
       statusCode: HttpStatus.OK,
       message: 'Vui lòng kiểm tra email để đặt lại mật khẩu',
+      result: {},
+    };
+  }
+
+  // send email verification
+  @Post('send-verification-email')
+  async sendVerificationEmail(@Req() req: Request) {
+    const user = req.user as JwtPayload;
+    await this.authService.sendVerificationEmail(user.sub, user.email);
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Vui lòng kiểm tra email để xác thực tài khoản',
       result: {},
     };
   }

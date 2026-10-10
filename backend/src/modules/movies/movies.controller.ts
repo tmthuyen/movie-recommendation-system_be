@@ -32,7 +32,13 @@ export class MoviesController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Thêm phim mới (Chỉ dành cho ADMIN)' })
   async create(@Body() createMovieDto: CreateMovieDto) {
-    return await this.moviesService.create(createMovieDto);
+    const result = await this.moviesService.create(createMovieDto);
+    return {
+      success: true,
+      statusCode: 201,
+      message: 'Created movie successfully',
+      result,
+    };
   }
   @Post('/test-created')
   // @UseGuards(JwtAuthGuard)
@@ -40,7 +46,13 @@ export class MoviesController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Test movie created' })
   testMovieCreated(@Body() createMovieDto: CreateMovieDto) {
-    return this.moviesService.testMovieCreated(createMovieDto);
+    const result = this.moviesService.testMovieCreated(createMovieDto);
+    return {
+      success: true,
+      statusCode: 201,
+      message: 'Tested movie created successfully',
+      result,
+    };
   }
   // @Post('/seed-created-movie')
   // // @UseGuards(JwtAuthGuard)
@@ -55,13 +67,31 @@ export class MoviesController {
   @Get()
   @ApiOperation({ summary: 'Lấy danh sách phim (Public)' })
   async findAll(@Query() paginationDto: PaginationDto) {
-    return await this.moviesService.findAll(paginationDto);
+    const result = await this.moviesService.findAll(paginationDto);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Get movies successfully',
+      result: result.data,
+      pagination: {
+        total: result.total,
+        page: result.page,
+        limit: result.limit,
+        totalPages: result.totalPages,
+      },
+    };
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Lấy chi tiết phim (Public)' })
   async findOne(@Param('id') id: string) {
-    return await this.moviesService.findOne(+id);
+    const result = await this.moviesService.findOne(+id);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Get movie details successfully',
+      result,
+    };
   }
 
   @Post(':id/view')
@@ -70,7 +100,13 @@ export class MoviesController {
   @ApiOperation({ summary: 'Tăng lượt xem cho phim và ghi log' })
   async incrementView(@Param('id') id: string, @Req() req: Request) {
     const user = req.user as JwtPayload | undefined;
-    return await this.moviesService.incrementViewCount(+id, user?.sub);
+    const result = await this.moviesService.incrementViewCount(+id, user?.sub);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Incremented view count successfully',
+      result,
+    };
   }
 
   @Patch(':id')
@@ -82,7 +118,13 @@ export class MoviesController {
     @Param('id') id: string,
     @Body() updateMovieDto: UpdateMovieDto,
   ) {
-    return await this.moviesService.update(+id, updateMovieDto);
+    const result = await this.moviesService.update(+id, updateMovieDto);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Updated movie successfully',
+      result,
+    };
   }
 
   @Delete(':id')
@@ -91,6 +133,12 @@ export class MoviesController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Xoá phim (Chỉ dành cho ADMIN)' })
   async remove(@Param('id') id: string) {
-    return await this.moviesService.remove(+id);
+    const result = await this.moviesService.remove(+id);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Deleted movie successfully',
+      result,
+    };
   }
 }

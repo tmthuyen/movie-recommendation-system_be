@@ -3,7 +3,6 @@ import {
   Get,
   Post,
   Body,
-  Patch,
   Param,
   Delete,
   UseGuards,
@@ -12,7 +11,6 @@ import {
 } from '@nestjs/common';
 import { InteractionsService } from './interactions.service';
 import { CreateInteractionDto } from './dto/create-interaction.dto';
-import { UpdateInteractionDto } from './dto/update-interaction.dto';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { PaginationDto } from '@/common/dtos/pagination.dto';
@@ -33,13 +31,34 @@ export class InteractionsController {
     @Body() createInteractionDto: CreateInteractionDto,
   ) {
     const { sub: userId } = req.user as JwtPayload;
-    return await this.interactionsService.create(userId, createInteractionDto);
+    const result = await this.interactionsService.create(
+      userId,
+      createInteractionDto,
+    );
+
+    return {
+      success: true,
+
+      statusCode: 201,
+
+      message: 'Success',
+
+      result,
+    };
   }
 
   @Get()
   @ApiOperation({ summary: 'Lấy tất cả tương tác (Public)' })
   async findAll(@Query() paginationDto: PaginationDto) {
-    return await this.interactionsService.findAll(paginationDto);
+    const { data, ...pagination } =
+      await this.interactionsService.findAll(paginationDto);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Lấy danh sách tương tác thành công',
+      result: data,
+      pagination: pagination,
+    };
   }
 
   @Get('my-history')
@@ -51,7 +70,17 @@ export class InteractionsController {
     @Query() paginationDto: PaginationDto,
   ) {
     const { sub: userId } = req.user as JwtPayload;
-    return await this.interactionsService.getHistory(userId, paginationDto);
+    const { data, ...pagination } = await this.interactionsService.getHistory(
+      userId,
+      paginationDto,
+    );
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Lấy lịch sử xem phim thành công',
+      result: data,
+      pagination: pagination,
+    };
   }
 
   @Get('my-favorites')
@@ -63,13 +92,33 @@ export class InteractionsController {
     @Query() paginationDto: PaginationDto,
   ) {
     const { sub: userId } = req.user as JwtPayload;
-    return await this.interactionsService.getFavorites(userId, paginationDto);
+    const { data, ...pagination } = await this.interactionsService.getFavorites(
+      userId,
+      paginationDto,
+    );
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Lấy danh sách phim yêu thích thành công',
+      result: data,
+      pagination: pagination,
+    };
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Lấy chi tiết tương tác (Public)' })
   async findOne(@Param('id') id: string) {
-    return await this.interactionsService.findOne(+id);
+    const result = await this.interactionsService.findOne(+id);
+
+    return {
+      success: true,
+
+      statusCode: 200,
+
+      message: 'Success',
+
+      result,
+    };
   }
 
   @Delete(':id')
@@ -77,6 +126,16 @@ export class InteractionsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Xoá tương tác (Yêu cầu đăng nhập)' })
   async remove(@Param('id') id: string) {
-    return await this.interactionsService.remove(+id);
+    const result = await this.interactionsService.remove(+id);
+
+    return {
+      success: true,
+
+      statusCode: 200,
+
+      message: 'Success',
+
+      result,
+    };
   }
 }
