@@ -14,7 +14,7 @@ import { NavUser } from './nav-user';
 import Image from 'next/image';
 import Link from 'next/link';
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader className="flex h-16 items-start justify-center border-b shadow-sm">

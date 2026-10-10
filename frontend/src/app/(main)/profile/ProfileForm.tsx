@@ -31,11 +31,11 @@ import { Role } from '@/shared/types/api.types';
 import { mapUserStatus } from '@/shared/utils/mapStatus';
 import { usePathname, useRouter } from 'next/navigation';
 import { parseAxiosError } from '@/lib/axiosClient';
-import UpdatePasswordForm from '@/app/(admin-layout)/profile/UpdatePasswordForm';
+import UpdatePasswordForm from '@/app/(main)/profile/UpdatePasswordForm';
 import dateTimeUtils from '@/shared/utils/formatting';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { Avatar, AvatarBadge, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import UserProfileForm from '@/app/(admin-layout)/profile/UserProfileForm';
+import UserProfileForm from '@/app/(main)/profile/UserProfileForm';
 
 // props
 interface ProfileFormProps {

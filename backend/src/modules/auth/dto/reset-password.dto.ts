@@ -11,5 +11,5 @@ export class ResetPasswordDto {
 
   @IsString()
   @IsNotEmpty()
-  passwordConfirm: string;
+  confirmPassword: string;
 }

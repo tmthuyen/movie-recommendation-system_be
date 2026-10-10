@@ -31,6 +31,20 @@ export type BaseDto = {
   updatedBy: string;
 };
 
+// login
+export interface LoginData {
+  username: string;
+  password: string;
+}
+
+// register
+export interface RegisterData {
+  fullName: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+}
+
 // role
 export interface Role extends BaseDto {
   id: string;

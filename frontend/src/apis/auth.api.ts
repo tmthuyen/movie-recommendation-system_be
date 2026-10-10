@@ -1,4 +1,4 @@
-import { ApiResponse, UpdatePasswordData, User } from '@/shared/types/api.types';
+import { ApiResponse, RegisterData, UpdatePasswordData, User } from '@/shared/types/api.types';
 import axiosClient from '../lib/axiosClient';
 
 export const authApi = {
@@ -15,11 +15,9 @@ export const authApi = {
   },
 
   register: async (
-    name: string,
-    email: string,
-    password: string
+    registerData: RegisterData
   ): Promise<ApiResponse<{ accessToken: string; refreshToken: string }>> => {
-    const { data } = await axiosClient.post('/auth/register', { name, email, password });
+    const { data } = await axiosClient.post('/auth/register', registerData);
 
     return data;
   },

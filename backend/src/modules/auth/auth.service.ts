@@ -17,6 +17,7 @@ import { RedisService } from '@/infrastructure/redis/redis.service';
 import { RolesService } from '@/modules/roles/roles.service';
 import { UserProducer } from '@/infrastructure/messaging/producers/user.producer';
 import { ConfigService } from '@nestjs/config';
+import { ResetPasswordDto } from '@/modules/auth/dto/reset-password.dto';
 
 @Injectable()
 export class AuthService {
@@ -90,8 +91,8 @@ export class AuthService {
 
   // 3. Đăng ký tài khoản
   async register(registerDto: RegisterDto) {
-    if (registerDto.password !== registerDto.passwordConfirm) {
-      throw new BadRequestException('Password not matched');
+    if (registerDto.password !== registerDto.confirmPassword) {
+      throw new BadRequestException('Mật khẩu xác nhận không khớp');
     }
 
     const hashedPassword = await bcrypt.hash(registerDto.password, 10);
@@ -235,10 +236,8 @@ export class AuthService {
   }
 
   // 7. Reset mật khẩu
-  async resetPassword(
-    resetDto: import('./dto/reset-password.dto').ResetPasswordDto,
-  ) {
-    if (resetDto.password !== resetDto.passwordConfirm) {
+  async resetPassword(resetDto: ResetPasswordDto) {
+    if (resetDto.password !== resetDto.confirmPassword) {
       throw new BadRequestException('Password not matched');
     }
 

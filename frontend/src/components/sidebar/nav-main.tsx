@@ -123,13 +123,41 @@ const dataBar = {
       },
       {
         title: 'Thông báo',
-        url: '/admin/notifications',
+        url: '/notification',
         icon: Bell,
       },
     ],
   },
 };
 
+export function UserNavMain() {
+  const pathname = usePathname();
+
+  return (
+    <div>
+      <SidebarGroup>
+        <SidebarGroupLabel>{dataBar.settings.groupLabel}</SidebarGroupLabel>
+        <SidebarMenu>
+          {dataBar.settings.items.map((it) => (
+            <SidebarMenuItem key={it.title}>
+              <SidebarMenuButton
+                asChild
+                className={`${
+                  pathname === it.url ? 'bg-accent text-accent-foreground dark:bg-accent/40' : ''
+                } hover:bg-accent/70 dark:hover:bg-accent/40 hover:text-accent-foreground cursor-pointer transition-transform hover:scale-105`}
+              >
+                <Link href={it.url}>
+                  <it.icon />
+                  <span>{it.title}</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      </SidebarGroup>
+    </div>
+  );
+}
 export function NavMain() {
   const pathname = usePathname();
 
