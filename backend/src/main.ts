@@ -10,6 +10,7 @@ import { LoggingInterceptor } from '@/common/interceptors/logging.interceptor';
 import { HttpExceptionFilter } from '@/common/filters/http-exception.filter';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import cookieParser from 'cookie-parser';
+import { NextFunction, Request } from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -18,6 +19,19 @@ async function bootstrap() {
 
   // cookie
   app.use(cookieParser());
+
+  // query edit
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.query) {
+      Object.defineProperty(req, 'query', {
+        value: { ...req.query },
+        writable: true,
+        configurable: true,
+        enumerable: true,
+      });
+    }
+    next();
+  });
 
   const winstonLogger = app.get(WINSTON_MODULE_NEST_PROVIDER);
   app.useLogger(winstonLogger);

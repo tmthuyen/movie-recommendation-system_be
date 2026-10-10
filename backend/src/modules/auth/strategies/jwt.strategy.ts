@@ -23,20 +23,22 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   // Hàm này tự động chạy SAU KHI token đã được giải mã hợp lệ
   async validate(payload: JwtPayload) {
     // check jti in redis blacklist
-    this.logger.log(`[JWT] Validating token with jti: ${payload.jti}`);
+    // this.logger.log(`[JWT] Validating token with jti: ${payload.jti}`);
     const isBlacklisted = await this.redisService.get(
       `auth:blacklist:${payload.jti}`,
     );
     if (isBlacklisted) {
-      throw new UnauthorizedException('Token không hợp lệ.');
+      this.logger.warn(`[JWT] Token đã bị thu hồi, jti: ${payload.jti}`);
+      throw new UnauthorizedException('Token đã bị thu hồi.');
     }
 
     // check sessionId in redis
-    this.logger.log(`[JWT] Validating sessionId: ${payload.sessionId}`);
+    // this.logger.log(`[JWT] Validating sessionId: ${payload.sessionId}`);
     const sessionData = await this.redisService.get(
       `auth:session:${payload.sessionId}`,
     );
     if (!sessionData) {
+      this.logger.warn(`[JWT] Không tìm thấy session: ${payload.sessionId}`);
       throw new UnauthorizedException('Token không hợp lệ.');
     }
 

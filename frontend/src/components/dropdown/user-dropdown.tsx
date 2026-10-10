@@ -66,11 +66,11 @@ export default function UserDropdown() {
         <DropdownMenuItem onClick={() => router.push('/setting/theme')} className="cursor-pointer">
           <Settings /> Cài đặt
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => router.push('/setting/theme')} className="cursor-pointer">
+        <DropdownMenuItem onClick={() => router.push('/dashboard')} className="cursor-pointer">
           <ShieldUser /> Quản trị viên
         </DropdownMenuItem>
         <DropdownMenuSeparator className="bg-gray-100 dark:bg-slate-700" />
-        <DropdownMenuItem onClick={() => router.push('/auth/register')} className="cursor-pointer">
+        <DropdownMenuItem onClick={() => router.push('/auth/signup')} className="cursor-pointer">
           <MailQuestion /> Đăng ký
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => router.push('/auth/login')} className="cursor-pointer">

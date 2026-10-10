@@ -10,6 +10,8 @@ import { JwtStrategy } from '@/modules/auth/strategies/jwt.strategy';
 import { SessionService } from './session.service';
 import { RolesModule } from '@/modules/roles/roles.module';
 import { UserProducer } from '@/infrastructure/messaging/producers/user.producer';
+import { PassportModule } from '@nestjs/passport';
+import { GoogleStrategy } from '@/modules/auth/strategies/google.strategy';
 
 @Module({
   imports: [
@@ -33,9 +35,16 @@ import { UserProducer } from '@/infrastructure/messaging/producers/user.producer
       },
       inject: [ConfigService],
     }),
+    PassportModule.register({ session: false }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, SessionService, UserProducer],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    GoogleStrategy,
+    SessionService,
+    UserProducer,
+  ],
   exports: [AuthService, SessionService],
 })
 export class AuthModule {}

@@ -27,6 +27,8 @@ import { Public } from '@/common/decorators/public.decorator';
 import { RateLimit } from '@/common/rate-limit/rate-limit.decorator';
 import { ApiResponse } from '@/common/dtos/api-response.dto';
 import { LoginResultDto } from '@/common/dtos/auth/login-result.dto';
+import { GoogleAuthGuard } from '@/modules/auth/guards/google-auth.guard';
+import { DeviceInfoDto } from '@/modules/auth/dto/device-info.dto';
 
 @Controller('auth')
 @UseGuards(JwtAuthGuard)
@@ -55,12 +57,11 @@ export class AuthController {
     const userAgent = req.headers['user-agent'] || '';
     const deviceIdCookie = req.cookies?.deviceId;
 
-    const { accessToken, session } = await this.authService.login(
-      user,
+    const { accessToken, session } = await this.authService.login(user, {
       userAgent,
-      ip,
-      deviceIdCookie,
-    );
+      ipAddress: ip,
+      deviceId: deviceIdCookie || '',
+    });
     res.cookie('refreshToken', session.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -314,5 +315,46 @@ export class AuthController {
       message: 'Đổi mật khẩu thành công. Vui lòng đăng nhập lại.',
       result: {},
     };
+  }
+
+  // google oauth
+  @Public()
+  @Get('google')
+  @UseGuards(GoogleAuthGuard)
+  googleLogin() {
+    // Passport tự chuyển hướng sang Google.
+  }
+
+  @Public()
+  @Get('google/callback')
+  @UseGuards(GoogleAuthGuard)
+  async googleCallback(@Req() req: Request, @Res() res: Response) {
+    const googleProfile = req.user as {
+      googleId: string;
+      email: string;
+      fullName: string;
+      avatar?: string;
+    };
+
+    const deviceInfo: DeviceInfoDto = {
+      userAgent: req.headers['user-agent'] || '',
+      ipAddress: req.ip || '',
+      deviceId: req.cookies?.deviceId as string,
+    };
+
+    // Tìm hoặc tạo user, cấp refresh token và lưu session.
+    const result = await this.authService.loginWithGoogle(
+      googleProfile,
+      deviceInfo,
+    );
+
+    res.cookie('refreshToken', result.session.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+
+    return res.redirect(`${process.env.FRONTEND_URL}/auth/google-success`);
   }
 }

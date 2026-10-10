@@ -124,8 +124,8 @@ axiosClient.interceptors.response.use(
       try {
         const response = await axiosClient.post(`/auth/refresh`, null, { withCredentials: true });
 
-        // console.log('Refresh Response: ', response);
-        const { accessToken: newAccessToken } = response.data.data;
+        // console.log('Refresh Response: ', response.data);
+        const { accessToken: newAccessToken } = response?.data?.result;
         // console.log("newAccessToken", newAccessToken)
 
         useAuthStore.getState().setAccessToken(newAccessToken);

@@ -12,17 +12,22 @@ import { LoginRequestDto } from './dto/login.dto';
 import { RegisterDto } from '@/modules/auth/dto/register.dto';
 import { User, UserStatus } from '@/modules/users/entities/user.entity';
 import { IMailService, MailService } from '@/infrastructure/mail/mail.service';
-import { SessionService } from './session.service';
+import { SessionData, SessionService } from './session.service';
 import { RedisService } from '@/infrastructure/redis/redis.service';
 import { RolesService } from '@/modules/roles/roles.service';
 import { UserProducer } from '@/infrastructure/messaging/producers/user.producer';
 import { ConfigService } from '@nestjs/config';
 import { ResetPasswordDto } from '@/modules/auth/dto/reset-password.dto';
+import { DeviceInfoDto } from '@/modules/auth/dto/device-info.dto';
+import { DataSource } from 'typeorm';
+import { Role } from '@/modules/roles/entities/role.entity';
+import { UserProvider } from '@/modules/users/entities/user-provider.entity';
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
   constructor(
+    private readonly dataSource: DataSource,
     private usersService: UsersService,
     private rolesService: RolesService,
     private jwtService: JwtService,
@@ -58,9 +63,12 @@ export class AuthService {
   }
 
   // 2. Tạo và cấp JWT Token
-  async login(user: User, userAgent: string, ip: string, deviceId: string) {
-    if (!deviceId) {
-      deviceId = crypto.randomUUID();
+  async login(
+    user: User,
+    deviceInfo: DeviceInfoDto,
+  ): Promise<{ accessToken: string; session: SessionData }> {
+    if (!deviceInfo.deviceId) {
+      deviceInfo.deviceId = crypto.randomUUID();
     }
 
     const sessionId = crypto.randomUUID();
@@ -76,9 +84,9 @@ export class AuthService {
 
     const session = await this.sessionService.createSession(
       user.id,
-      ip,
-      userAgent,
-      deviceId,
+      deviceInfo.ipAddress,
+      deviceInfo.userAgent,
+      deviceInfo.deviceId,
       sessionId,
       jti,
     );
@@ -87,6 +95,80 @@ export class AuthService {
       accessToken: this.jwtService.sign(payload),
       session,
     };
+  }
+
+  async loginWithGoogle(
+    googleProfile: {
+      googleId: string;
+      email: string;
+      fullName: string;
+      avatar?: string;
+    },
+    deviceInfo: DeviceInfoDto,
+  ) {
+    const existingUser = await this.usersService.findByEmail(
+      googleProfile.email,
+    );
+
+    if (existingUser) {
+      this.logger.log(
+        `[Login GG] Existing user found for email: ${googleProfile.email}, logging in.`,
+      );
+      return this.login(existingUser, deviceInfo);
+    }
+
+    // Create new user with default role 'user'
+
+    // transaction to create user and assign role
+    const savedUser = await this.dataSource.transaction(
+      async transactionalEntityManager => {
+        // check exits provider but not linked to user
+        const existingProvider = await transactionalEntityManager.findOne(
+          UserProvider,
+          {
+            where: { provider: 'google', providerId: googleProfile.googleId },
+          },
+        );
+
+        // remove existing provider if exists
+        if (existingProvider) {
+          await transactionalEntityManager.remove(existingProvider);
+          this.logger.warn(
+            `[Login GG] Removed existing provider for googleId: ${googleProfile.googleId}`,
+          );
+        }
+
+        const defaultRole = await transactionalEntityManager.findOne(Role, {
+          where: { code: 'user' },
+        });
+        const userData = {
+          email: googleProfile.email,
+          fullName: googleProfile.fullName,
+          avatarUrl: googleProfile.avatar,
+          roles: defaultRole ? [defaultRole] : [],
+          status: UserStatus.ACTIVE,
+          isVerified: true,
+        };
+
+        const user = transactionalEntityManager.create(User, userData);
+        const savedUser = await transactionalEntityManager.save(user);
+
+        // save to user provider
+        await transactionalEntityManager.save(UserProvider, {
+          userId: savedUser.id,
+          provider: 'google',
+          providerId: googleProfile.googleId,
+        });
+
+        this.logger.log(
+          `[Login GG] New user created with email: ${googleProfile.email}, userId: ${savedUser.id}`,
+        );
+
+        return savedUser;
+      },
+    );
+
+    return this.login(savedUser, deviceInfo);
   }
 
   // 3. Đăng ký tài khoản
@@ -105,6 +187,7 @@ export class AuthService {
       ...registerDto,
       roleIds,
       password: hashedPassword,
+      avatarUrl: 'https://ui-avatars.com/api/?name=Default+User',
     });
 
     // Tạo mã xác nhận và lưu vào Redis (hết hạn trong 1 ngày)
