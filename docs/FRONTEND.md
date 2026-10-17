@@ -40,7 +40,7 @@ Bảng lib đọc từ `frontend/package.json` (phiên bản khai báo):
 | `react-day-picker` + `date-fns` | `^10.0.1`, `^4.4.0` | Chọn ngày + format ngày (Calendar của shadcn) |
 | `cmdk` | `^1.1.1` | Command palette (component `command` của shadcn) |
 | `recharts` | `^3.10.1` | Biểu đồ cho Dashboard admin (**đã cài, chưa dùng**) |
-| `socket.io-client` | `^4.8.3` | Realtime (comment/rating/viewCount/typing) (**đã cài, chưa dùng**) |
+| `socket.io-client` | `^4.8.3` | Realtime (comment/rating/viewCount/typing) — **đã dùng ở `hooks/useMovieSocket.ts` (Phase 2)** |
 | `react-icons` | `^5.7.0` | **Không dùng** cho icon mới (ưu tiên lucide-react) |
 | `react-router-dom` | `^7.18.3` | **Không dùng** — project dùng Next.js App Router |
 
@@ -65,11 +65,13 @@ frontend/
     │   ├── globals.css      # Design tokens Tailwind v4 (CSS-first): :root light, .dark, [data-theme=…], radius
     │   ├── not-found.tsx    # Trang 404
     │   ├── (main)/          # Route group cho USER
-    │   │   ├── layout.tsx   # "/" → render trần; path khác → bọc RoleLayout/UserLayout
-    │   │   ├── (home)/page.tsx        # / — trang chủ (placeholder)
+    │   │   ├── layout.tsx   # RoleLayout → guest/USER: UserLayout, ADMIN: AdminLayout
+    │   │   ├── (home)/page.tsx        # / — trang chủ THẬT (hero, MovieRow sections, genre/country)
+    │   │   ├── movies/                # /movies (danh sách + filter) và /movies/[id] (chi tiết)
     │   │   ├── notification/page.tsx  # /notification (placeholder)
     │   │   ├── profile/               # /profile — THẬT (ProfileForm, UserProfileForm, UpdatePasswordForm, UserSessionForm)
-    │   │   └── setting/theme/page.tsx # /setting/theme — THẬT (chọn theme/màu)
+    │   │   ├── setting/theme/page.tsx # /setting/theme — THẬT (chọn theme/màu)
+    │   │   └── about/ contact/ privacy/ terms/   # Trang thông tin website (server component, PageHeader)
     │   ├── (admin-layout)/  # Route group cho ADMIN
     │   │   ├── layout.tsx / error.tsx / loading.tsx   # Layout admin, error boundary, skeleton
     │   │   ├── dashboard/page.tsx     # /dashboard (placeholder)
@@ -105,13 +107,19 @@ frontend/
     │
     ├── components/
     │   ├── ui/              # shadcn/ui sinh từ CLI (button, dialog, table, sidebar, sonner…)
-    │   ├── layout/          # UserLayout.tsx, AdminLayout.tsx, RoleLayout.tsx (bọc theo role)
-    │   ├── sidebar/         # nav-main.tsx (dataBar nhiều group), nav-user.tsx, user-sidebar, admin-sidebar
+    │   ├── layout/          # UserLayout (shell user: UserHeader + content wrapper min-w-0 + SiteFooter + MobileBottomNav),
+    │   │                    # AdminLayout, RoleLayout (bọc theo role), user-header (top header + dropdown user),
+    │   │                    # user-menu (dropdown nội dung dùng chung header/sidebar), mobile-bottom-nav (nav màn hình nhỏ),
+    │   │                    # site-footer (footer info website)
+    │   ├── sidebar/         # nav-main.tsx (dataBar nhiều group), nav-user.tsx (trigger sidebar, dùng chung UserMenuContent), user-sidebar, admin-sidebar
     │   ├── auth/            # RequireRole.tsx (phân quyền), InitAuth.tsx (bootstrap token khi F5)
     │   ├── common/          # UI kit dùng chung: PageHeader, SectionHeader, EmptyState, ErrorState, DataPagination,
     │   │                    # PaginatedView, paginations/Pagination (PaginatedTable), ConfirmDialog, AppModal,
     │   │                    # SkeletonLoader, ThemeToggle; ErrorBoundary.tsx đã comment toàn bộ (không dùng)
-    │   ├── movie/           # Domain phim: MovieCard, MovieGrid (+MovieGridSkeleton), MovieFilters, MovieList, LatestMovies
+    │   ├── movie/           # Domain phim: MovieCard (hover overlay + actions), MovieRow (+MovieRowSkeleton, hàng ngang),
+    │   │                    # MovieActions (toggle like/favorite/watchlist), MovieGrid (+MovieGridSkeleton), MovieFilters,
+    │   │                    # MovieList, LatestMovies, MovieDetailView/Detail (chi tiết /movies/[id]), MovieRating (sao
+    │   │                    # realtime), MovieComments (phân cấp + typing realtime), MovieViewCount (realtime), SimilarMovies (placeholder)
     │   ├── header/          # admin-header
     │   ├── dropdown/        # user-dropdown, notification-dropdown, streak-dropdown, dropdown-container
     │   ├── loading/         # AdminSkeletonLayout, redirecting, spining
@@ -140,7 +148,9 @@ frontend/
 
 | URL | File | Trạng thái |
 |---|---|---|
-| `/` | `src/app/(main)/(home)/page.tsx` | 🔲 Placeholder (mới có tiêu đề "Trang chủ" + UserDropdown) |
+| `/` | `src/app/(main)/(home)/page.tsx` | ✅ Thật (hero + hàng phim MovieRow, thể loại/quốc gia) |
+| `/movies` | `src/app/(main)/movies/page.tsx` | ✅ Thật (danh sách phim, filter client-side, phân trang) |
+| `/movies/[id]` | `src/app/(main)/movies/[id]/page.tsx` | ✅ Thật (chi tiết phim, đánh giá sao, bình luận + view count realtime) |
 | `/auth/login` | `src/app/auth/login/page.tsx` (+ `login-form.tsx`, `google-button.tsx`) | ✅ Thật (API login + Google OAuth) |
 | `/auth/signup` | `src/app/auth/signup/page.tsx` (+ `signup-form.tsx`) | ✅ Thật (API register) |
 | `/auth/verify-email` | `src/app/auth/verify-email/page.tsx` (+ `verify-email.tsx`) | ✅ Thật (API verify-email) |
@@ -148,6 +158,10 @@ frontend/
 | `/profile` | `src/app/(main)/profile/page.tsx` (+ 4 form) | ✅ Thật (getMe, update profile, đổi mật khẩu, session) |
 | `/setting/theme` | `src/app/(main)/setting/theme/page.tsx` | ✅ Thật (chọn theme/màu, next-themes) |
 | `/notification` | `src/app/(main)/notification/page.tsx` | 🔲 Placeholder |
+| `/about` | `src/app/(main)/about/page.tsx` | ✅ Trang thông tin tĩnh (server component) |
+| `/contact` | `src/app/(main)/contact/page.tsx` | ✅ Trang thông tin tĩnh (server component, placeholder thông tin liên hệ) |
+| `/privacy` | `src/app/(main)/privacy/page.tsx` | ✅ Trang thông tin tĩnh (server component) |
+| `/terms` | `src/app/(main)/terms/page.tsx` | ✅ Trang thông tin tĩnh (server component) |
 | `/dashboard` | `src/app/(admin-layout)/dashboard/page.tsx` | 🔲 Placeholder |
 | `/admin/movies` | `src/app/(admin-layout)/admin/movies/page.tsx` | 🔲 Placeholder |
 | `/admin/genres` | `src/app/(admin-layout)/admin/genres/page.tsx` | 🔲 Placeholder |
@@ -158,6 +172,18 @@ frontend/
 | `/admin/interaction` | `src/app/(admin-layout)/admin/interaction/page.tsx` | 🔲 Placeholder |
 
 Mẫu chung cho trang admin placeholder: `export metadata` (title/description tiếng Việt) + `<h2>` tiêu đề + `div.flex.flex-col.gap-4` khung nội dung.
+
+## Layout shell khu vực user (`UserLayout`)
+
+`UserLayout` (`components/layout/UserLayout.tsx` — dùng cho guest + USER ở route group `(main)`):
+
+- `SidebarProvider` + `UserSidebar`: sidebar **desktop (`md+`)**; mobile ẩn mặc định (chỉ mở tay qua Sheet của shadcn).
+- `UserHeader` (`components/layout/user-header.tsx`): top header sticky — logo/link về `/`, toggle theme, dropdown tài khoản `UserMenu`; `SidebarTrigger` chỉ hiện `md+`.
+- Content wrapper **block** `mx-auto w-full max-w-7xl min-w-0 flex-1` (không dùng flex row) + `SidebarInset` có `min-w-0` — fix lỗi scroll ngang toàn trang (trước đây flex item `w-full` có `min-width:auto` khiến overflow nội bộ hàng `MovieRow` đẩy ra ngoài trang).
+- `SiteFooter` (`components/layout/site-footer.tsx`): footer info website — giới thiệu, Khám phá, Thông tin (About/Contact), Pháp lý (Chính sách/Điều khoản), social (placeholder `SOCIAL_LINKS` — chủ website điền URL thật), copyright.
+- `MobileBottomNav` (`components/layout/mobile-bottom-nav.tsx`): bottom nav cố định `md:hidden`, chừa `env(safe-area-inset-bottom)`; guest: Trang chủ/Phim/Đăng nhập — user: + Thông báo/Tài khoản; item active theo pathname.
+- `SidebarInset` có `pb-16 md:pb-0` để không bị bottom nav che footer.
+- Nội dung dropdown tài khoản **dùng chung** `UserMenuContent` (`components/layout/user-menu.tsx`) giữa header và sidebar (`nav-user.tsx`) — route shortcuts (Trang chủ, Phim, Hồ sơ, Thông báo, Dashboard nếu ADMIN), Đăng nhập/Đăng xuất.
 
 ## Kết nối API
 
@@ -295,7 +321,7 @@ Ghi chú:
 - ⚠ **`frontend/node_modules` chưa cài** — phải chạy `npm install` trong `frontend/` trước khi dev/build (agent không tự cài).
 - ⚠ **Mock `AuthContext` còn song song** với `useAuthStore` (`src/contexts/AuthContext.tsx`, `src/hooks/useAuth.ts`, `AppContext`) — code mới chỉ dùng `useAuthStore`, dọn dần mock.
 - ⚠ **Folder `src/hooks/tankstack/` sai chính tả** (`tankstack` thay vì `tanstack`) — **giữ nguyên tên folder** để không phá import hiện hữu.
-- ⚠ **`recharts` và `socket.io-client` đã cài nhưng chưa dùng** (chờ Phase 2/5 trong plan V11); `react-router-dom`, `react-icons` cũng không dùng trong App Router.
+- ⚠ **`recharts` đã cài nhưng chưa dùng** (chờ Phase 5/dashboard); `react-router-dom`, `react-icons` cũng không dùng trong App Router. **`socket.io-client` đã dùng (Phase 2)**.
 - ⚠ **`src/shared/utils/http.ts` là legacy (dùng `fetch`)** — không được dùng, chỉ dùng `axiosClient`.
 - ⚠ **Nav group "Interaction" trong `nav-main.tsx` trỏ `/interaction/*`** nhưng hiện chưa có route nào khớp (trang thật là `/admin/interaction`) — cần sửa khi làm Phase 5.
 - ✅ **Type `Pagination`** trong `api.types.ts` đã chuẩn hoá về `{ total, page, limit, totalPages }` khớp payload backend; `DataPagination` dùng chung cho mọi nơi hiển thị phân trang.

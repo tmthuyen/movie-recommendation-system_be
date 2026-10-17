@@ -153,7 +153,7 @@
 - UI thân thiện, hiện đại, đồng nhất các trang, spacing, responsive, 
 cấm tông màu lệch lạc (quá AI thô sơ), animation, frame motion, …"
 - Sử dụng git thành thạo
-- Tên nhánh: fea/{domain làm việc, fixbug, ...}: fea/aut; fea/users, / fea/movie, fea/ai-**
+- Tên nhánh: fea/{domain làm việc, fixbug, ...}: fea/aut; fea/users, / fea/movie, fea/ai-**; với scope `cicd` ưu tiên dùng `cicd/...` (ví dụ: `cicd/split-workflows`, `cicd/update-deploy-action`)
 main để show, dev staging, production deploy
 - Commit message đúng format: fea: **   \n task: ui **, backend **, Ai***
 fea: auth

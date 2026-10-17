@@ -1,6 +1,6 @@
 # V11 — Frontend UI Roadmap (User-facing + Admin CRUD)
 
-- **Trạng thái**: Đang thực hiện — **Phase 0 (baseline) xong ở mức môi trường**, **Phase 1 (nền tảng + trang chủ + danh sách phim) đã triển khai**; Phase 2–5 còn `- [ ]`. Lưu ý: DoD `lint`/`build` đang bị chặn bởi lỗi baseline có sẵn trong repo (xem "Ghi chú triển khai Phase 1").
+- **Trạng thái**: Đang thực hiện — **Phase 0 (baseline) xong ở mức môi trường**, **Phase 1 (nền tảng + trang chủ + danh sách phim + movie card UX) hoàn thành → đã đóng**, **Phase 2 (chi tiết phim `/movies/[id]`) hoàn thành → đã đóng**, **Phase 1.5 (base layout shell responsive: fix scroll ngang, bottom nav, header user dropdown, footer site info + trang about/contact/privacy/terms) hoàn thành → đã đóng**; đang làm **Phase 3 (tương tác cá nhân)**; Phase 4–5 còn `- [ ]`. Lưu ý: DoD `lint`/`build` đang bị chặn bởi lỗi baseline có sẵn trong repo (xem "Ghi chú triển khai Phase 1").
 - **Người thực hiện**: AI Agent
 - **Thời gian**: 2026-10-17
 - **Phạm vi**: `frontend/` — xây dựng toàn bộ giao diện user-facing (trang chủ, danh sách phim, chi tiết phim, tương tác cá nhân, semantic search) và khu vực admin CRUD (movies/genres/countries/peoples/users/roles/interaction + dashboard). Không sửa backend/ai-service.
@@ -59,6 +59,15 @@
 - [x] Thêm mục điều hướng cho user (Trang chủ, Phim) vào `frontend/src/components/sidebar/nav-main.tsx` / `nav-user.tsx` (icon lucide)
 - [x] Xử lý trạng thái **guest** (không crash/không trắng trang khi chưa đăng nhập; ẩn mục cần auth) — thực hiện ở `RoleLayout.tsx` + `(main)/layout.tsx` (guest → `UserLayout`), `UserLayout.tsx` (dọn import thừa), `nav-main.tsx`/`nav-user.tsx` (ẩn mục cần auth, hiện nút Đăng nhập)
 
+### Mở rộng Phase 1 — Movie card UX (hover overlay + actions) + hàng ngang (2026-10-17)
+
+- [x] Sửa `movie-card.tsx`: bỏ khoảng trắng trên poster, **overlay khi hover/focus** hiện thông tin (thể loại, mô tả, năm, lượt xem), stretched-link click toàn card → `/movies/[id]`, touch-friendly (ẩn overlay trên thiết bị `hover: none`)
+- [x] Tạo `components/movie/movie-actions.tsx` — nút toggle like/favorite/watchlist ngay trên card (icon lucide, `aria-pressed`, touch target ≥36px); **rút sớm từ Phase 3**
+- [x] Tạo `apis/interaction.api.ts` (`toggle`, `getMyHistory`, `getMyFavorites`) + `hooks/tankstack/useInteraction.ts` (`useToggleInteraction` optimistic + `useMyFavorites`) — **rút sớm từ Phase 3**
+- [x] Tạo `components/movie/movie-row.tsx` + `MovieRowSkeleton` — **1 hàng ngang** responsive (2 phim mobile → 6 phim desktop), ẩn scrollbar, scroll-snap, nút cuộn trái/phải (desktop)
+- [x] `globals.css` thêm utility `no-scrollbar` (Tailwind v4 `@utility`)
+- [x] Trang chủ: các section danh sách (Dành cho bạn, Mới nhất, Xem nhiều, Đánh giá cao, Sắp ra mắt) chuyển sang `MovieRow`; bỏ khoảng trắng của `Card` (`py-6`) ở hero
+
 ### Ghi chú triển khai Phase 1 (2026-10-17)
 
 - **Lệch nhỏ so với plan**: `useGetMovies` dùng `queryKey: ['movies', page, limit, keyword]` (primitive) thay vì `['movies', params]` để tuân thủ `FRONTEND_RULES.md` (không đặt object trong queryKey).
@@ -73,23 +82,67 @@
 
 ---
 
+## Phase 1.5 — Base layout shell responsive (fix scroll ngang + nav mobile + header/footer site info)
+
+**Mục tiêu**: Shell người dùng (`UserLayout`) responsive và đúng chuẩn base: không scroll ngang toàn trang, có bottom nav cho màn hình nhỏ, header có dropdown user (route/tính năng) dùng được cả mobile & desktop, và footer thông tin website (about/contact/social/chính sách).
+
+> Đặt ngay sau Phase 1 (base) trong tài liệu vì đây là phần nền tảng bị thiếu; do Phase 1–2 đã đóng nên các task này được làm mới ở phase riêng.
+
+- [x] **Fix lỗi scroll ngang toàn trang ở trang chủ**: đổi content wrapper trong `UserLayout.tsx` từ `flex` → block (`mx-auto w-full max-w-7xl min-w-0 flex-1`) + thêm `min-w-0` cho `SidebarInset` — loại bỏ min-width:auto của flex item khiến overflow nội bộ (hàng `MovieRow`) lan ra toàn trang
+- [x] Tạo `components/layout/user-header.tsx` — header user: `SidebarTrigger` (chỉ `md+`, mobile dùng bottom nav), logo/link về `/`, toggle theme, `UserMenu` (dropdown user) — styled sẵn, dùng cho mọi trang `(main)`
+- [x] Tạo `components/layout/user-menu.tsx` — dropdown nội dung user tái sử dụng: thông tin tài khoản, Trang chủ, Phim, Hồ sơ, Thông báo, Dashboard (nếu ADMIN), Đăng nhập (guest) / Đăng xuất; **`nav-user.tsx` (sidebar) tái sử dụng `UserMenuContent`**, không duplicate logic
+- [x] Tạo `components/layout/mobile-bottom-nav.tsx` — bottom nav cố định `md:hidden`, safe-area (`env(safe-area-inset-bottom)`), item active theo pathname; guest: Trang chủ/Phim/Đăng nhập; user: + Thông báo, Tài khoản → `/profile`
+- [x] Tạo `components/layout/site-footer.tsx` — footer site-wide: giới thiệu ngắn, link nhanh (Trang chủ/Phim), Về chúng tôi/Liên hệ, Chính sách bảo mật/Điều khoản, social icons, copyright
+- [x] Tạo trang tĩnh `(main)/{about,contact,privacy,terms}/page.tsx` (server component, dùng `PageHeader`, nội dung tiếng Việt) — không bịa thông tin liên hệ thật, để placeholder cho chủ website điền
+- [x] Cập nhật `UserLayout.tsx`: `UserHeader` + wrapper `min-w-0` + `SiteFooter` + `MobileBottomNav`; `SidebarInset` thêm `pb-16 md:pb-0` (chừa chỗ bottom nav)
+- [x] Verify `npx --no-install tsc --noEmit` không phát sinh lỗi mới; cập nhật `docs/FRONTEND.md` (layout components + routes mới)
+
+### Mở rộng Phase 1.5 — Ô tìm kiếm kiểu YouTube trong header + fix glassmorphism (2026-10-18)
+
+- [x] Tạo `components/layout/header-search.tsx` — ô tìm kiếm kiểu YouTube: desktop (`md+`) hiện input inline trong header (icon Search + input bo tròn + nút submit); mobile hiện icon tìm kiếm, bấm để **mở rộng input ra toàn hàng header** (autoFocus, nút đóng); submit → `/movies?keyword=…`
+- [x] Sửa `movie-list.tsx` + `movies/page.tsx` — đọc `?keyword=` từ URL seed vào filter store **và re-seed khi URL đổi** (trước đây chỉ seed 1 lần khi mount → search từ header trên chính trang `/movies` không có tác dụng)
+- [x] Sửa `movie-filters.tsx` — đồng bộ `keywordInput` khi store keyword thay đổi từ bên ngoài (URL seed); **bug tiềm ẩn**: debounce 400ms của filter đang ghi đè keyword vừa seed từ URL (input local rỗng ≠ store keyword → tự setFilter ngược lại)
+- [x] Fix glassmorphism "giả" ở header: `bg-sidebar` (opaque) + `backdrop-blur-md` = blur **vô hiệu** (blur chỉ hiệu lực khi nền trong suốt) → chuyển `bg-sidebar/75 backdrop-blur-md` (user header + className của `AdminLayout` đang truyền cho admin-header)
+
+- **API dùng**: không gọi API mới — chỉ UI shell (dùng `useAuthStore` cho trạng thái đăng nhập)
+- **File dự kiến tạo**: `src/components/layout/{user-header,user-menu,mobile-bottom-nav,site-footer}.tsx`, `src/app/(main)/{about,contact,privacy,terms}/page.tsx`
+- **File dự kiến sửa**: `src/components/layout/UserLayout.tsx`, `src/components/sidebar/nav-user.tsx`, `docs/FRONTEND.md`
+
+### Ghi chú triển khai Phase 1.5 (2026-10-18)
+
+- **Nguyên nhân scroll ngang**: `UserLayout` bọc trang trong flex row (`mx-auto flex w-full max-w-7xl flex-1`) — trang chủ (`w-full`) là flex item có `min-width: auto` theo mặc định, nên không co xuống dưới min-content (mọi hàng `MovieRow` với 12 card) → overflow nội bộ bị đẩy ra ngoài, **toàn trang cuộn ngang thay vì từng hàng phim cuộn**. Chuyển wrapper sang block flow + `min-w-0` cho các flex item (wrapper, `SidebarInset`) là fix chuẩn.
+- Bottom nav chỉ link **route đang tồn tại** (`/`, `/movies`, `/notification`, `/profile`, `/auth/login`); `/search`, `/recommendations`, `/my-history`, `/my-favorites` chưa có page → không đưa vào nav/footer (tránh 404). **Lỗi có sẵn (ngoài phạm vi phase này)**: trang chủ đang link `/search` và `/recommendations` → 404 (chờ Phase 4 / bổ sung trang).
+- Social links trong footer là placeholder `#` + constant `SOCIAL_LINKS` ở đầu file — chủ website tự điền URL thật.
+
+---
+
 ## Phase 2 — Chi tiết phim `/movies/[id]`
 
 **Mục tiêu**: Trang chi tiết phim có thông tin, đánh giá sao, bình luận phân cấp realtime, view count realtime và khu vực phim tương đồng.
 
-- [ ] Tạo `frontend/src/app/(main)/movies/[id]/page.tsx` (params là **string**, parse sang number; gọi `POST /movies/:id/view` khi mount) + `loading.tsx`
-- [ ] Tạo `frontend/src/components/movie/movie-detail.tsx` (poster `aspect-[2/3]`, `title`/`titleVi`, `overview`/`overviewVi` qua `react-markdown`, thể loại, quốc gia, `releaseDate`, `runtime` nếu có)
-- [ ] Tạo `frontend/src/components/movie/movie-rating.tsx` — chọn sao (0–5) + submit `POST /api/ratings` (`{ rating, movieId }`), hiển thị `voteAverage`/`voteCount`, cập nhật realtime qua WS `movie-{id}-rating` (`movieStats`)
-- [ ] Tạo `frontend/src/components/movie/movie-comments.tsx` — root comments (`GET /api/comments/movie/:movieId?page&limit`), tải reply theo `parentId`, form gửi `POST /api/comments` (`{ content, movieId, parentId? }`), phân trang theo `pagination`, hiển thị `replyCount`
-- [ ] Tạo `frontend/src/components/movie/movie-view-count.tsx` — hiển thị lượt xem từ `{ viewCount }`, cập nhật realtime qua WS `movie-{id}-viewCount`
-- [ ] Tạo `frontend/src/components/movie/similar-movies.tsx` — **để trống/placeholder** vì backend không có endpoint phim tương đồng (thuộc ai-service, xem Rủi ro)
-- [ ] Tạo `frontend/src/hooks/tankstack/useRating.ts` (`['ratings', movieId]` + mutation invalidate)
-- [ ] Tạo `frontend/src/hooks/tankstack/useComment.ts` (`['comments', movieId]` + mutation invalidate, optimistic khi gửi)
-- [ ] Tạo `frontend/src/hooks/useMovieSocket.ts` — kết nối `socket.io-client` tới `:8081`, lắng nghe `movie-{id}-comment`, `movie-{id}-rating`, `movie-{id}-viewCount`, `movie-{id}-typing`; **emit `typingComment`** `{ movieId, isTyping, userFullName? }`; cleanup khi unmount
-- [ ] Thêm trạng thái "đang gõ…" (typing) và hiệu ứng cập nhật realtime (transition nhẹ)
+- [x] Tạo `frontend/src/app/(main)/movies/[id]/page.tsx` (server component — `params` là **Promise** phải `await`; container `movie-detail-view.tsx` gọi `POST /movies/:id/view` 1 lần khi mount, ref-guard chống DoubleInvoke) + `loading.tsx`
+- [x] Tạo `frontend/src/components/movie/movie-detail.tsx` (poster `aspect-[2/3]`, `title`/`titleVi`, `overview`/`overviewVi` qua `react-markdown`, thể loại, quốc gia, `releaseDate`)
+- [x] Tạo `frontend/src/components/movie/movie-rating.tsx` — chọn sao 1–5 + submit `POST /api/ratings` (`{ rating, movieId }`), hiển thị `voteAverage`/`voteCount`, cập nhật realtime qua WS `movie-{id}-rating` (`movieStats`)
+- [x] Tạo `frontend/src/components/movie/movie-comments.tsx` — root comments (`GET /api/comments/movie/:movieId?page&limit`), tải reply theo `parentId`, form gửi `POST /api/comments` (`{ content, movieId, parentId? }`), phân trang bằng `DataPagination`, hiển thị `replyCount`, tái sử dụng `Textarea`/`Input`/`Avatar` shadcn
+- [x] Tạo `frontend/src/components/movie/movie-view-count.tsx` — hiển thị lượt xem từ `{ viewCount }`, cập nhật realtime qua WS `movie-{id}-viewCount`
+- [x] Tạo `frontend/src/components/movie/similar-movies.tsx` — **placeholder** (chưa có endpoint phim tương đồng; hiển thị giải thích + link khám phá theo thể loại của phim)
+- [x] Tạo `frontend/src/hooks/tankstack/useRating.ts` (`['ratings', movieId]` + mutation invalidate `['ratings']`/`['movie']`/`['movies']`)
+- [x] Tạo `frontend/src/hooks/tankstack/useComment.ts` (`['comments', movieId]` + mutation invalidate, optimistic prepend khi gửi, rollback `onError`)
+- [x] Tạo `frontend/src/hooks/useMovieSocket.ts` — kết nối `socket.io-client` (URL derive từ `NEXT_PUBLIC_API_BASE_URL`, **không hardcode cổng**), lắng nghe `movie-{id}-comment`, `movie-{id}-rating`, `movie-{id}-viewCount`, `movie-{id}-typing`; **emit `typingComment`** `{ movieId, isTyping, userFullName? }`; handler giữ ref, cleanup khi unmount
+- [x] Thêm trạng thái "đang gõ…" (typing realtime, debounce 2s) và hiệu ứng cập nhật realtime (star preview, transition card)
 
 - **API dùng**: `GET /api/movies/:id`, `POST /api/movies/:id/view`, `POST /api/ratings`, `GET /api/ratings/movie/:movieId?page&limit`, `GET /api/comments/movie/:movieId?page&limit&parentId`, `POST /api/comments`; Socket.IO: nhận `movie-{id}-comment`, `movie-{id}-rating`, `movie-{id}-viewCount`, `movie-{id}-typing`; gửi `typingComment`
-- **File dự kiến tạo**: `src/app/(main)/movies/[id]/page.tsx` + `loading.tsx`, `src/components/movie/{movie-detail,movie-rating,movie-comments,movie-view-count,similar-movies}.tsx`, `src/hooks/tankstack/{useRating,useComment}.ts`, `src/hooks/useMovieSocket.ts`
+
+### Ghi chú triển khai Phase 2 (2026-10-17)
+
+- **Lệch nhỏ so với plan**: Next.js 16 bắt buộc `params` là **Promise** → `page.tsx` là server component `await params` rồi truyền `id` sang container client `movie-detail-view.tsx` (plan ghi "parse sang number" — giữ nguyên string theo type `number | string` của API, tránh ép kiểu vô ích).
+- **Mở rộng ngoài danh sách file**: thêm `src/apis/{rating,comment}.api.ts`, `src/shared/types/{rating,comment}.types.ts` (types tách khỏi `BaseDto` vì `createdAt` từ server là `string`, không phải `Date`); thêm `movie-detail-view.tsx` (container fetch + tăng view + layout 4 khối).
+- **URL Socket.IO** derive từ `NEXT_PUBLIC_API_BASE_URL` (bỏ hậu tố `/api`) — không hardcode `:8081` (tuân thủ rule env).
+- **Không dùng class `prose`** cho `react-markdown` vì repo không cài `@tailwindcss/typography` → style markdown bằng arbitrary variant (`[&_p]:mb-2`, `[&_li]:list-disc`…).
+- **Rating submit lại**: backend unique (user, movie) — submit lần 2 trả lỗi → hiển thị message server qua toast (không tự thay đổi logic backend).
+- **`similar-movies`**: placeholder có chủ đích (backend chưa có endpoint); hiển thị giải thích + link khám phá theo thể loại — không bịa dữ liệu.
+- **Chặn DoD**: vẫn là 4 lỗi baseline cũ (`api/auth/signup/route.ts` ×2, `ui/calendar.tsx`, `ui/drawer.tsx`) — `tsc --noEmit` không phát sinh lỗi mới cho toàn bộ code Phase 2.
+- **File dự kiến tạo**: `src/app/(main)/movies/[id]/page.tsx` + `loading.tsx`, `src/components/movie/{movie-detail,movie-detail-view,movie-rating,movie-comments,movie-view-count,similar-movies}.tsx`, `src/hooks/tankstack/{useRating,useComment}.ts`, `src/hooks/useMovieSocket.ts`, thêm `src/shared/types/{rating,comment}.types.ts` + `src/apis/{rating,comment}.api.ts`
 
 ---
 
@@ -97,9 +150,9 @@
 
 **Mục tiêu**: User xem được lịch sử xem / phim yêu thích và toggle các tương tác (like/dislike/favorite/watchlist) với optimistic update.
 
-- [ ] Tạo `frontend/src/apis/interaction.api.ts` (`toggle`, `getMyHistory`, `getMyFavorites`)
-- [ ] Tạo `frontend/src/hooks/tankstack/useInteraction.ts` — `useToggleInteraction` (đọc `result.action` = `added`/`removed`, optimistic update + rollback `onError`), `useMyHistory`, `useMyFavorites`
-- [ ] Tạo `frontend/src/components/movie/movie-actions.tsx` — nút like/dislike/favorite/watchlist (icon lucide, touch target ≥44px)
+- [ ] Tạo `frontend/src/apis/interaction.api.ts` (`toggle`, `getMyHistory`, `getMyFavorites`) — ✅ `toggle` + `getMyFavorites` đã rút lên Phase 1 (card actions); còn `getMyHistory` làm ở Phase 3
+- [ ] Tạo `frontend/src/hooks/tankstack/useInteraction.ts` — `useToggleInteraction` (đọc `result.action` = `added`/`removed`, optimistic update + rollback `onError`), `useMyHistory`, `useMyFavorites` — ✅ `useToggleInteraction` + `useMyFavorites` đã rút lên Phase 1; còn `useMyHistory` làm ở Phase 3
+- [ ] Tạo `frontend/src/components/movie/movie-actions.tsx` — nút like/dislike/favorite/watchlist (icon lucide, touch target ≥44px) — ✅ đã rút lên Phase 1 (like/favorite/watchlist trên card; `dislike` thêm khi làm chi tiết phim)
 - [ ] Gắn `movie-actions` vào `movie-card.tsx` và trang chi tiết phim
 - [ ] Tạo trang lịch sử xem `frontend/src/app/(main)/my-history/page.tsx` (list + phân trang + loading/empty state)
 - [ ] Tạo trang yêu thích `frontend/src/app/(main)/my-favorites/page.tsx` (list + phân trang + loading/empty state)

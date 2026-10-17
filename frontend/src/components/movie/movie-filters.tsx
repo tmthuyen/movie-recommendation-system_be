@@ -1,7 +1,7 @@
 'use client';
 
 import { Search, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -32,6 +32,17 @@ export function MovieFilters() {
   const resetFilter = useMovieFilterStore((state) => state.resetFilter);
 
   const [keywordInput, setKeywordInput] = useState(keyword);
+
+  // Đồng bộ khi store keyword thay đổi **từ bên ngoài** (vd. seed từ URL nhờ ô tìm
+  // kiếm header) — nếu không, debounce bên dưới sẽ ghi đè keyword vừa seed bằng giá
+  // trị input local cũ (rỗng) trong 400ms → tìm kiếm mất tác dụng.
+  const prevKeyword = useRef(keyword);
+  useEffect(() => {
+    if (keyword !== prevKeyword.current) {
+      prevKeyword.current = keyword;
+      setKeywordInput(keyword);
+    }
+  }, [keyword]);
 
   // Debounce keyword ~400ms để tránh gọi API và đụng rate limit.
   useEffect(() => {

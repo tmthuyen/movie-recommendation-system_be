@@ -26,8 +26,12 @@ Tài liệu này quy định các quy tắc **bắt buộc** khi viết/sửa co
 - Icon → **lucide-react**; **cấm dùng emoji làm icon** trong UI.
 - Đăng nhập Google → `@react-oauth/google`; biểu đồ admin → `recharts`; realtime → `socket.io-client` (chỉ dùng khi backend đã có event tương ứng).
 
-## 3. UI / style
+## 3. UI / style — Tailwind CSS v4 + shadcn/ui (bắt buộc)
 
+- **UI stack bắt buộc**: mọi giao diện mới phải dựng từ component **shadcn/ui** (`src/components/ui`) + utility **Tailwind CSS v4** — không viết giao diện bằng inline style, không tạo "div thuần + CSS tay" khi shadcn đã có component tương đương (Button, Card, Dialog, DropdownMenu, Select, Sheet, Table, Sidebar…).
+- Component shadcn chưa có → thêm vào `src/components/ui` theo đúng cấu trúc style **`new-york`** của `components.json` (`npx shadcn add <component>` hoặc tạo file cùng pattern) — **không** đặt trong folder domain và không nhân bản sang nhiều nơi.
+- Trước khi tạo component UI mới phải **kiểm tra tái sử dụng** theo thứ tự: `src/components/common` (UI kit: PageHeader, SectionHeader, EmptyState, ErrorState, DataPagination…) → `src/components/ui` (shadcn) → component domain sẵn có. **Không duplicate** cùng một UI ở nhiều domain (mỗi domain tự viết code UI riêng = hỏng).
+- Dùng đúng `variant`/`size` có sẵn của component shadcn; cần biến thể thì mở rộng bằng `cn(...)`/props, không copy toàn bộ file component ra để sửa.
 - Component shadcn sinh bằng style **`new-york`** theo `components.json`; không đổi style/baseColor toàn cục khi chưa hỏi developer.
 - Dark mode là **class-based** qua `next-themes` (`attribute="class"`, class `.dark`) — không tự thêm cơ chế theme khác.
 - Mọi màu sắc phải dùng **design token trong `src/app/globals.css`** qua CSS variable/Tailwind semantic class (`bg-background`, `text-foreground`, `border-border`, `bg-primary`…) — **cấm hardcode hex** trong component.
@@ -35,6 +39,8 @@ Tài liệu này quy định các quy tắc **bắt buộc** khi viết/sửa co
 - Toàn bộ text hiển thị cho người dùng phải là **tiếng Việt** (kể cả `metadata.title/description`, empty state, nhãn nút, thông báo lỗi).
 - Typography theo các class đang dùng trong project (`text-3xl font-extrabold` cho tiêu đề trang, `text-gray-500 dark:text-gray-400` cho mô tả) — không tự ý tạo scale mới.
 - Bo góc dùng `--radius` (0.625rem) qua class `rounded-lg/md/sm`, không hardcode `rounded-[10px]`.
+- Component/trang mới phải kiểm tra cả **light & dark mode** và **width 375px** trước khi nhận là xong.
+- Glassmorphism/`backdrop-blur`: chỉ dùng khi nền **trong suốt** (vd. `bg-sidebar/75 backdrop-blur-md`) — **không** ghép `backdrop-blur-*` với nền opaque (blur bị vô hiệu, "glass giả").
 
 ## 4. Đa màn hình (responsive)
 

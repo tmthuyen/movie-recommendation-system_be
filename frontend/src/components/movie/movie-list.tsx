@@ -13,9 +13,10 @@ import { MovieGrid, MovieGridSkeleton } from './movie-grid';
 interface MovieListProps {
   initialGenreId?: string;
   initialCountryId?: string;
+  initialKeyword?: string;
 }
 
-export function MovieList({ initialGenreId, initialCountryId }: MovieListProps) {
+export function MovieList({ initialGenreId, initialCountryId, initialKeyword }: MovieListProps) {
   const keyword = useMovieFilterStore((state) => state.keyword);
   const genreId = useMovieFilterStore((state) => state.genreId);
   const countryId = useMovieFilterStore((state) => state.countryId);
@@ -25,19 +26,40 @@ export function MovieList({ initialGenreId, initialCountryId }: MovieListProps) 
   const setPage = useMovieFilterStore((state) => state.setPage);
   const setFilter = useMovieFilterStore((state) => state.setFilter);
 
-  // Seed bộ lọc từ URL (chỉ một lần khi mount, ví dụ `/movies?genre=28`).
+  // Seed bộ lọc từ URL (ví dụ `/movies?genre=28&keyword=avengers`).
+  // Seed lại khi URL đổi (vd. submit tìm kiếm từ header ngay trên trang /movies) —
+  // không chỉ khi mount, vì cùng route không remount.
   const isSeeded = useRef(false);
+  const lastSeed = useRef({
+    genre: initialGenreId,
+    country: initialCountryId,
+    keyword: initialKeyword,
+  });
   useEffect(() => {
-    if (isSeeded.current) return;
-    isSeeded.current = true;
+    const changed =
+      lastSeed.current.genre !== initialGenreId ||
+      lastSeed.current.country !== initialCountryId ||
+      lastSeed.current.keyword !== initialKeyword;
 
-    const initial: { genreId?: string; countryId?: string } = {};
+    if (!isSeeded.current) {
+      isSeeded.current = true;
+    } else if (!changed) {
+      return;
+    }
+    lastSeed.current = {
+      genre: initialGenreId,
+      country: initialCountryId,
+      keyword: initialKeyword,
+    };
+
+    const initial: { genreId?: string; countryId?: string; keyword?: string } = {};
     if (initialGenreId) initial.genreId = initialGenreId;
     if (initialCountryId) initial.countryId = initialCountryId;
+    if (initialKeyword) initial.keyword = initialKeyword;
     if (Object.keys(initial).length > 0) {
       setFilter(initial);
     }
-  }, [initialGenreId, initialCountryId, setFilter]);
+  }, [initialGenreId, initialCountryId, initialKeyword, setFilter]);
 
   const { data, isLoading, isError, isFetching, refetch } = useMovie.useGetMovies({
     page,

@@ -53,21 +53,24 @@ Dưới đây là quy ước chung cơ bản. Chi tiết các quy ước code (R
 ## Quy trình của agent
 
 - Khi nhận task/yêu cầu, agent **phải lập plan và lưu vào `docs/plans/`** trước khi triển khai.
-  - Đặt tên theo version + phạm vi: `V{n}_{scope}_{slug}.md` với `scope` ∈ `frontend` | `backend` | `ai`
-    (vd: `V11_frontend_ui-roadmap.md`, `V12_backend_docs-api-update.md`),
-  - tiêu đề `# V{n} — <mô tả>`,
-  - ghi trạng thái,
-  - người thực hiện & thời gian thực hiện,
-  - Các module được sửa hoặc liên quan,
-  - phạm vi — theo mẫu `docs/plans/V1_backend-plan.md`.
+  - Đặt tên file plan theo định dạng: `V{index}_{scope}_{task_name}.md`
+    - `{index}`: số thứ tự liên tục (integer), bắt đầu từ 0. Chỉ số được đánh số tuần tự dựa trên toàn bộ plans đã có trong `docs/plans/` (xem `PLAN_INDEX.md` để tra cứu index hiện tại và next index).
+    - `{scope}`: phải thuộc enum `backend` | `frontend` | `cicd` | `ai` (thêm `cicd` vào scope enum). Lưu ý: các plan cũ có thể dùng `ai-service` trong slug nhưng scope được chuẩn hoá thành `ai` khi đặt tên mới.
+    - `{task_name}`: tên task dạng slug (lowercase, dùng dấu `-` thay khoảng trắng), mô tả ngắn gọn công việc.
+    - Ví dụ: `V0_init-plan.md`, `V1_cicd_ci-cd-split-workflows.md`, `V2_backend_retrieval-target-validation.md`, `V3_backend_retrieval-api.md`
+  - Tiêu đề trong file: `# V{index} — <mô tả>`
+  - Phải ghi đầy đủ: trạng thái, người thực hiện & thời gian thực hiện, các module được sửa hoặc liên quan, phạm vi (theo mẫu `docs/plans/V1_backend-plan.md`).
+  - Khi tạo plan mới, agent **phải cập nhật `docs/plans/PLAN_INDEX.md`** để ghi lại mapping file ↔ index ↔ scope ↔ mô tả và tính toán `next_index = max(index)+1`.
+  - Khi phát hiện sai số thứ tự (index trùng lặp, thiếu liên tục), cần đề xuất sắp xếp lại tên file theo thứ tự hợp lý, **chỉ thực hiện rename sau khi có xác nhận từ người dùng** và đồng thời cập nhật `PLAN_INDEX.md` tương ứng.
 
 - Các task trong plan phải mô tả rõ ràng và chia nhỏ thành phase hay subtask viết rõ trong plan đó để thực hiện. Đánh dấu tiến độ đã hoàn thành hay chưa
+- Khi làm việc với scope `cicd`, ưu tiên tạo nhánh Git có prefix `cicd/` (ví dụ: `cicd/split-workflows`, `cicd/update-deploy-action`).
 
 ## Tài liệu tham chiếu
 
 ### Plans
 
-Đây là các tài liệu mô tả kế hoạch triển khai, **agent được phép sửa** khi có yêu cầu. Thêm mới khi có task mới. Quản lý phiên bản và tên plan theo quy ước `V{n}_{scope}_{slug}.md` với `scope` ∈ `frontend` | `backend` | `ai` (V1, V2, … Vn). Tiêu đề `# V{n} — <mô tả>`; ghi trạng thái, người thực hiện, phạm vi.
+Đây là các tài liệu mô tả kế hoạch triển khai, **agent được phép sửa** khi có yêu cầu. Thêm mới khi có task mới. Quản lý tên file plan theo định dạng `V{index}_{scope}_{task_name}.md` với `scope` ∈ `backend` | `frontend` | `cicd` | `ai`. Index là số thứ tự liên tục (0,1,2,...), bắt đầu từ 0. Tiêu đề trong file: `# V{index} — <mô tả>`. Phải cập nhật `docs/plans/PLAN_INDEX.md` khi thêm/sửa/xoá hoặc đổi tên plan. Xem chi tiết quy trình tại mục "Quy trình của agent".
 
 ### Docs cho ai-service
 
