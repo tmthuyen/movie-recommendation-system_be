@@ -1,15 +1,19 @@
-import { genreApi } from '@/apis/genre.api';
+import { genreApi, GenreQuery } from '@/apis/genre.api';
 import { parseAxiosError } from '@/lib/axiosClient';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import React from 'react';
 import { toast } from 'sonner';
 
 // get all
-export function useGetAll(staleTime: number = 1000 * 60 * 5, gcTime: number = 1000 * 60 * 10) {
+export function useGetAll(
+  params: GenreQuery = {},
+  staleTime: number = 1000 * 60 * 5,
+  gcTime: number = 1000 * 60 * 10
+) {
+  const { page, limit, keyword } = params;
   return useQuery({
-    queryKey: ['genres'],
+    queryKey: ['genres', page, limit, keyword],
     queryFn: async () => {
-      const response = await genreApi.getAll();
+      const response = await genreApi.getAll(params);
       return response.result;
     },
     staleTime: staleTime, // 5 minutes

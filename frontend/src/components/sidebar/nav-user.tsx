@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronsUpDown, LogOut, User } from 'lucide-react';
+import { ChevronsUpDown, Film, Home, LogIn, LogOut, User } from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -18,22 +18,35 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar';
+import { useAuthStore } from '@/stores/auth.store';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/hooks/useAuth';
-import { useAuthStore } from '@/stores/auth.store';
 
 export function NavUser() {
   const router = useRouter();
   const { isMobile } = useSidebar();
   const user = useAuthStore((state) => state.user);
 
-  if (!user) return <>Chưa có người dùng</>;
-
   const handleLogout = async () => {
     await useAuthStore.getState().logout();
     router.push('/auth/login');
   };
+
+  // Guest: chỉ hiển thị nút đăng nhập.
+  if (!user) {
+    return (
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton asChild size="lg" className="cursor-pointer">
+            <Link href="/auth/login">
+              <LogIn />
+              <span>Đăng nhập</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    );
+  }
 
   return (
     <SidebarMenu className="">
@@ -75,6 +88,14 @@ export function NavUser() {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
+              <DropdownMenuItem className="cursor-pointer transition-transform hover:scale-105">
+                <Home className="focus:text-primary mr-2 h-4 w-4" />
+                <Link href="/">Trang chủ</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem className="cursor-pointer transition-transform hover:scale-105">
+                <Film className="focus:text-primary mr-2 h-4 w-4" />
+                <Link href="/movies">Phim</Link>
+              </DropdownMenuItem>
               <DropdownMenuItem className="cursor-pointer transition-transform hover:scale-105">
                 <User className="focus:text-primary mr-2 h-4 w-4" />
                 <Link href="/profile">Hồ sơ</Link>

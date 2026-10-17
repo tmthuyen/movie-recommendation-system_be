@@ -10,11 +10,12 @@ export interface ApiPaginatedResponse<T = any> extends ApiResponse<T> {
   pagination: Pagination;
 }
 
+/** Khớp payload `pagination` của backend: `{ total, page, limit, totalPages }`. */
 export interface Pagination {
-  totalItems: number;
+  total: number;
+  page: number;
+  limit: number;
   totalPages: number;
-  currentPage: number;
-  pageSize: number;
 }
 
 export type ApiErrorResponse = {

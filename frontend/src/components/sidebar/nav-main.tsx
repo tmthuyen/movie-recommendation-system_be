@@ -1,25 +1,20 @@
 'use client';
 
 import {
-  BarChart2,
   BarChart4,
   Bell,
   Clock,
   ContactRound,
   Film,
   Flag,
-  Gamepad,
   Heart,
   Home,
-  List,
-  ListCheck,
   MessageSquare,
   Palette,
-  RollerCoaster,
   Star,
-  Swords,
   Tag,
   UsersRound,
+  type LucideIcon,
 } from 'lucide-react';
 
 import {
@@ -29,10 +24,37 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { useAuthStore } from '@/stores/auth.store';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+interface NavItem {
+  title: string;
+  url: string;
+  icon: LucideIcon;
+}
+
+interface NavSectionData {
+  groupLabel: string;
+  items: NavItem[];
+}
+
 const dataBar = {
+  user: {
+    groupLabel: 'Khám phá',
+    items: [
+      {
+        title: 'Trang chủ',
+        url: '/',
+        icon: Home,
+      },
+      {
+        title: 'Phim',
+        url: '/movies',
+        icon: Film,
+      },
+    ],
+  },
   learning: {
     groupLabel: 'Dashboard',
     items: [
@@ -128,141 +150,64 @@ const dataBar = {
       },
     ],
   },
-};
+} satisfies Record<string, NavSectionData>;
 
-export function UserNavMain() {
+function isActivePath(pathname: string, url: string) {
+  if (url === '/') return pathname === '/';
+  return pathname === url || pathname.startsWith(`${url}/`);
+}
+
+function NavSection({ groupLabel, items }: NavSectionData) {
   const pathname = usePathname();
 
   return (
-    <div>
-      <SidebarGroup>
-        <SidebarGroupLabel>{dataBar.settings.groupLabel}</SidebarGroupLabel>
-        <SidebarMenu>
-          {dataBar.settings.items.map((it) => (
-            <SidebarMenuItem key={it.title}>
+    <SidebarGroup>
+      <SidebarGroupLabel>{groupLabel}</SidebarGroupLabel>
+      <SidebarMenu>
+        {items.map((item) => {
+          const active = isActivePath(pathname, item.url);
+          return (
+            <SidebarMenuItem key={item.title}>
               <SidebarMenuButton
                 asChild
                 className={`${
-                  pathname === it.url ? 'bg-accent text-accent-foreground dark:bg-accent/40' : ''
+                  active ? 'bg-accent text-accent-foreground dark:bg-accent/40' : ''
                 } hover:bg-accent/70 dark:hover:bg-accent/40 hover:text-accent-foreground cursor-pointer transition-transform hover:scale-105`}
               >
-                <Link href={it.url}>
-                  <it.icon />
-                  <span>{it.title}</span>
+                <Link href={item.url}>
+                  <item.icon />
+                  <span>{item.title}</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </SidebarGroup>
+          );
+        })}
+      </SidebarMenu>
+    </SidebarGroup>
+  );
+}
+
+export function UserNavMain() {
+  const user = useAuthStore((state) => state.user);
+
+  return (
+    <div>
+      <NavSection groupLabel={dataBar.user.groupLabel} items={dataBar.user.items} />
+      {user && (
+        <NavSection groupLabel={dataBar.settings.groupLabel} items={dataBar.settings.items} />
+      )}
     </div>
   );
 }
-export function NavMain() {
-  const pathname = usePathname();
 
+export function NavMain() {
   return (
     <div>
-      <SidebarGroup>
-        <SidebarGroupLabel>{dataBar.learning.groupLabel}</SidebarGroupLabel>
-        <SidebarMenu>
-          {dataBar.learning.items.map((it) => (
-            <SidebarMenuItem key={it.title}>
-              <SidebarMenuButton
-                asChild
-                className={`${
-                  pathname === it.url ? 'bg-accent text-accent-foreground dark:bg-accent/40' : ''
-                } hover:bg-accent/70 dark:hover:bg-accent/40 hover:text-accent-foreground cursor-pointer transition-transform hover:scale-105`}
-              >
-                <Link href={it.url}>
-                  <it.icon />
-                  <span>{it.title}</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </SidebarGroup>
-      <SidebarGroup>
-        <SidebarGroupLabel>{dataBar.auth.groupLabel}</SidebarGroupLabel>
-        <SidebarMenu>
-          {dataBar.auth.items.map((it) => (
-            <SidebarMenuItem key={it.title}>
-              <SidebarMenuButton
-                asChild
-                className={`${
-                  pathname === it.url ? 'bg-accent text-accent-foreground dark:bg-accent/40' : ''
-                } hover:bg-accent/70 dark:hover:bg-accent/40 hover:text-accent-foreground cursor-pointer transition-transform hover:scale-105`}
-              >
-                <Link href={it.url}>
-                  <it.icon />
-                  <span>{it.title}</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </SidebarGroup>
-      <SidebarGroup>
-        <SidebarGroupLabel>{dataBar.admin.groupLabel}</SidebarGroupLabel>
-        <SidebarMenu>
-          {dataBar.admin.items.map((it) => (
-            <SidebarMenuItem key={it.title}>
-              <SidebarMenuButton
-                asChild
-                className={`${
-                  pathname === it.url ? 'bg-accent text-accent-foreground dark:bg-accent/40' : ''
-                } hover:bg-accent/70 dark:hover:bg-accent/40 hover:text-accent-foreground cursor-pointer transition-transform hover:scale-105`}
-              >
-                <Link href={it.url}>
-                  <it.icon />
-                  <span>{it.title}</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </SidebarGroup>
-      <SidebarGroup>
-        <SidebarGroupLabel>{dataBar.interaction.groupLabel}</SidebarGroupLabel>
-        <SidebarMenu>
-          {dataBar.interaction.items.map((it) => (
-            <SidebarMenuItem key={it.title}>
-              <SidebarMenuButton
-                asChild
-                className={`${
-                  pathname === it.url ? 'bg-accent text-accent-foreground dark:bg-accent/40' : ''
-                } hover:bg-accent/70 dark:hover:bg-accent/40 hover:text-accent-foreground cursor-pointer transition-transform hover:scale-105`}
-              >
-                <Link href={it.url}>
-                  <it.icon />
-                  <span>{it.title}</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </SidebarGroup>
-      <SidebarGroup>
-        <SidebarGroupLabel>{dataBar.settings.groupLabel}</SidebarGroupLabel>
-        <SidebarMenu>
-          {dataBar.settings.items.map((it) => (
-            <SidebarMenuItem key={it.title}>
-              <SidebarMenuButton
-                asChild
-                className={`${
-                  pathname === it.url ? 'bg-accent text-accent-foreground dark:bg-accent/40' : ''
-                } hover:bg-accent/70 dark:hover:bg-accent/40 hover:text-accent-foreground cursor-pointer transition-transform hover:scale-105`}
-              >
-                <Link href={it.url}>
-                  <it.icon />
-                  <span>{it.title}</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </SidebarGroup>
+      <NavSection groupLabel={dataBar.learning.groupLabel} items={dataBar.learning.items} />
+      <NavSection groupLabel={dataBar.auth.groupLabel} items={dataBar.auth.items} />
+      <NavSection groupLabel={dataBar.admin.groupLabel} items={dataBar.admin.items} />
+      <NavSection groupLabel={dataBar.interaction.groupLabel} items={dataBar.interaction.items} />
+      <NavSection groupLabel={dataBar.settings.groupLabel} items={dataBar.settings.items} />
     </div>
   );
 }

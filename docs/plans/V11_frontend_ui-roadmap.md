@@ -1,6 +1,6 @@
 # V11 — Frontend UI Roadmap (User-facing + Admin CRUD)
 
-- **Trạng thái**: Đang thực hiện (plan đã lập, **chưa triển khai** — toàn bộ task còn `- [ ]`)
+- **Trạng thái**: Đang thực hiện — **Phase 0 (baseline) xong ở mức môi trường**, **Phase 1 (nền tảng + trang chủ + danh sách phim) đã triển khai**; Phase 2–5 còn `- [ ]`. Lưu ý: DoD `lint`/`build` đang bị chặn bởi lỗi baseline có sẵn trong repo (xem "Ghi chú triển khai Phase 1").
 - **Người thực hiện**: AI Agent
 - **Thời gian**: 2026-10-17
 - **Phạm vi**: `frontend/` — xây dựng toàn bộ giao diện user-facing (trang chủ, danh sách phim, chi tiết phim, tương tác cá nhân, semantic search) và khu vực admin CRUD (movies/genres/countries/peoples/users/roles/interaction + dashboard). Không sửa backend/ai-service.
@@ -44,20 +44,28 @@
 
 **Mục tiêu**: Có tầng types/api/hooks cho Movie–Country và hai trang công khai đầu tiên (`/` và `/movies`) hiển thị dữ liệu thật, hỗ trợ guest.
 
-- [ ] Tạo `frontend/src/shared/types/movie.types.ts` (`Movie`, `MovieDetail`, `MovieQuery`, `Country`, `MovieListResult` + page/limit/keyword)
-- [ ] Tạo `frontend/src/apis/movie.api.ts` → `movieApi.getAll/getById/incrementView`
-- [ ] Tạo `frontend/src/apis/country.api.ts` → `countryApi.getAll`
-- [ ] Tạo `frontend/src/hooks/tankstack/useMovie.ts` → `useGetMovies` (`queryKey: ['movies', params]`, staleTime 5 phút), `useGetMovieDetail` (`['movie', id]`), `useIncrementView`
-- [ ] Tạo `frontend/src/hooks/tankstack/useCountry.ts` → `useGetCountries` (`['countries']`, staleTime 5 phút)
-- [ ] Tạo `frontend/src/stores/movie-filter.store.ts` → điền state filter (keyword, genreId, countryId, sort, page, limit + `setFilter`, `resetFilter`); lưu ý filter genre/country hiện **chỉ dùng client-side**
-- [ ] Tạo `frontend/src/components/movie/movie-card.tsx` (poster `aspect-[2/3]`, title, năm, rating)
-- [ ] Tạo `frontend/src/components/movie/movie-grid.tsx` (grid `grid-cols-2 md:grid-cols-4 lg:grid-cols-6`)
-- [ ] Tạo `frontend/src/components/movie/movie-filters.tsx` (input keyword **debounce ~400ms** + sort/lọc thể loại–quốc gia **client-side**, vì `GET /api/movies` hiện chỉ nhận `page/limit/keyword`)
-- [ ] Tạo `frontend/src/components/movie/movie-pagination.tsx` (đọc `pagination` từ envelope: `total/page/limit/totalPages`)
-- [ ] Tạo trang danh sách `frontend/src/app/(main)/movies/page.tsx` + `loading.tsx` (skeleton)
-- [ ] Làm lại trang chủ `frontend/src/app/(main)/(home)/page.tsx` (hero + phim mới nhất + danh sách link thể loại)
-- [ ] Thêm mục điều hướng cho user (Trang chủ, Phim) vào `frontend/src/components/sidebar/nav-main.tsx` / `nav-user.tsx` (icon lucide)
-- [ ] Xử lý trạng thái **guest** trong `frontend/src/components/layout/UserLayout.tsx` (không crash/không trắng trang khi chưa đăng nhập; ẩn mục cần auth)
+- [x] Tạo `frontend/src/shared/types/movie.types.ts` (`Movie`, `MovieDetail`, `MovieQuery`, `Country`, `MovieListResult` + page/limit/keyword)
+- [x] Tạo `frontend/src/apis/movie.api.ts` → `movieApi.getAll/getById/incrementView`
+- [x] Tạo `frontend/src/apis/country.api.ts` → `countryApi.getAll` (+ `getById`)
+- [x] Tạo `frontend/src/hooks/tankstack/useMovie.ts` → `useGetMovies` (`queryKey: ['movies', page, limit, keyword]`, staleTime 5 phút), `useGetMovieDetail` (`['movie', id]`), `useIncrementView`
+- [x] Tạo `frontend/src/hooks/tankstack/useCountry.ts` → `useGetCountries` (`['countries']`, staleTime 5 phút)
+- [x] Tạo `frontend/src/stores/movie-filter.store.ts` → điền state filter (keyword, genreId, countryId, sort, page, limit + `setFilter`, `resetFilter`); lưu ý filter genre/country hiện **chỉ dùng client-side**
+- [x] Tạo `frontend/src/components/movie/movie-card.tsx` (poster `aspect-[2/3]`, title, năm, rating)
+- [x] Tạo `frontend/src/components/movie/movie-grid.tsx` (grid `grid-cols-2 md:grid-cols-4 lg:grid-cols-6` + `MovieGridSkeleton`)
+- [x] Tạo `frontend/src/components/movie/movie-filters.tsx` (input keyword **debounce ~400ms** + sort/lọc thể loại–quốc gia **client-side**, vì `GET /api/movies` hiện chỉ nhận `page/limit/keyword`)
+- [x] Tạo `frontend/src/components/movie/movie-pagination.tsx` (đọc `pagination` từ envelope: `total/page/limit/totalPages`)
+- [x] Tạo trang danh sách `frontend/src/app/(main)/movies/page.tsx` + `loading.tsx` (skeleton) — kèm `movie-list.tsx` (client) và seed filter từ `?genre=`/`?country=`
+- [x] Làm lại trang chủ `frontend/src/app/(main)/(home)/page.tsx` (hero + phim mới nhất + danh sách link thể loại) — dùng component `latest-movies.tsx`
+- [x] Thêm mục điều hướng cho user (Trang chủ, Phim) vào `frontend/src/components/sidebar/nav-main.tsx` / `nav-user.tsx` (icon lucide)
+- [x] Xử lý trạng thái **guest** (không crash/không trắng trang khi chưa đăng nhập; ẩn mục cần auth) — thực hiện ở `RoleLayout.tsx` + `(main)/layout.tsx` (guest → `UserLayout`), `UserLayout.tsx` (dọn import thừa), `nav-main.tsx`/`nav-user.tsx` (ẩn mục cần auth, hiện nút Đăng nhập)
+
+### Ghi chú triển khai Phase 1 (2026-10-17)
+
+- **Lệch nhỏ so với plan**: `useGetMovies` dùng `queryKey: ['movies', page, limit, keyword]` (primitive) thay vì `['movies', params]` để tuân thủ `FRONTEND_RULES.md` (không đặt object trong queryKey).
+- **Mở rộng nhỏ ngoài danh sách file dự kiến**: `genreApi.getAll(params)` + `useGenre.useGetAll(params)` thêm tham số `page/limit/keyword` (tương thích ngược, mặc định giữ nguyên) để lấy đủ thể loại cho dropdown lọc; thêm `src/shared/utils/movie.ts` (dựng URL ảnh TMDB + helper title/năm); `next.config.ts` thêm `images.remotePatterns` cho `image.tmdb.org`; thêm env `NEXT_PUBLIC_TMDB_IMAGE_BASE_URL`.
+- **Chuẩn hoá `Pagination`** (rủi ro #8) đã xử lý: `api.types.ts` → `{ total, page, limit, totalPages }` khớp payload backend.
+- **Lưu ý chất lượng dữ liệu**: `similar`/`trending`/`sort` phía server chưa có nên sort "Đánh giá cao"/"Xem nhiều" và lọc thể loại–quốc gia được xử lý **client-side trong từng trang** (backend chỉ hỗ trợ `page/limit/keyword`).
+- **Chặn DoD (baseline có sẵn, KHÔNG do Phase 1)**: `npm run lint` lỗi do `eslint.config.mjs` import các plugin chưa có trong `package.json` (`eslint-plugin-react-hooks`, `eslint-plugin-react-refresh`, `@typescript-eslint/*`); `npm run build` lỗi do file cũ `src/app/api/auth/signup/route.ts` trỏ module không tồn tại `@/infrastructure/*`, plus lỗi type sẵn có ở `src/components/ui/{drawer,calendar}.tsx`, `src/components/common/ThemeToggle.tsx`, và `/auth/login` dùng `useSearchParams` thiếu `Suspense`. Đã xác minh code Phase 1 typecheck sạch (`tsc --noEmit` không phát sinh lỗi mới) và build thành công khi tạm vô hiệu hoá các blocker có sẵn này (đã khôi phục nguyên trạng).
 
 - **API dùng**: `GET /api/movies?page&limit&keyword` (public, chỉ 3 query param này), `GET /api/genres?page&limit&keyword`, `GET /api/countries?page&limit&keyword`
 - **File dự kiến tạo**: `src/shared/types/movie.types.ts`, `src/apis/movie.api.ts`, `src/apis/country.api.ts`, `src/hooks/tankstack/useMovie.ts`, `src/hooks/tankstack/useCountry.ts`, `src/components/movie/*`, `src/app/(main)/movies/page.tsx`, `src/app/(main)/movies/loading.tsx`

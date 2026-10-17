@@ -101,14 +101,17 @@ frontend/
     │
     ├── stores/              # ZUSTAND — state toàn cục
     │   ├── auth.store.ts        # accessToken in-memory, user, bootstrap/refresh/logout
-    │   └── movie-filter.store.ts # Filter state cho trang phim (file tồn tại, CHƯA có nội dung)
+    │   └── movie-filter.store.ts # Filter state trang phim (keyword, genreId, countryId, sort, page, limit)
     │
     ├── components/
     │   ├── ui/              # shadcn/ui sinh từ CLI (button, dialog, table, sidebar, sonner…)
     │   ├── layout/          # UserLayout.tsx, AdminLayout.tsx, RoleLayout.tsx (bọc theo role)
     │   ├── sidebar/         # nav-main.tsx (dataBar nhiều group), nav-user.tsx, user-sidebar, admin-sidebar
     │   ├── auth/            # RequireRole.tsx (phân quyền), InitAuth.tsx (bootstrap token khi F5)
-    │   ├── common/          # AppModal, ConfirmDialog, ErrorBoundary, PaginatedView, SkeletonLoader, ThemeToggle, paginations/
+    │   ├── common/          # UI kit dùng chung: PageHeader, SectionHeader, EmptyState, ErrorState, DataPagination,
+    │   │                    # PaginatedView, paginations/Pagination (PaginatedTable), ConfirmDialog, AppModal,
+    │   │                    # SkeletonLoader, ThemeToggle; ErrorBoundary.tsx đã comment toàn bộ (không dùng)
+    │   ├── movie/           # Domain phim: MovieCard, MovieGrid (+MovieGridSkeleton), MovieFilters, MovieList, LatestMovies
     │   ├── header/          # admin-header
     │   ├── dropdown/        # user-dropdown, notification-dropdown, streak-dropdown, dropdown-container
     │   ├── loading/         # AdminSkeletonLayout, redirecting, spining
@@ -263,6 +266,29 @@ Tóm tắt (chi tiết, bắt buộc: [FRONTEND_RULES.md](./FRONTEND_RULES.md)):
 - **Auth/roles**: chỉ dùng `useAuthStore` (không dùng mock `AuthContext`), trang admin bọc `RequireRole(['ADMIN'])`.
 - **Git**: không commit/push khi chưa được yêu cầu.
 
+## UI kit dùng chung (`src/components/common`)
+
+Quy ước: **UI nào lặp lại phải là component dùng chung** — mỗi domain không tự viết lại markup. Chi tiết kế hoạch: [plans/V13_frontend_ui-reuse.md](./plans/V13_frontend_ui-reuse.md).
+
+| Component | Vai trò | Props chính |
+|---|---|---|
+| `PageHeader` | Tiêu đề trang — định nghĩa **duy nhất** cho block `text-3xl font-extrabold` + mô tả | `title`, `description?`, `actions?`, `className?` |
+| `SectionHeader` | Tiêu đề một mục trong trang | `title`, `description?`, `action?`, `className?` |
+| `EmptyState` | Trạng thái rỗng cho danh sách | `icon?` (LucideIcon), `title?`, `description?`, `action?`, `className?` |
+| `ErrorState` | Trạng thái lỗi + nút thử lại | `title?`, `description?`, `onRetry?`, `retryText?`, `action?`, `className?` |
+| `DataPagination` | Control phân trang (presentational — **điểm duy nhất** render phân trang) | `page`, `totalPages`, `total?`, `onPageChange`, `disabled?`, `className?`, `ariaLabel?` |
+| `PaginatedView` | Bọc danh sách phân trang **client-side** (đã có sẵn toàn bộ dữ liệu) | `data`, `itemsPerPage?`, `renderContent`, `resetDependency?` |
+| `PaginatedTable` (`common/paginations/Pagination.tsx`) | Khung danh sách phân trang **server-side** cho admin (đọc envelope `result` + `pagination`) | `queryKeyName`, `fetchFn`, `ContentComponent`, `title?`, `staleTime?`, `gcTime?`, `pageSizeOptions?` |
+| `ConfirmDialog` | Hộp thoại xác nhận | `isOpen`, `title`, `description`, `onConfirm`, `onCancel`, `confirmText?`, `cancelText?`, `variant?` |
+| `AppModal` | Modal có portal + kích thước | `isShowingModal`, `toggleModal`, `title`, `children`, `size?` |
+| `SkeletonLoader` | Skeleton danh sách/bảng dùng chung | `rows?`… |
+
+Ghi chú:
+
+- `DataPagination` là nơi duy nhất render control phân trang; cả `PaginatedView` (client) và `PaginatedTable` (server) đều tái sử dụng nó.
+- `PaginatedTable` trước đây đọc sai envelope (`data.data.pagination.totalItems`); đã sửa về `result` + `pagination { total, page, limit, totalPages }` (khớp `FRONTEND_RULES` §1).
+- `ErrorBoundary.tsx` đã bị comment toàn bộ trong repo (không dùng) — không nằm trong UI kit.
+
 ## Ủng hộ/known issues
 
 - ✅ **Các trang auth + `/profile` + `/setting/theme` đã hoạt động thật** với backend; envelope + refresh token đã chạy ổn định; Design tokens, sidebar, phân quyền (`RequireRole`, `RoleLayout`) đã sẵn sàng làm nền.
@@ -272,9 +298,9 @@ Tóm tắt (chi tiết, bắt buộc: [FRONTEND_RULES.md](./FRONTEND_RULES.md)):
 - ⚠ **`recharts` và `socket.io-client` đã cài nhưng chưa dùng** (chờ Phase 2/5 trong plan V11); `react-router-dom`, `react-icons` cũng không dùng trong App Router.
 - ⚠ **`src/shared/utils/http.ts` là legacy (dùng `fetch`)** — không được dùng, chỉ dùng `axiosClient`.
 - ⚠ **Nav group "Interaction" trong `nav-main.tsx` trỏ `/interaction/*`** nhưng hiện chưa có route nào khớp (trang thật là `/admin/interaction`) — cần sửa khi làm Phase 5.
-- ⚠ **Type `Pagination`** trong `api.types.ts` khai báo `totalItems/currentPage/pageSize/totalPages`, còn payload backend mẫu là `total/page/limit/totalPages` — phải đối chiếu khi hiển thị phân trang.
+- ✅ **Type `Pagination`** trong `api.types.ts` đã chuẩn hoá về `{ total, page, limit, totalPages }` khớp payload backend; `DataPagination` dùng chung cho mọi nơi hiển thị phân trang.
 - ⚠ **Route handler `src/app/api/*` chỉ là stub** trả JSON rỗng — không phải nơi gọi backend.
-- ⚠ **`movie-filter.store.ts` đang rỗng** — chờ Phase 1 điền state filter.
+- ✅ **`movie-filter.store.ts`** đã có state filter (keyword, genreId, countryId, sort, page, limit) + `setFilter/setPage/resetFilter`.
 - ⚠ **`GET /api/movies` chỉ hỗ trợ `page/limit/keyword`** — chưa có filter theo thể loại/quốc gia hay tham số `sort`; muốn filter theo thể loại/quốc gia cần backend bổ sung query param (đề xuất plan backend) hoặc lọc client-side trên trang hiện tại.
 - ⚠ **Không có endpoint recommendation/search ở backend** — recommendation nằm ở ai-service (`/api/recommendations`, qua gateway `:8000`); frontend cần chốt cách gọi và chờ ai-service fix lỗi 500 + CORS (V11 Phase 4).
 - ⚠ **`RolesGuard` không được enforce** ở hầu hết module backend — không dựa vào backend để bảo vệ trang admin; dùng `RequireRole(['ADMIN'])` ở client và cẩn trọng khi ẩn/hiện hành động quản trị.

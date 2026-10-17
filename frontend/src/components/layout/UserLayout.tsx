@@ -1,10 +1,9 @@
 'use client';
 
-import { AdminSidebar } from '@/components/sidebar/admin-sidebar';
 import Header from '@/components/header/admin-header';
+import { UserSidebar } from '@/components/sidebar/user-sidebar';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import React from 'react';
-import { UserSidebar } from '@/components/sidebar/user-sidebar';
 
 export default function UserLayout({ children }: { children: React.ReactNode }) {
   return (
