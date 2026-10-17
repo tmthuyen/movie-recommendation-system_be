@@ -66,5 +66,5 @@ backup/
 !**/.gitkeep
 
 # AI skills
-.agents/skills/
-.claude/skills/
+skills/
+skills/
