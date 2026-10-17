@@ -1,5 +1,6 @@
 'use client';
 
+import { RequireLoginDialog } from '@/components/auth/require-login-dialog';
 import { MobileBottomNav } from '@/components/layout/mobile-bottom-nav';
 import { SiteFooter } from '@/components/layout/site-footer';
 import UserHeader from '@/components/layout/user-header';
@@ -28,6 +29,8 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
         <SiteFooter />
       </SidebarInset>
       <MobileBottomNav />
+      {/* Hộp thoại "chưa đăng nhập" khi guest bấm tương tác cần JWT */}
+      <RequireLoginDialog />
     </SidebarProvider>
   );
 }

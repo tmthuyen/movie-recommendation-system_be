@@ -1,7 +1,6 @@
 'use client';
 
 import { MessageCircle, Send, CornerDownRight } from 'lucide-react';
-import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { DataPagination } from '@/components/common/DataPagination';
@@ -12,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import useComment from '@/hooks/tankstack/useComment';
+import { useRequireLogin } from '@/hooks/useRequireLogin';
 import { emitTypingComment, useMovieSocket } from '@/hooks/useMovieSocket';
 import { cn } from '@/lib/utils';
 import { Comment } from '@/shared/types/comment.types';
@@ -97,8 +97,7 @@ interface MovieCommentsProps {
  * "đang gõ…").
  */
 export function MovieComments({ movieId }: MovieCommentsProps) {
-  const router = useRouter();
-  const pathname = usePathname();
+  const requireLogin = useRequireLogin();
   const { isAuthenticated, user } = useAuthStore();
 
   const [page, setPage] = useState(1);
@@ -160,10 +159,7 @@ export function MovieComments({ movieId }: MovieCommentsProps) {
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!isAuthenticated) {
-      router.push(`/auth/login?return-page=${encodeURIComponent(pathname)}`);
-      return;
-    }
+    if (!requireLogin()) return;
     const value = content.trim();
     if (!value || createComment.isPending) return;
     createComment.mutate(
@@ -180,10 +176,9 @@ export function MovieComments({ movieId }: MovieCommentsProps) {
 
   const handleSubmitReply = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!isAuthenticated || replyTo === null) {
-      router.push(`/auth/login?return-page=${encodeURIComponent(pathname)}`);
-      return;
-    }
+    if (!requireLogin()) return;
+    // Đã đăng nhập nhưng không có comment đang trả lời → bỏ qua (không redirect).
+    if (replyTo === null) return;
     const value = replyContent.trim();
     if (!value || createComment.isPending) return;
     createComment.mutate(

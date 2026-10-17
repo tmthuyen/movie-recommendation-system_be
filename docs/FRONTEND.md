@@ -99,11 +99,13 @@ frontend/
     │   │   ├── useGenre.ts     # useGetAll (staleTime 5 phút) + useCreateGenre (mẫu chuẩn)
     │   │   └── useUser.ts      # Quản lý user
     │   ├── useAuth.ts       # ⚠ Đang đọc mock AuthContext — sẽ dọn khi chuyển hẳn useAuthStore
+    │   ├── useRequireLogin.ts # Guard guest: true nếu đã đăng nhập, ngược lại mở RequireLoginDialog
     │   ├── use-mobile.ts, useBreadCrumb.ts, useClickOutside.ts, useColor.ts, useHover.ts
     │
     ├── stores/              # ZUSTAND — state toàn cục
     │   ├── auth.store.ts        # accessToken in-memory, user, bootstrap/refresh/logout
-    │   └── movie-filter.store.ts # Filter state trang phim (keyword, genreId, countryId, sort, page, limit)
+    │   ├── movie-filter.store.ts # Filter state trang phim (keyword, genreId, countryId, sort, page, limit)
+    │   └── require-login.store.ts # Trạng thái hộp thoại "chưa đăng nhập" (mở bởi useRequireLogin)
     │
     ├── components/
     │   ├── ui/              # shadcn/ui sinh từ CLI (button, dialog, table, sidebar, sonner…)
@@ -112,7 +114,7 @@ frontend/
     │   │                    # user-menu (dropdown nội dung dùng chung header/sidebar), mobile-bottom-nav (nav màn hình nhỏ),
     │   │                    # site-footer (footer info website)
     │   ├── sidebar/         # nav-main.tsx (dataBar nhiều group), nav-user.tsx (trigger sidebar, dùng chung UserMenuContent), user-sidebar, admin-sidebar
-    │   ├── auth/            # RequireRole.tsx (phân quyền), InitAuth.tsx (bootstrap token khi F5)
+    │   ├── auth/            # RequireRole.tsx (phân quyền), RequireLoginDialog.tsx (hộp thoại yêu cầu đăng nhập khi guest bấm tương tác), InitAuth.tsx (bootstrap token khi F5)
     │   ├── common/          # UI kit dùng chung: PageHeader, SectionHeader, EmptyState, ErrorState, DataPagination,
     │   │                    # PaginatedView, paginations/Pagination (PaginatedTable), ConfirmDialog, AppModal,
     │   │                    # SkeletonLoader, ThemeToggle; ErrorBoundary.tsx đã comment toàn bộ (không dùng)
@@ -184,6 +186,7 @@ Mẫu chung cho trang admin placeholder: `export metadata` (title/description ti
 - `MobileBottomNav` (`components/layout/mobile-bottom-nav.tsx`): bottom nav cố định `md:hidden`, chừa `env(safe-area-inset-bottom)`; guest: Trang chủ/Phim/Đăng nhập — user: + Thông báo/Tài khoản; item active theo pathname.
 - `SidebarInset` có `pb-16 md:pb-0` để không bị bottom nav che footer.
 - Nội dung dropdown tài khoản **dùng chung** `UserMenuContent` (`components/layout/user-menu.tsx`) giữa header và sidebar (`nav-user.tsx`) — route shortcuts (Trang chủ, Phim, Hồ sơ, Thông báo, Dashboard nếu ADMIN), Đăng nhập/Đăng xuất.
+- `<RequireLoginDialog />` mount trong `UserLayout`: guest bấm tương tác cần JWT (thích/yêu thích/muốn xem trên card, đánh giá/bình luận ở `/movies/[id]`) → hiện **hộp thoại** xác nhận, xác nhận mới chuyển `/auth/login?return-page=…` (không redirect ngay) — guard tập trung qua hook `useRequireLogin()` + `stores/require-login.store.ts`.
 
 ## Kết nối API
 

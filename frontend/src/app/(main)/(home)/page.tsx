@@ -73,7 +73,7 @@ function TopMovieCard({ movie, rank }: { movie: any; rank: number }) {
             {rating.toFixed(1)}
           </div>
           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3">
-            <h3 className="line-clamp-1 font-semibold text-white">{title}</h3>
+            <h3 className="line-clamp-2 font-semibold text-white">{title}</h3>
             <div className="mt-1 flex items-center gap-3 text-xs text-white/80">
               {year && (
                 <span className="flex items-center gap-1">

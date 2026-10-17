@@ -1,12 +1,11 @@
 'use client';
 
 import { Star } from 'lucide-react';
-import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import useRating from '@/hooks/tankstack/useRating';
+import { useRequireLogin } from '@/hooks/useRequireLogin';
 import { useMovieSocket } from '@/hooks/useMovieSocket';
 import { cn } from '@/lib/utils';
-import { useAuthStore } from '@/stores/auth.store';
 
 interface MovieRatingProps {
   /** Phim đang hiển thị. */
@@ -22,12 +21,10 @@ interface MovieRatingProps {
  * - Hiển thị `voteAverage`/`voteCount` hiện tại (cập nhật realtime qua WS
  *   `movie-{id}-rating` → `payload.movieStats`).
  * - Nút 1–5 sao (aria-label rõ ràng) → `POST /api/ratings` (JWT);
- *   chưa đăng nhập → chuyển `/auth/login?return-page=...`.
+ *   chưa đăng nhập → hiện hộp thoại yêu cầu đăng nhập (`useRequireLogin`).
  */
 export function MovieRating({ movie }: MovieRatingProps) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const { isAuthenticated } = useAuthStore();
+  const requireLogin = useRequireLogin();
 
   const [stats, setStats] = useState({
     voteAverage: typeof movie.voteAverage === 'number' ? movie.voteAverage : 0,
@@ -52,10 +49,7 @@ export function MovieRating({ movie }: MovieRatingProps) {
   });
 
   const handleRate = (value: number) => {
-    if (!isAuthenticated) {
-      router.push(`/auth/login?return-page=${encodeURIComponent(pathname)}`);
-      return;
-    }
+    if (!requireLogin()) return;
     createRating.mutate(value);
   };
 

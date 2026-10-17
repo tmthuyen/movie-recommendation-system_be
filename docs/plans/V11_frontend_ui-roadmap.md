@@ -104,6 +104,12 @@
 - [x] Sửa `movie-filters.tsx` — đồng bộ `keywordInput` khi store keyword thay đổi từ bên ngoài (URL seed); **bug tiềm ẩn**: debounce 400ms của filter đang ghi đè keyword vừa seed từ URL (input local rỗng ≠ store keyword → tự setFilter ngược lại)
 - [x] Fix glassmorphism "giả" ở header: `bg-sidebar` (opaque) + `backdrop-blur-md` = blur **vô hiệu** (blur chỉ hiệu lực khi nền trong suốt) → chuyển `bg-sidebar/75 backdrop-blur-md` (user header + className của `AdminLayout` đang truyền cho admin-header)
 
+### Mở rộng Phase 1.5 — Ổn định title card + hộp thoại yêu cầu đăng nhập khi tương tác (2026-10-18)
+
+- [x] MovieCard: title giữ `line-clamp-2` + thêm `min-h-[2.5rem]` (dành chỗ 2 dòng) để card không nhảy size khi tên phim ngắn/dài khác nhau; card `TopMovieCard` ở trang chủ đổi `line-clamp-1` → `line-clamp-2`
+- [x] Tạo `stores/require-login.store.ts` (zustand: `isOpen/openDialog/closeDialog`) + `components/auth/require-login-dialog.tsx` (dùng `ConfirmDialog`, variant default: "Bạn chưa đăng nhập" → xác nhận mới chuyển `/auth/login?return-page=…`) + hook `hooks/useRequireLogin.ts` (`requireLogin(): boolean`)
+- [x] Mount `<RequireLoginDialog />` trong `UserLayout`; thay redirect **ngay lập tức** trước đây bằng guard qua hộp thoại ở `movie-actions.tsx`, `movie-rating.tsx`, `movie-comments.tsx` (submit + reply) — fix kèm bug: submit reply đang redirect login cả khi đã đăng nhập mà `replyTo === null`
+
 - **API dùng**: không gọi API mới — chỉ UI shell (dùng `useAuthStore` cho trạng thái đăng nhập)
 - **File dự kiến tạo**: `src/components/layout/{user-header,user-menu,mobile-bottom-nav,site-footer}.tsx`, `src/app/(main)/{about,contact,privacy,terms}/page.tsx`
 - **File dự kiến sửa**: `src/components/layout/UserLayout.tsx`, `src/components/sidebar/nav-user.tsx`, `docs/FRONTEND.md`

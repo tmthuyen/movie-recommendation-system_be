@@ -1,11 +1,10 @@
 'use client';
 
 import { Bookmark, Heart, ThumbsUp } from 'lucide-react';
-import { usePathname, useRouter } from 'next/navigation';
 import useInteraction from '@/hooks/tankstack/useInteraction';
+import { useRequireLogin } from '@/hooks/useRequireLogin';
 import { cn } from '@/lib/utils';
 import { InteractionType } from '@/shared/types/interaction.types';
-import { useAuthStore } from '@/stores/auth.store';
 
 type ActionDef = {
   type: InteractionType;
@@ -49,20 +48,15 @@ interface MovieActionsProps {
 
 /**
  * Bộ nút tương tác nhanh (thích / yêu thích / muốn xem) — gọi `POST /api/interactions`
- * (TOGGLE). Chưa đăng nhập → chuyển `/auth/login?return-page=...`.
+ * (TOGGLE). Chưa đăng nhập → hiện hộp thoại yêu cầu đăng nhập (`useRequireLogin`).
  */
 export function MovieActions({ movieId, variant = 'card', className }: MovieActionsProps) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const { isAuthenticated } = useAuthStore();
+  const requireLogin = useRequireLogin();
   const { keys } = useInteraction.useMyFavoriteKeys();
   const toggleInteraction = useInteraction.useToggleInteraction();
 
   const handleToggle = (type: InteractionType) => {
-    if (!isAuthenticated) {
-      router.push(`/auth/login?return-page=${encodeURIComponent(pathname)}`);
-      return;
-    }
+    if (!requireLogin()) return;
     toggleInteraction.mutate({ movieId, type });
   };
 

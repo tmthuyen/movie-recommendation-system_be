@@ -88,7 +88,8 @@ export function MovieCard({ movie, hideActions = false }: MovieCardProps) {
       </div>
 
       <div className="flex flex-1 flex-col gap-2 p-3">
-        <h3 className="line-clamp-2 text-sm leading-snug font-semibold">{title}</h3>
+        {/* Title max 2 dòng, reserved min-h 2 dòng → card không nhảy size khi tên phim ngắn/dài */}
+        <h3 className="line-clamp-2 min-h-[2.5rem] text-sm leading-snug font-semibold">{title}</h3>
         <div className="mt-auto flex items-center justify-between gap-2">
           <p className="text-muted-foreground text-xs">{year || 'Đang cập nhật'}</p>
           {!hideActions && <MovieActions movieId={movie.id} variant="card" />}
