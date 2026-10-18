@@ -51,6 +51,10 @@ const eslintConfig = defineConfig([
         },
       ],
       '@typescript-eslint/no-explicit-any': 'off', // Tắt cảnh báo khi lạm dụng kiểu 'any'
+
+      // Rule mới của eslint-plugin-react-hooks v7 (React Compiler-era).
+      // Hạ xuống warning cho codebase hiện tại; có thể nâng lại sau khi refactor các effect.
+      'react-hooks/set-state-in-effect': 'warn',
     },
   },
 ]);

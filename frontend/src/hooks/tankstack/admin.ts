@@ -90,6 +90,7 @@ export const adminRoles = createCrudHooks<Role, RoleInput>({
  * Trang admin Interaction — 3 danh sách read-only (tương tác/đánh giá/bình luận)
  * + xóa từng bản ghi. Backend không filter theo type → filter client-side.
  */
+/* eslint-disable react-hooks/rules-of-hooks -- usePagedList là FACTORY (trả về hook), không gọi hook nào khi chạy ở module level;see admin-crud.ts */
 export const useAdminInteractions = usePagedList('admin-interactions', (params) =>
   interactionApi.getAll(params),
 );
@@ -97,6 +98,7 @@ export const useAdminRatings = usePagedList('admin-ratings', (params) => ratingA
 export const useAdminComments = usePagedList('admin-comments', (params) =>
   commentApi.getAll(params),
 );
+/* eslint-enable react-hooks/rules-of-hooks */
 
 export const useDeleteInteraction = () => useDeleteOnly('admin-interactions', interactionApi.remove);
 export const useDeleteRating = () => useDeleteOnly('admin-ratings', ratingApi.remove);

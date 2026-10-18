@@ -10,7 +10,10 @@ export const metadata: Metadata = {
 function LoginContent() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
-      <LoginForm />
+      {/* LoginForm dùng useSearchParams → bắt buộc bọc Suspense khi prerender tĩnh */}
+      <Suspense fallback={null}>
+        <LoginForm />
+      </Suspense>
     </div>
   );
 }
@@ -22,5 +25,3 @@ export default function LoginPage() {
     </Suspense>
   );
 }
-
-

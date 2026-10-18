@@ -63,7 +63,10 @@ export function useMovieSocket({
 }: UseMovieSocketOptions) {
   const socketRef = useRef<Socket | null>(null);
   const handlersRef = useRef({ onComment, onRating, onViewCount, onTyping });
-  handlersRef.current = { onComment, onRating, onViewCount, onTyping };
+  // Cập nhật handler ref trong effect (không ghi ref trong render — react-hooks/refs)
+  useEffect(() => {
+    handlersRef.current = { onComment, onRating, onViewCount, onTyping };
+  });
 
   useEffect(() => {
     if (!movieId) return;

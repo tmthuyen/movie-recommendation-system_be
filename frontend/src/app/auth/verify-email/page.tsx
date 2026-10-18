@@ -11,7 +11,10 @@ function VerifyEmailContent() {
   console.log('VerifyEmail component rendered');
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
-      <VerifyEmail />
+      {/* VerifyEmail dùng useSearchParams → bắt buộc bọc Suspense khi prerender tĩnh */}
+      <Suspense fallback={null}>
+        <VerifyEmail />
+      </Suspense>
     </div>
   );
 }
