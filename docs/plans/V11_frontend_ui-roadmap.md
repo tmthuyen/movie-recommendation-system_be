@@ -1,6 +1,6 @@
 # V11 — Frontend UI Roadmap (User-facing + Admin CRUD)
 
-- **Trạng thái**: Đang thực hiện — **Phase 0 (baseline) xong ở mức môi trường**, **Phase 1 (nền tảng + trang chủ + danh sách phim + movie card UX) hoàn thành → đã đóng**, **Phase 2 (chi tiết phim `/movies/[id]`) hoàn thành → đã đóng**, **Phase 1.5 (base layout shell responsive: fix scroll ngang, bottom nav, header user dropdown, footer site info + trang about/contact/privacy/terms) hoàn thành → đã đóng**; đang làm **Phase 3 (tương tác cá nhân)**; Phase 4–5 còn `- [ ]`. Lưu ý: DoD `lint`/`build` đang bị chặn bởi lỗi baseline có sẵn trong repo (xem "Ghi chú triển khai Phase 1").
+- **Trạng thái**: Đang thực hiện — **Phase 0 (baseline) xong ở mức môi trường**, **Phase 1 (nền tảng + trang chủ + danh sách phim + movie card UX) hoàn thành → đã đóng**, **Phase 2 (chi tiết phim `/movies/[id]`) hoàn thành → đã đóng**, **Phase 1.5 (base layout shell responsive: fix scroll ngang, bottom nav, header user dropdown, footer site info + trang about/contact/privacy/terms) hoàn thành → đã đóng**, **Phase 3 (tương tác cá nhân: `/my-history`, `/my-favorites`, dislike ở chi tiết, nav cá nhân, guard đăng nhập) hoàn thành → đã đóng**, **Phase 5 (admin CRUD + dashboard: kit data-table/form-dialog, CRUD movies/genres/countries/people/users/roles, trang interaction 3 tab, dashboard recharts) hoàn thành → đã đóng**; còn lại **Phase 4 (semantic search — ⚠ đang bị chặn bởi ai-service lỗi 500 + CORS)**. Lưu ý: DoD `lint`/`build` đang bị chặn bởi lỗi baseline có sẵn trong repo (xem "Ghi chú triển khai Phase 1").
 - **Người thực hiện**: AI Agent
 - **Thời gian**: 2026-10-17
 - **Phạm vi**: `frontend/` — xây dựng toàn bộ giao diện user-facing (trang chủ, danh sách phim, chi tiết phim, tương tác cá nhân, semantic search) và khu vực admin CRUD (movies/genres/countries/peoples/users/roles/interaction + dashboard). Không sửa backend/ai-service.
@@ -156,14 +156,25 @@
 
 **Mục tiêu**: User xem được lịch sử xem / phim yêu thích và toggle các tương tác (like/dislike/favorite/watchlist) với optimistic update.
 
-- [ ] Tạo `frontend/src/apis/interaction.api.ts` (`toggle`, `getMyHistory`, `getMyFavorites`) — ✅ `toggle` + `getMyFavorites` đã rút lên Phase 1 (card actions); còn `getMyHistory` làm ở Phase 3
-- [ ] Tạo `frontend/src/hooks/tankstack/useInteraction.ts` — `useToggleInteraction` (đọc `result.action` = `added`/`removed`, optimistic update + rollback `onError`), `useMyHistory`, `useMyFavorites` — ✅ `useToggleInteraction` + `useMyFavorites` đã rút lên Phase 1; còn `useMyHistory` làm ở Phase 3
-- [ ] Tạo `frontend/src/components/movie/movie-actions.tsx` — nút like/dislike/favorite/watchlist (icon lucide, touch target ≥44px) — ✅ đã rút lên Phase 1 (like/favorite/watchlist trên card; `dislike` thêm khi làm chi tiết phim)
-- [ ] Gắn `movie-actions` vào `movie-card.tsx` và trang chi tiết phim
-- [ ] Tạo trang lịch sử xem `frontend/src/app/(main)/my-history/page.tsx` (list + phân trang + loading/empty state)
-- [ ] Tạo trang yêu thích `frontend/src/app/(main)/my-favorites/page.tsx` (list + phân trang + loading/empty state)
-- [ ] Thêm mục điều hướng (Lịch sử xem, Yêu thích) vào `nav-main.tsx` / `nav-user.tsx` cho user đã đăng nhập
-- [ ] Chặn truy cập khi chưa đăng nhập (redirect login kèm `return-page`)
+- [x] Tạo `frontend/src/apis/interaction.api.ts` (`toggle`, `getMyHistory`, `getMyFavorites`) — ✅ `toggle` + `getMyFavorites` đã rút lên Phase 1 (card actions); `getMyHistory` hoàn thành ở Phase 3
+- [x] Tạo `frontend/src/hooks/tankstack/useInteraction.ts` — `useToggleInteraction` (đọc `result.action` = `added`/`removed`, optimistic update + rollback `onError`), `useMyHistory`, `useMyFavorites` — ✅ `useToggleInteraction` + `useMyFavorites` đã rút lên Phase 1; `useMyHistory` + `useMyFavoritesPaged` (phân trang cho 2 trang cá nhân) hoàn thành ở Phase 3
+- [x] Tạo `frontend/src/components/movie/movie-actions.tsx` — nút like/dislike/favorite/watchlist (icon lucide, touch target ≥44px) — ✅ đã rút lên Phase 1 (like/favorite/watchlist trên card); `dislike` thêm ở Phase 3 cho biến thể `detail`
+- [x] Gắn `movie-actions` vào `movie-card.tsx` và trang chi tiết phim — ✅ card từ Phase 1; `movie-detail-view.tsx` gắn hàng `MovieActions variant="detail"` (4 nút: thích / không thích / yêu thích / muốn xem)
+- [x] Tạo trang lịch sử xem `frontend/src/app/(main)/my-history/page.tsx` (list + phân trang + loading/empty state)
+- [x] Tạo trang yêu thích `frontend/src/app/(main)/my-favorites/page.tsx` (list + phân trang + loading/empty state)
+- [x] Thêm mục điều hướng (Lịch sử xem, Yêu thích) vào `nav-main.tsx` (group "Cá nhân", ẩn khi guest) / dropdown user `user-menu.tsx` (dùng chung cho header + sidebar)
+- [x] Chặn truy cập khi chưa đăng nhập (redirect login kèm `return-page`) — component mới `components/auth/require-auth.tsx` (`RequireAuth`: chỉ yêu cầu đăng nhập, khác `RequireRole` là không check role)
+
+### Ghi chú triển khai Phase 3 (2026-10-18)
+
+- **Dùng chung 1 component cho 2 trang** (tái sử dụng UI): `components/movie/interaction-movie-list.tsx` (`MyInteractionList source="history"|"favorites"`) — hàng poster + tên phim + badge loại tương tác + ngày, click → `/movies/[id]`, `DataPagination`, skeleton/empty/error state; 2 page chỉ là server shell (`PageHeader` + container) + `metadata`.
+- **QueryKey tách root**: danh sách phân trang dùng root `['my-history', page, limit]` và `['my-favorites-page', page, limit]` — **cố ý tách khỏi root `interactions`** vì optimistic update trong `useToggleInteraction` ghi cache dạng `Interaction[]` lên mọi query khớp `[FAVORITES_KEY]`, sẽ phá cache có shape `{items, pagination}`; `onSettled` invalidate cả 3 root để trang list đồng bộ sau khi toggle. `useMyFavorites` cũ (page-1, limit 100, shape array) giữ nguyên cho trạng thái nút trên card.
+- **Hooks gọi kép an toàn**: `MyInteractionList` gọi cả `useMyHistory` + `useMyFavoritesPaged` (rules của React Hooks) với tham số `enabled` — hook không được chọn không fetch.
+- **Guard đăng nhập**: `RequireAuth` (mới) — guest → redirect `/auth/login?return-page=…`, đang khôi phục phiên → spinner; dùng cho `/my-history`, `/my-favorites`. `RequireRole` giữ nguyên cho admin (check role).
+- **Giới hạn `dislike` (backend)**: `GET /api/interactions/my-favorites` chỉ trả `type ∈ like, favorite, watchlist` → nút "Không thích" ở chi tiết phim **không hiển thị trạng thái active bền vững** (chỉ toggle theo kết quả server + toast); không tự bịa endpoint để fix.
+- **Chặn DoD**: vẫn là 4 lỗi baseline cũ (`api/auth/signup/route.ts` ×2, `ui/calendar.tsx`, `ui/drawer.tsx`) — `tsc --noEmit` không phát sinh lỗi mới; smoke test `/my-history`, `/my-favorites` qua dev server `:3002` OK (SSR shell + title đúng).
+- **File dự kiến tạo (thực tế)**: `src/app/(main)/{my-history,my-favorites}/page.tsx`, `src/components/movie/interaction-movie-list.tsx`, `src/components/auth/require-auth.tsx`
+- **File dự kiến sửa (thực tế)**: `src/hooks/tankstack/useInteraction.ts` (`useMyHistory`, `useMyFavoritesPaged`, invalidate list roots), `src/components/movie/movie-actions.tsx` (dislike variant detail), `src/components/movie/movie-detail-view.tsx` (hàng actions), `src/components/sidebar/nav-main.tsx` (group "Cá nhân"), `src/components/layout/user-menu.tsx` (2 mục dropdown)
 
 - **API dùng**: `POST /api/interactions` (`{ score?, type, movieId }` — toggle, kết quả `{ success, action: 'added'|'removed', type, data? }`), `GET /api/interactions/my-history?page&limit`, `GET /api/interactions/my-favorites?page&limit`
 - **File dự kiến tạo**: `src/apis/interaction.api.ts`, `src/hooks/tankstack/useInteraction.ts`, `src/components/movie/movie-actions.tsx`, `src/app/(main)/my-history/page.tsx`, `src/app/(main)/my-favorites/page.tsx`
@@ -197,19 +208,35 @@
 
 **Mục tiêu**: Khu vực admin quản trị dữ liệu thật: movies, genres, countries, peoples, users, roles, interaction; dashboard có biểu đồ.
 
-- [ ] Tạo component dùng chung `frontend/src/components/admin/data-table.tsx` (table + pagination + search)
-- [ ] Tạo component dùng chung `frontend/src/components/admin/form-dialog.tsx` (react-hook-form + zod + shadcn Dialog)
-- [ ] Cài đặt CRUD Movies: `src/apis/movie.api.ts` (create/update/delete) + hook + `src/app/(admin-layout)/admin/movies/page.tsx` + form (chọn thể loại/quốc gia/diễn viên)
-- [ ] Cài đặt CRUD Genres: hoàn thiện trang `admin/genres/page.tsx` dùng `genreApi` + `useGenre` sẵn có
-- [ ] Cài đặt CRUD Countries: trang `admin/countries/page.tsx`
-- [ ] Cài đặt CRUD Peoples (diễn viên & đạo diễn): trang `admin/people/page.tsx`
-- [ ] Cài đặt quản lý Users: trang `admin/users/page.tsx` (list, khoá/mở, gán vai trò) dùng `userApi`/`roleApi`
-- [ ] Cài đặt quản lý Roles: trang `admin/roles/page.tsx` dùng `roleApi`
-- [ ] Cài đặt trang Interaction: `admin/interaction/page.tsx` (ratings/comments/favorites/history)
-- [ ] Sửa `nav-main.tsx` — group "Interaction" trỏ đúng `/admin/interaction` (hiện đang trỏ `/interaction/*` không tồn tại)
-- [ ] Bọc toàn bộ trang admin bằng `RequireRole requiredRoles={['ADMIN']}`
-- [ ] Dashboard `frontend/src/app/(admin-layout)/dashboard/page.tsx` — thẻ chỉ số + biểu đồ `recharts` (phim theo thể loại, lượt xem/đánh giá theo thời gian)
-- [ ] Đảm bảo mọi trang admin có skeleton + error state (tiếng Việt) và responsive (table → card/overflow trên mobile)
+- [x] Tạo component dùng chung `frontend/src/components/admin/data-table.tsx` (table + pagination + search) — kèm `CrudTableSkeleton`, hành động Sửa/Xóa + `extraActions`
+- [x] Tạo component dùng chung `frontend/src/components/admin/form-dialog.tsx` (react-hook-form + zod + shadcn Dialog) — field `text`/`textarea`/`select`/`multiselect`, kèm `crud-toolbar.tsx`, `delete-dialog.tsx`, `assign-roles-dialog.tsx`
+- [x] Cài đặt CRUD Movies: `src/apis/movie.api.ts` (create/update/delete) + hook + `src/app/(admin-layout)/admin/movies/page.tsx` + form (chọn thể loại/quốc gia/diễn viên)
+- [x] Cài đặt CRUD Genres: hoàn thiện trang `admin/genres/page.tsx` dùng `genreApi` + `useGenre` sẵn có
+- [x] Cài đặt CRUD Countries: trang `admin/countries/page.tsx`
+- [x] Cài đặt CRUD Peoples (diễn viên & đạo diễn): trang `admin/people/page.tsx`
+- [x] Cài đặt quản lý Users: trang `admin/users/page.tsx` (list, gán vai trò — **bỏ "khoá/mở"**: backend không có endpoint status được docs xác nhận) dùng `userApi`/`roleApi`
+- [x] Cài đặt quản lý Roles: trang `admin/roles/page.tsx` dùng `roleApi`
+- [x] Cài đặt trang Interaction: `admin/interaction/page.tsx` — 3 tab Tương tác/Đánh giá/Bình luận (`GET /api/interactions|ratings|comments`, fetch theo tab bằng `enabled`)
+- [x] Sửa `nav-main.tsx` — group "Interaction" trỏ đúng `/admin/interaction` (hiện đang trỏ `/interaction/*` không tồn tại)
+- [x] Bọc toàn bộ trang admin bằng `RequireRole requiredRoles={['ADMIN']}` — **đã có sẵn trong `AdminLayout.tsx`**, chỉ cần kiểm tra lại
+- [x] Dashboard `frontend/src/app/(admin-layout)/dashboard/page.tsx` — thẻ chỉ số + biểu đồ `recharts` (top phim xem nhiều, phim theo thể loại, tương tác theo loại)
+- [x] Đảm bảo mọi trang admin có skeleton + error state (tiếng Việt) và responsive (table → card/overflow trên mobile)
+
+### Ghi chú triển khai Phase 5
+
+- **Kit admin tái sử dụng 1 điểm render** (`src/components/admin/`):
+  - `data-table.tsx`: `DataTable<T>` generic — bảng shadcn (md+, `overflow-x-auto`) + card list (mobile, đúng chuẩn responsive); cột khai báo `columns`; hành động Sửa/Xóa + `extraActions` (dùng cho nút Phân quyền) khai báo qua props.
+  - `form-dialog.tsx`: `CrudFormDialog<T>` (react-hook-form + zod, field `text`/`textarea`/`select`/`multiselect`, error inline tiếng Việt) + `useCrudFormValues` (defaultValues memo theo item sửa).
+  - `crud-toolbar.tsx` (tìm kiếm debounce + nút thêm), `delete-dialog.tsx` (`CrudDeleteDialog` bọc `ConfirmDialog` sẵn có), `assign-roles-dialog.tsx` (phân quyền user, tái sử dụng `CrudFormDialog` với 1 field multiselect).
+- **Hooks CRUD generic** (`src/hooks/tankstack/admin-crud.ts` + `admin.ts`): factory `createCrudHooks` (list phân trang + create/update/delete, invalidate + toast), `useCrudPage` (state orchestration: pagination, debounce 400ms, dialog thêm/sửa/xóa — mỗi trang chỉ khai báo `columns`/`fields`), `usePagedList`/`useDeleteOnly` cho danh sách read-only. QueryKey root riêng `admin-*` để không conflict cache phía user.
+- **API**: thêm `people.api.ts`; mở rộng `movie.api.ts` (create/update/delete), `country.api.ts`, `role.api.ts` (CRUD), `user.api.ts` (`getAllUsers` nhận `{page,limit,keyword}` + `updateUserRoles`), `rating.api.ts`/`comment.api.ts`/`interaction.api.ts` (`getAll` + `remove`). **Fix `genre.api.ts` update: `PUT` → `PATCH`** (đúng `genres.controller.ts` backend).
+- **Users**: form thêm (email/fullName/password/confirmPassword) khác form sửa (fullName — `UpdateProfileDto`); không tự xóa chính mình (`canDelete`); gán vai trò qua `PATCH /users/:id/roles` (`{roleIds: number[]}` theo BACKEND.md). **Bỏ "khoá/mở"**: `PUT /users/:id/status` không có trong docs → không bịa endpoint.
+- **Roles**: `GET /api/roles` backend không phân trang → giả lập envelope (`limit:1000`, `totalPages:1`) để dùng chung `DataTable`.
+- **Interaction**: 3 tab read-only + xóa từng bản ghi; tab switch bằng button segment (không có `tabs.tsx` trong ui kit); tái sử dụng `TYPE_BADGES` từ `interaction-movie-list.tsx` làm nhãn type.
+- **Dashboard**: 4 thẻ chỉ số lấy `pagination.total`; biểu đồ recharts (bar top 10 phim xem nhiều, bar phim theo thể loại, donut tương tác theo loại) tổng hợp client-side từ 100 bản ghi đầu tiên — **backend chưa có endpoint thống kê/sort/trend theo thời gian**, có ghi chú rõ trên trang. Biểu đồ có `role="img"` + `aria-label`, thẻ chỉ số hiện số cụ thể (không dùng màu làm duy nhất).
+- **Guard**: `RequireRole requiredRoles={['ADMIN']}` đã bọc toàn bộ `AdminLayout` (kiểm tra lại, không sửa thêm).
+- **nav-main**: group "Interaction" gộp còn 1 mục "Tương tác" → `/admin/interaction` (4 route `/interaction/*` cũ đều 404, đã xóa khỏi nav); nhóm thêm `Activity` icon, bỏ icon không dùng (`Star`, `MessageSquare`).
+- **Kiểm chứng**: `tsc --noEmit` chỉ còn 4 lỗi baseline (signup route ×2, `ui/calendar.tsx`, `ui/drawer.tsx` — không đụng tới theo yêu cầu "chỉ báo cáo, không sửa"); smoke-test 8 trang admin trên dev `:3002` đều 200 (compile OK). Lint/build vẫn bị chặn bởi baseline như các phase trước.
 
 - **API dùng**: CRUD `/api/movies`, `/api/genres`, `/api/countries`, `/api/peoples`, `/api/users`, `/api/roles`, `/api/interactions`; dữ liệu dashboard tổng hợp từ các endpoint trên
 - **File dự kiến tạo**: `src/components/admin/{data-table,form-dialog}.tsx`, các form quản trị trong `src/components/admin/*`

@@ -6,6 +6,7 @@ import { useEffect, useRef } from 'react';
 import { ErrorState } from '@/components/common/ErrorState';
 import { Skeleton } from '@/components/ui/skeleton';
 import useMovie from '@/hooks/tankstack/useMovie';
+import { MovieActions } from './movie-actions';
 import { MovieComments } from './movie-comments';
 import { MovieDetail } from './movie-detail';
 import { MovieRating } from './movie-rating';
@@ -109,6 +110,14 @@ export function MovieDetailView({ id }: { id: string }) {
       </nav>
 
       <MovieDetail movie={movie} />
+
+      {/* Tương tác nhanh: thích / không thích / yêu thích / muốn xem (variant detail) */}
+      <div className="flex flex-wrap items-center gap-4">
+        <MovieActions movieId={movie.id} variant="detail" />
+        <p className="text-muted-foreground text-sm">
+          Thích hoặc không thích phim này, thêm vào danh sách của bạn.
+        </p>
+      </div>
 
       <MovieRating movie={movie} />
 

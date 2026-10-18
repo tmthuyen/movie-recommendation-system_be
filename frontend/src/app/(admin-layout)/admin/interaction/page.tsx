@@ -1,10 +1,10 @@
 import React from 'react';
 import { PageHeader } from '@/components/common/PageHeader';
+import { InteractionClient } from './interaction-client';
 
 export const metadata = {
   title: 'Tương tác',
-  description:
-    'Trang tổng quan của hệ thống, nơi hiển thị các thông tin quan trọng và các chỉ số liên quan đến hoạt động của ứng dụng.',
+  description: 'Theo dõi tương tác, đánh giá và bình luận của người dùng',
 };
 
 export default function Page() {
@@ -13,7 +13,7 @@ export default function Page() {
       <PageHeader title={metadata.title} description={metadata.description} />
 
       {/* content */}
-      <div className="flex items-center justify-center">Content</div>
+      <InteractionClient />
     </div>
   );
 }

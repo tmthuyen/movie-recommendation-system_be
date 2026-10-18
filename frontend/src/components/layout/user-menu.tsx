@@ -3,7 +3,9 @@
 import {
   Bell,
   ChevronsUpDown,
+  Clock,
   Film,
+  Heart,
   Home,
   LayoutDashboard,
   LogIn,
@@ -86,6 +88,18 @@ export function UserMenuContent({
           <Link href="/movies">
             <Film className="mr-2 h-4 w-4" />
             Phim
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem className="cursor-pointer" asChild>
+          <Link href="/my-history">
+            <Clock className="mr-2 h-4 w-4" />
+            Lịch sử xem
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem className="cursor-pointer" asChild>
+          <Link href="/my-favorites">
+            <Heart className="mr-2 h-4 w-4" />
+            Yêu thích
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem className="cursor-pointer" asChild>

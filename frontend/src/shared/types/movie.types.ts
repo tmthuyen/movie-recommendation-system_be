@@ -10,7 +10,13 @@ export interface Country extends BaseDto {
 /** Người tham gia phim (diễn viên/đạo diễn) */
 export interface People extends BaseDto {
   id: number;
-  name: string;
+  /** Khớp entity backend (`fullName`) — `name` là legacy type cũ. */
+  fullName?: string;
+  name?: string;
+  birthDate?: string;
+  nationality?: string;
+  gender?: string;
+  mainRole?: string;
   profilePath?: string;
 }
 

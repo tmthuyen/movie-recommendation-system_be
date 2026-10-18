@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  Activity,
   BarChart4,
   Bell,
   Clock,
@@ -9,9 +10,7 @@ import {
   Flag,
   Heart,
   Home,
-  MessageSquare,
   Palette,
-  Star,
   Tag,
   UsersRound,
   type LucideIcon,
@@ -109,24 +108,24 @@ const dataBar = {
     groupLabel: 'Interaction',
     items: [
       {
-        title: 'Đánh giá',
-        url: '/interaction/ratings',
-        icon: Star,
+        title: 'Tương tác',
+        url: '/admin/interaction',
+        icon: Activity,
       },
+    ],
+  },
+  personal: {
+    groupLabel: 'Cá nhân',
+    items: [
       {
-        title: 'Bình luận',
-        url: '/interaction/comments',
-        icon: MessageSquare,
+        title: 'Lịch sử xem',
+        url: '/my-history',
+        icon: Clock,
       },
       {
         title: 'Yêu thích',
-        url: '/interaction/favorites',
+        url: '/my-favorites',
         icon: Heart,
-      },
-      {
-        title: 'Lịch sử xem',
-        url: '/interaction/history',
-        icon: Clock,
       },
     ],
   },
@@ -193,6 +192,9 @@ export function UserNavMain() {
   return (
     <div>
       <NavSection groupLabel={dataBar.user.groupLabel} items={dataBar.user.items} />
+      {user && (
+        <NavSection groupLabel={dataBar.personal.groupLabel} items={dataBar.personal.items} />
+      )}
       {user && (
         <NavSection groupLabel={dataBar.settings.groupLabel} items={dataBar.settings.items} />
       )}

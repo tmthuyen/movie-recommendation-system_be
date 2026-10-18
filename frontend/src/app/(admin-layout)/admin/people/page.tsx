@@ -1,9 +1,10 @@
 import React from 'react';
 import { PageHeader } from '@/components/common/PageHeader';
+import { PeopleClient } from './people-client';
 
 export const metadata = {
   title: 'Diễn viên / Đạo diễn',
-  description: 'Quản lý diễn viên và đạo diễn',
+  description: 'Quản lý người tham gia phim',
 };
 
 export default function Page() {
@@ -12,7 +13,7 @@ export default function Page() {
       <PageHeader title={metadata.title} description={metadata.description} />
 
       {/* content */}
-      <div className="flex items-center justify-center">Content</div>
+      <PeopleClient />
     </div>
   );
 }

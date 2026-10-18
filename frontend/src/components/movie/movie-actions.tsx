@@ -1,6 +1,6 @@
 'use client';
 
-import { Bookmark, Heart, ThumbsUp } from 'lucide-react';
+import { Bookmark, Heart, ThumbsDown, ThumbsUp } from 'lucide-react';
 import useInteraction from '@/hooks/tankstack/useInteraction';
 import { useRequireLogin } from '@/hooks/useRequireLogin';
 import { cn } from '@/lib/utils';
@@ -39,6 +39,21 @@ const ACTIONS: ActionDef[] = [
   },
 ];
 
+/**
+ * Trang chi tiết: thêm `dislike` (đúng `InteractionScoreMap` của backend).
+ * Lưu ý: `GET /api/interactions/my-favorites` không trả `dislike` nên nút này
+ * không hiển thị trạng thái active bền vững (chỉ toggle theo kết quả server).
+ */
+const DISLIKE_ACTION: ActionDef = {
+  type: 'dislike',
+  label: 'Không thích',
+  activeLabel: 'Bỏ không thích',
+  Icon: ThumbsDown,
+  activeClass: 'bg-zinc-500/10 text-zinc-500 border-zinc-500/30',
+};
+
+const DETAIL_ACTIONS: ActionDef[] = [ACTIONS[0], DISLIKE_ACTION, ACTIONS[1], ACTIONS[2]];
+
 interface MovieActionsProps {
   movieId: number | string;
   /** Kiểu hiển thị: `card` (compact cho card phim) hoặc `detail` (trang chi tiết). */
@@ -47,13 +62,17 @@ interface MovieActionsProps {
 }
 
 /**
- * Bộ nút tương tác nhanh (thích / yêu thích / muốn xem) — gọi `POST /api/interactions`
- * (TOGGLE). Chưa đăng nhập → hiện hộp thoại yêu cầu đăng nhập (`useRequireLogin`).
+ * Bộ nút tương tác nhanh (thích / không thích / yêu thích / muốn xem — biến thể
+ * chi tiết) — gọi `POST /api/interactions` (TOGGLE). Biến thể `card` chỉ có
+ * like/favorite/watchlist. Chưa đăng nhập → hiện hộp thoại yêu cầu đăng nhập
+ * (`useRequireLogin`).
  */
 export function MovieActions({ movieId, variant = 'card', className }: MovieActionsProps) {
   const requireLogin = useRequireLogin();
   const { keys } = useInteraction.useMyFavoriteKeys();
   const toggleInteraction = useInteraction.useToggleInteraction();
+
+  const actions = variant === 'detail' ? DETAIL_ACTIONS : ACTIONS;
 
   const handleToggle = (type: InteractionType) => {
     if (!requireLogin()) return;
@@ -66,7 +85,7 @@ export function MovieActions({ movieId, variant = 'card', className }: MovieActi
       role="group"
       aria-label="Tương tác với phim"
     >
-      {ACTIONS.map(({ type, label, activeLabel, Icon, activeClass }) => {
+      {actions.map(({ type, label, activeLabel, Icon, activeClass }) => {
         const active = keys.has(`${movieId}:${type}`);
         const pending =
           toggleInteraction.isPending &&

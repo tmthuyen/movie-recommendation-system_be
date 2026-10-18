@@ -1,9 +1,10 @@
 import React from 'react';
 import { PageHeader } from '@/components/common/PageHeader';
+import { CountriesClient } from './countries-client';
 
 export const metadata = {
   title: 'Quốc gia',
-  description: 'Quản lý quốc gia',
+  description: 'Quản lý quốc gia xuất xứ của phim',
 };
 
 export default function Page() {
@@ -12,7 +13,7 @@ export default function Page() {
       <PageHeader title={metadata.title} description={metadata.description} />
 
       {/* content */}
-      <div className="flex items-center justify-center">Content</div>
+      <CountriesClient />
     </div>
   );
 }

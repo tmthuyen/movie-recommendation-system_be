@@ -1,5 +1,6 @@
 import { interactionApi } from '@/apis/interaction.api';
 import { parseAxiosError } from '@/lib/axiosClient';
+import { ApiPaginatedResponse, Pagination } from '@/shared/types/api.types';
 import { Interaction, InteractionType } from '@/shared/types/interaction.types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
@@ -7,6 +8,12 @@ import { toast } from 'sonner';
 import { useAuthStore } from '@/stores/auth.store';
 
 const FAVORITES_KEY = 'interactions';
+
+/** Kết quả phân trang của `my-history`/`my-favorites` (items + pagination từ envelope). */
+export interface PagedInteractions {
+  items: Interaction[];
+  pagination: Pagination;
+}
 
 /** Key query chung cho danh sách yêu thích của user hiện tại. */
 export const myFavoritesQueryKey = (limit: number) => [FAVORITES_KEY, 'my-favorites', limit];
@@ -28,6 +35,65 @@ export function useMyFavorites(limit: number = 100) {
     staleTime: 1000 * 60 * 5, // 5 phút
     gcTime: 1000 * 60 * 10, // 10 phút
   });
+}
+
+/**
+ * Hook nội bộ cho danh sách tương tác **có phân trang** (trang `/my-history`,
+ * `/my-favorites`). Dùng queryKey root RIÊNG (`my-history`, `my-favorites-page`)
+ * — tách khỏi root `interactions` để optimistic update (dạng `Interaction[]`
+ * trong `useToggleInteraction`) không ghi đè nhầm cache có shape `{items, pagination}`.
+ */
+function usePagedInteractionsQuery(
+  source: 'my-history' | 'my-favorites-page',
+  page: number,
+  limit: number,
+  fetcher: (params: {
+    page: number;
+    limit: number;
+  }) => Promise<ApiPaginatedResponse<Interaction[]>>,
+  enabled: boolean
+) {
+  return useQuery({
+    queryKey: [source, page, limit],
+    queryFn: async (): Promise<PagedInteractions> => {
+      const response = await fetcher({ page, limit });
+      return { items: response.result ?? [], pagination: response.pagination };
+    },
+    enabled,
+    staleTime: 1000 * 60 * 2, // 2 phút
+    gcTime: 1000 * 60 * 10, // 10 phút
+  });
+}
+
+/**
+ * Lịch sử xem phim (JWT) — `GET /api/interactions/my-history` (chỉ `type=click`,
+ * join `movie`). Chỉ fetch khi `enabled` + đã đăng nhập.
+ */
+export function useMyHistory(page: number = 1, limit: number = 12, enabled: boolean = true) {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  return usePagedInteractionsQuery(
+    'my-history',
+    page,
+    limit,
+    interactionApi.getMyHistory,
+    enabled && isAuthenticated
+  );
+}
+
+/**
+ * Danh sách yêu thích **có phân trang** (JWT) — `GET /api/interactions/my-favorites`
+ * (`type ∈ like, favorite, watchlist`, join `movie`). Khác `useMyFavorites`
+ * (trả mảng page-1, limit lớn — dùng cho trạng thái nút trên card).
+ */
+export function useMyFavoritesPaged(page: number = 1, limit: number = 12, enabled: boolean = true) {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  return usePagedInteractionsQuery(
+    'my-favorites-page',
+    page,
+    limit,
+    interactionApi.getMyFavorites,
+    enabled && isAuthenticated
+  );
 }
 
 /**
@@ -106,6 +172,9 @@ export function useToggleInteraction() {
     onSettled: () => {
       // Đồng bộ lại với server (đọc result.action bên server làm nguồn sự thật)
       queryClient.invalidateQueries({ queryKey: [FAVORITES_KEY] });
+      // Danh sách trang Lịch sử xem / Yêu thích (queryKey root riêng, có phân trang)
+      queryClient.invalidateQueries({ queryKey: ['my-history'] });
+      queryClient.invalidateQueries({ queryKey: ['my-favorites-page'] });
     },
   });
 }
@@ -113,6 +182,8 @@ export function useToggleInteraction() {
 const useInteraction = {
   useMyFavorites,
   useMyFavoriteKeys,
+  useMyHistory,
+  useMyFavoritesPaged,
   useToggleInteraction,
 };
 

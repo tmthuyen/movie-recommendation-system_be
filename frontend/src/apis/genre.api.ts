@@ -20,8 +20,9 @@ export const genreApi = {
     const { data } = await axiosClient.post('/genres', genre);
     return data;
   },
+  /** Cập nhật (ADMIN) — backend nhận `PATCH` (khớp `genres.controller.ts`). */
   update: async (id: string, genre: Partial<Genre>): Promise<ApiResponse<Genre>> => {
-    const { data } = await axiosClient.put(`/genres/${id}`, genre);
+    const { data } = await axiosClient.patch(`/genres/${id}`, genre);
     return data;
   },
   delete: async (id: string): Promise<ApiResponse<null>> => {

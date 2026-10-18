@@ -74,6 +74,8 @@ export interface User extends BaseDto {
 export interface Genre {
   id: string;
   name: string;
+  /** Tên tiếng Anh (backend `CreateGenreDto.enName`). */
+  enName?: string;
 }
 
 export interface UpdateProfileDto {

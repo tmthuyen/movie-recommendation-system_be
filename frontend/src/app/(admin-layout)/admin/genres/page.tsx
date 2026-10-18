@@ -1,9 +1,10 @@
 import React from 'react';
 import { PageHeader } from '@/components/common/PageHeader';
+import { GenresClient } from './genres-client';
 
 export const metadata = {
   title: 'Thể loại',
-  description: 'Thể loại các phim và người dùng quan tâm',
+  description: 'Quản lý các nhóm thể loại phim',
 };
 
 export default function Page() {
@@ -12,7 +13,7 @@ export default function Page() {
       <PageHeader title={metadata.title} description={metadata.description} />
 
       {/* content */}
-      <div className="flex items-center justify-center">Content</div>
+      <GenresClient />
     </div>
   );
 }

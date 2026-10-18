@@ -15,7 +15,7 @@ export function useGetAll(
   return useQuery({
     queryKey: ['users'],
     queryFn: async () => {
-      const response = await userApi.getAllUsers(page, limit);
+      const response = await userApi.getAllUsers({ page, limit });
       return response.result;
     },
     staleTime: staleTime, // 5 minutes

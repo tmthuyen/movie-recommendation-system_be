@@ -26,4 +26,17 @@ export const commentApi = {
     });
     return data;
   },
+  /** Toàn bộ bình luận (public, admin) — `{page, limit}`, join `user` + `movie`. */
+  getAll: async (params: {
+    page?: number;
+    limit?: number;
+  }): Promise<ApiPaginatedResponse<Comment[]>> => {
+    const { data } = await axiosClient.get('/comments', { params });
+    return data;
+  },
+  /** Xóa bình luận (ADMIN). */
+  remove: async (id: number | string): Promise<ApiResponse<null>> => {
+    const { data } = await axiosClient.delete(`/comments/${id}`);
+    return data;
+  },
 };

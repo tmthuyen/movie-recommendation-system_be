@@ -1,9 +1,10 @@
 import React from 'react';
 import { PageHeader } from '@/components/common/PageHeader';
+import { RolesClient } from './roles-client';
 
 export const metadata = {
   title: 'Vai trò',
-  description: 'Quản lý vai trò',
+  description: 'Quản lý vai trò và phân quyền',
 };
 
 export default function Page() {
@@ -12,7 +13,7 @@ export default function Page() {
       <PageHeader title={metadata.title} description={metadata.description} />
 
       {/* content */}
-      <div className="flex items-center justify-center">Content</div>
+      <RolesClient />
     </div>
   );
 }

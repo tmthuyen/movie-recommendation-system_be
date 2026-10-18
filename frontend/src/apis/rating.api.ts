@@ -19,4 +19,17 @@ export const ratingApi = {
     const { data } = await axiosClient.get(`/ratings/movie/${movieId}`, { params });
     return data;
   },
+  /** Toàn bộ đánh giá (public, admin) — `{page, limit}`, join `user` + `movie`. */
+  getAll: async (params: {
+    page?: number;
+    limit?: number;
+  }): Promise<ApiPaginatedResponse<Rating[]>> => {
+    const { data } = await axiosClient.get('/ratings', { params });
+    return data;
+  },
+  /** Xóa đánh giá (ADMIN). */
+  remove: async (id: number | string): Promise<ApiResponse<null>> => {
+    const { data } = await axiosClient.delete(`/ratings/${id}`);
+    return data;
+  },
 };

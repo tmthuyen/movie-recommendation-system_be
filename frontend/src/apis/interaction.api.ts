@@ -31,4 +31,17 @@ export const interactionApi = {
     const { data } = await axiosClient.get('/interactions/my-favorites', { params });
     return data;
   },
+  /** Toàn bộ tương tác (public, admin) — `{page, limit}`, join `user` + `movie`. */
+  getAll: async (params: {
+    page?: number;
+    limit?: number;
+  }): Promise<ApiPaginatedResponse<Interaction[]>> => {
+    const { data } = await axiosClient.get('/interactions', { params });
+    return data;
+  },
+  /** Xóa tương tác (JWT). */
+  remove: async (id: number | string): Promise<ApiResponse<null>> => {
+    const { data } = await axiosClient.delete(`/interactions/${id}`);
+    return data;
+  },
 };

@@ -1,5 +1,6 @@
 import React from 'react';
 import { PageHeader } from '@/components/common/PageHeader';
+import { MoviesClient } from './movies-client';
 
 export const metadata = {
   title: 'Phim',
@@ -12,7 +13,7 @@ export default function Page() {
       <PageHeader title={metadata.title} description={metadata.description} />
 
       {/* content */}
-      <div className="flex items-center justify-center">Content</div>
+      <MoviesClient />
     </div>
   );
 }
