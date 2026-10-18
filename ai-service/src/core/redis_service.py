@@ -1,19 +1,22 @@
-from api.schemas import UserInteractionEvent
-from api.schemas import MovieEvent
-from utils import setup_logger
 from typing import Any
+
 from redis.asyncio import Redis
 
+from api.schemas import MovieEvent, UserInteractionEvent
+from utils import setup_logger
+
 from .config import Settings
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Redis Store (cache)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class RedisStore:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.client: Redis | None = None
-        self.logger = setup_logger(name='FastAPI-Recommendations', filename=__name__)
+        self.logger = setup_logger(name="FastAPI-Recommendations", filename=__name__)
 
     async def start(self) -> None:
         if self.settings.redis_enabled:

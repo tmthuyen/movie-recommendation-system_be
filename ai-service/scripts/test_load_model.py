@@ -7,9 +7,9 @@ src_path = project_root / "src"
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
+from core.tokenizer import get_tokenizer
 from models.bm25_search import BM25Recommender
 from models.tfidf_search import TFIDFRecommender
-from core.tokenizer import get_tokenizer
 from utils.logger import setup_logger
 
 logger = setup_logger()

@@ -38,8 +38,8 @@ class MovieEventHandler:
             Re-raise moi loi khac de MessageQueue quyet dinh retry hay DLQ.
         """
 
-        if payload.get('title', '') == '' or payload.get('overview', '') == '':
-                raise Exception('Title or overview is required')
+        if payload.get("title", "") == "" or payload.get("overview", "") == "":
+            raise Exception("Title or overview is required")
 
         if event_type == "movie.created":
             await self._on_movie_created(payload)
@@ -57,23 +57,31 @@ class MovieEventHandler:
         event = MovieCreated(**payload)
         movie_data = self._to_movie_data(event)
         await self._svc.upsert_movie_vector(movie_data)
-        self._logger.info("movie.created: upsert vector thanh cong movieId=%s", event.movieId)
+        self._logger.info(
+            "movie.created: upsert vector thanh cong movieId=%s", event.movieId
+        )
 
     async def _on_movie_updated(self, payload: dict[str, Any]) -> None:
         """Validate schema MovieUpdated -> cap nhat (ghi de) vector trong ChromaDB."""
         event = MovieUpdated(**payload)
         movie_data = self._to_movie_data(event)
         await self._svc.upsert_movie_vector(movie_data)
-        self._logger.info("movie.updated: upsert vector thanh cong movieId=%s", event.movieId)
+        self._logger.info(
+            "movie.updated: upsert vector thanh cong movieId=%s", event.movieId
+        )
 
     async def _on_movie_deleted(self, payload: dict[str, Any]) -> None:
         """Validate schema MovieDeleted -> xoa vector khoi ChromaDB."""
         event = MovieDeleted(**payload)
         deleted = await self._svc.delete_movie_vector(event.movieId)
         if deleted:
-            self._logger.info("movie.deleted: xoa vector thanh cong movieId=%s", event.movieId)
+            self._logger.info(
+                "movie.deleted: xoa vector thanh cong movieId=%s", event.movieId
+            )
         else:
-            self._logger.warning("movie.deleted: khong xoa duoc vector movieId=%s", event.movieId)
+            self._logger.warning(
+                "movie.deleted: khong xoa duoc vector movieId=%s", event.movieId
+            )
 
     # ── Helper ────────────────────────────────────────────────────────────────
 

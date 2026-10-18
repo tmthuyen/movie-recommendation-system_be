@@ -1,16 +1,17 @@
 import json
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
 import aio_pika
 from aio_pika import ExchangeType, IncomingMessage
 
 from core.config import Settings
-from utils.logger import setup_logger
-
 from services.interaction_event_handler import InteractionEventHandler
+from utils.logger import setup_logger
 
 # ─────────────────────────────────────────────────────────────────────────────
 # InteractionQueue — RabbitMQ consumer for user interactions
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class InteractionQueue:
     def __init__(self, settings: Settings) -> None:
@@ -19,7 +20,7 @@ class InteractionQueue:
         self._channel = None
         self._consumer_tag = None
         self._handler: InteractionEventHandler | None = None
-        self._logger = setup_logger(name='FastAPI-Interactions', filename=__name__)
+        self._logger = setup_logger(name="FastAPI-Interactions", filename=__name__)
 
     def set_handler(self, handler: InteractionEventHandler) -> None:
         """Inject InteractionEventHandler."""
@@ -58,8 +59,8 @@ class InteractionQueue:
             durable=True,
         )
         await dlq.bind(
-            exchange=dlx, 
-            routing_key=self._settings.rabbitmq_interaction_dlq_routing_key
+            exchange=dlx,
+            routing_key=self._settings.rabbitmq_interaction_dlq_routing_key,
         )
 
         # ── 4. Khai bao Queue voi DLX config ───────────────
@@ -68,7 +69,7 @@ class InteractionQueue:
             durable=True,
             arguments={
                 "x-dead-letter-exchange": self._settings.rabbitmq_interaction_dlx,
-                "x-dead-letter-routing-key": self._settings.rabbitmq_interaction_dlq_routing_key
+                "x-dead-letter-routing-key": self._settings.rabbitmq_interaction_dlq_routing_key,
             },
         )
 
@@ -85,9 +86,9 @@ class InteractionQueue:
         )
 
         self._logger.info(
-            f'Started Interaction Queue: {self._settings.rabbitmq_interaction_queue}'
-            f'\nDLX: {self._settings.rabbitmq_interaction_dlx}'
-            f'\nDLQ: {self._settings.rabbitmq_interaction_dlq}'
+            f"Started Interaction Queue: {self._settings.rabbitmq_interaction_queue}"
+            f"\nDLX: {self._settings.rabbitmq_interaction_dlx}"
+            f"\nDLQ: {self._settings.rabbitmq_interaction_dlq}"
         )
 
     async def close(self) -> None:
@@ -105,9 +106,9 @@ class InteractionQueue:
             body = json.loads(message.body.decode("utf-8"))
 
             self._logger.info(
-                f'Received [Interaction]: message \n'
-                f'Routing Key: {routing_key} \n'
-                f'Event: body'
+                f"Received [Interaction]: message \n"
+                f"Routing Key: {routing_key} \n"
+                f"Event: body"
             )
 
             if routing_key is None:
@@ -119,7 +120,9 @@ class InteractionQueue:
             payload: dict[str, Any] = body.get("payload") or {}
 
             if self._handler is None:
-                self._logger.error("InteractionEventHandler not injected! Ack to prevent loop.")
+                self._logger.error(
+                    "InteractionEventHandler not injected! Ack to prevent loop."
+                )
                 await message.ack()
                 return
 
@@ -128,11 +131,11 @@ class InteractionQueue:
 
         except (ValueError, TypeError, KeyError) as exc:
             self._logger.error(
-                "[Interaction Queue] Invalid payload event_type=%s, sending to DLQ: %s", event_type, exc
+                "[Interaction Queue] Invalid payload event_type=%s, sending to DLQ: %s",
+                event_type,
+                exc,
             )
             await message.nack(requeue=False)
         except Exception as exc:
-            self._logger.error(
-                f"[Interaction Queue] Error handling message: {exc}"
-            )
+            self._logger.error(f"[Interaction Queue] Error handling message: {exc}")
             await message.nack(requeue=False)

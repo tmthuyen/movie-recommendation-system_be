@@ -1,6 +1,8 @@
 import asyncio
 import logging
+
 from sentence_transformers import SentenceTransformer
+
 from core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -16,7 +18,9 @@ class EmbeddingService:
 
     def _get_model(self) -> SentenceTransformer:
         if self._model is None:
-            logger.info("Loading SentenceTransformer embedding model '%s'...", self.model_name)
+            logger.info(
+                "Loading SentenceTransformer embedding model '%s'...", self.model_name
+            )
             self._model = SentenceTransformer(self.model_name)
             logger.info("SentenceTransformer model loaded successfully.")
         return self._model

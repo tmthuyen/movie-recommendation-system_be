@@ -109,8 +109,8 @@ def build_metadata(row: pd.Series) -> dict:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    from sentence_transformers import SentenceTransformer
     import chromadb
+    from sentence_transformers import SentenceTransformer
     from tqdm import tqdm
 
     print("=" * 65)

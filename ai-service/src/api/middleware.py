@@ -1,38 +1,38 @@
-from core.config import get_settings
-from jose import JWTError
-from jose import ExpiredSignatureError
-from api.schemas import CurrentUser
-from jose import jwt
-from fastapi.responses import JSONResponse
-from fastapi import HTTPException
-from utils import setup_logger
 import time
-from fastapi import FastAPI, Request
 
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
+from jose import ExpiredSignatureError, JWTError, jwt
+
+from api.schemas import CurrentUser
+from core.config import get_settings
+from utils import setup_logger
 
 settings = get_settings()
 
 from opentelemetry import trace
 
-logger = setup_logger(name='FastAPI-Recommendations', filename=__name__)
+logger = setup_logger(name="FastAPI-Recommendations", filename=__name__)
+
+
 def get_correlation_id(request: Request) -> tuple[str, str, str]:
     # Lấy Trace ID từ bộ nhớ của OpenTelemetry, không lấy từ request.headers
     span = trace.get_current_span()
     trace_id_int = span.get_span_context().trace_id
     trace_id = format(trace_id_int, "032x") if trace_id_int != 0 else "None"
-    
+
     req_id = request.headers.get("X-Request-ID")
-    kong_id = request.headers.get("X-Kong-Request-ID") 
+    kong_id = request.headers.get("X-Kong-Request-ID")
 
     if trace_id is None:
         logger.warning("Missing traceparent")
-    
+
     if req_id is None:
         logger.warning("Missing request id")
-    
+
     if kong_id is None:
         logger.warning("Missing kong id")
-    
+
     return trace_id, req_id, kong_id
 
 
@@ -41,7 +41,9 @@ def setup_middleware(app: FastAPI) -> None:
     async def logging_id_and_response_time(request: Request, call_next):
         # req id
         trace_id, req_id, kong_id = get_correlation_id(request)
-        logger.info(f"[Trace ID]: {trace_id} - [Request ID]: {req_id} - [Kong ID]: {kong_id}")
+        logger.info(
+            f"[Trace ID]: {trace_id} - [Request ID]: {req_id} - [Kong ID]: {kong_id}"
+        )
 
         start_time = time.perf_counter()
         response = await call_next(request)
@@ -62,8 +64,6 @@ def setup_middleware(app: FastAPI) -> None:
 
         authorization = request.headers.get("Authorization")
 
-        
-        
         if not authorization:
             return await call_next(request)
 
@@ -82,9 +82,7 @@ def setup_middleware(app: FastAPI) -> None:
                     "data": None,
                     "errorCode": "INVALID_AUTHORIZATION",
                 },
-                headers={
-                    "WWW-Authenticate": "Bearer"
-                },
+                headers={"WWW-Authenticate": "Bearer"},
             )
 
         scheme, token = parts
@@ -98,9 +96,7 @@ def setup_middleware(app: FastAPI) -> None:
                     "data": None,
                     "errorCode": "INVALID_AUTHORIZATION",
                 },
-                headers={
-                    "WWW-Authenticate": "Bearer"
-                },
+                headers={"WWW-Authenticate": "Bearer"},
             )
 
         logger.info("[Token] received")
@@ -125,9 +121,7 @@ def setup_middleware(app: FastAPI) -> None:
                         "data": None,
                         "errorCode": "INVALID_TOKEN",
                     },
-                    headers={
-                        "WWW-Authenticate": "Bearer"
-                    },
+                    headers={"WWW-Authenticate": "Bearer"},
                 )
 
             # Parse JWT → CurrentUser
@@ -151,9 +145,7 @@ def setup_middleware(app: FastAPI) -> None:
                     "data": None,
                     "errorCode": "TOKEN_EXPIRED",
                 },
-                headers={
-                    "WWW-Authenticate": "Bearer"
-                },
+                headers={"WWW-Authenticate": "Bearer"},
             )
 
         except JWTError:
@@ -165,9 +157,7 @@ def setup_middleware(app: FastAPI) -> None:
                     "data": None,
                     "errorCode": "INVALID_TOKEN",
                 },
-                headers={
-                    "WWW-Authenticate": "Bearer"
-                },
+                headers={"WWW-Authenticate": "Bearer"},
             )
 
-        return await call_next(request)    
+        return await call_next(request)

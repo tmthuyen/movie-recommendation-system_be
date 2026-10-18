@@ -1,3 +1,4 @@
+from fastapi import FastAPI
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -5,11 +6,13 @@ from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from fastapi import FastAPI
+
+from utils import setup_logger
 
 from .config import Settings
-from utils import setup_logger
+
 logger = setup_logger(name="FastAPI-Recommendations", filename=__name__)
+
 
 def configure_tracing(app: FastAPI, settings: Settings) -> None:
     if not settings.otel_enabled:

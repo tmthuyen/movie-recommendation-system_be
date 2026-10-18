@@ -1,0 +1,43 @@
+name: BACKEND CD
+
+on:
+  push:
+    branches: [main, production]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-CD.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: backend-cd-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    # Chạy khi push lên main hoặc production
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    outputs:
+      has_docker: ${{ steps.scan.outputs.has_docker }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: scan
+        run: |
+          cnt=$(find backend -name 'Dockerfile' 2>/dev/null | wc -l)
+          echo "has_docker=$cnt" >> $GITHUB_OUTPUT
+        shell: bash
+
+  backend-cd:
+    needs: detect
+    runs-on: ubuntu-latest
+    # environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy placeholder
+        run: |
+          if [ "${{ needs.detect.outputs.has_docker }}" != "0" ]; then
+            echo "backend CD: Dockerfiles found. Add registry/ssh secrets to enable build+deploy."
+          else
+            echo "backend CD: no Dockerfile. Skipping."
+          fi
+        shell: bash

@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 from core.tokenizer import BaseTokenizer
+
 
 class BaseRecommender(ABC):
     """
@@ -52,7 +53,7 @@ class BaseRecommender(ABC):
         Lấy cấu hình của model để log vào experiment tracker.
         """
         return {
-            'model_class': self.__class__.__name__,
-            'tokenizer': self.tokenizer.name() if self.tokenizer else 'none',
-            **self.config
+            "model_class": self.__class__.__name__,
+            "tokenizer": self.tokenizer.name() if self.tokenizer else "none",
+            **self.config,
         }

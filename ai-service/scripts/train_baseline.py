@@ -1,17 +1,17 @@
 import sys
-from pathlib import Path
 import time
+from pathlib import Path
 
 # Thêm thư mục src vào sys.path để có thể import trực tiếp (vd: from data.data_loader)
 project_root = Path(__file__).resolve().parent.parent
 sys.path.append(str(project_root / 'src'))
 
-from data.data_loader import MovieDataLoader
 from core.tokenizer import get_tokenizer
-from models.tfidf_search import TFIDFRecommender
+from data.data_loader import MovieDataLoader
 from models.bm25_search import BM25Recommender
-from utils.experiment_tracker import ExperimentTracker
+from models.tfidf_search import TFIDFRecommender
 from utils import setup_logger
+from utils.experiment_tracker import ExperimentTracker
 
 logger = setup_logger()
 

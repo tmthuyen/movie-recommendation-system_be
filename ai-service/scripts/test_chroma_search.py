@@ -1,5 +1,6 @@
-import sys
 import os
+import sys
+
 import chromadb
 from sentence_transformers import SentenceTransformer
 

@@ -1,7 +1,8 @@
-from fastapi import HTTPException
-from fastapi import Request
-from api.schemas import CurrentUser
 from typing import Annotated
+
+from fastapi import HTTPException, Request
+
+from api.schemas import CurrentUser
 
 
 async def get_current_user(request: Request) -> CurrentUser:
@@ -15,9 +16,7 @@ async def get_current_user(request: Request) -> CurrentUser:
         raise HTTPException(
             status_code=401,
             detail="Chưa đăng nhập",
-            headers={
-                "WWW-Authenticate": "Bearer"
-            },
+            headers={"WWW-Authenticate": "Bearer"},
         )
-        
+
     return payload

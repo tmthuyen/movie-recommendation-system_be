@@ -10,6 +10,10 @@
     "backend/**/*.{ts,js}": [
       "npx eslint --fix",
       "npx prettier --write"
+    ],
+    "frontend/**/*.{ts,js,tsx,jsx}": [
+      "npx eslint --fix",
+      "npx prettier --write"
     ]
   }
 }

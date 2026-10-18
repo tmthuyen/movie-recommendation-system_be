@@ -1,0 +1,64 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [dev, ci-cd]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-CI.yml'
+  pull_request:
+    branches: [dev, ci-cd]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-CI.yml'
+
+concurrency:
+  group: frontend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend-ci:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ['18.x', '20.x', '22.x']
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node (matrix)
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install 
+        run: |
+          npm ci
+        shell: bash
+
+      - name: Lint
+        run: |
+          npm run lint
+        shell: bash
+
+      - name: Type check
+        run: |
+          npm run type-check
+          npx tsc --noEmit
+        shell: bash
+
+      - name: Test
+        run: |
+          npm test -- --passWithNoTests
+        shell: bash
+
+      - name: Build
+        run: |
+          npm run build
+        shell: bash

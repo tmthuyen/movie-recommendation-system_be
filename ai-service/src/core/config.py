@@ -45,8 +45,6 @@ class Settings(BaseSettings):
     rabbitmq_interaction_dlq_routing_key: str = "interaction.queue.dlq.rk"
     rabbitmq_interaction_routing_key: str = "interaction.event"
 
-
-
     redis_url: str = "redis://localhost:6379/0"
     redis_enabled: bool = True
     redis_key_prefix: str = "movie-recommendation:"
@@ -56,16 +54,16 @@ class Settings(BaseSettings):
     # Set to "chroma" | "qdrant" | "redis" | "memory"
     vector_db_provider: str = "chroma"
     vector_collection: str = "movies"
-    
+
     # AI Collaborative & Hybrid Collections
     vector_user_cf_collection: str = "user_cf_vectors"
     vector_movie_cf_collection: str = "movie_cf_vectors"
     vector_user_profile_collection: str = "user_profile_vectors"
-    
+
     # Dimension of paraphrase-multilingual-MiniLM-L12-v2 (multilingual, 384-dim)
     vector_size: int = 384
-    cf_vector_size: int = 64 # Kích thước vector của ALS model (implicit)
-    
+    cf_vector_size: int = 64  # Kích thước vector của ALS model (implicit)
+
     vector_db_enabled: bool = True
 
     # ChromaDB — persistent storage directory (relative to ai-service working dir)
@@ -86,7 +84,6 @@ class Settings(BaseSettings):
     s3_bucket_name: str = "movie-recommendation"
     s3_public_url: str = ""
 
-
     model_config = SettingsConfigDict(
         env_file=(".env", ".env.development", ".env.production"),
         env_file_encoding="utf-8",
@@ -96,7 +93,9 @@ class Settings(BaseSettings):
 
     @property
     def allowed_origins(self) -> list[str]:
-        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+        return [
+            origin.strip() for origin in self.cors_origins.split(",") if origin.strip()
+        ]
 
 
 @lru_cache
