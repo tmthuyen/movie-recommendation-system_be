@@ -15,7 +15,7 @@ export type AuthContextType = {
 const AuthContext = React.createContext<{
   user: AuthContextType | null;
   changeUser: (user: AuthContextType | null) => void;
-} | null>(null);
+    } | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = React.useState<AuthContextType | null>({

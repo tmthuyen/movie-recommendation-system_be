@@ -113,7 +113,7 @@ export function UsersClient() {
   const selfId = currentUser?.id;
   const title = useMemo(
     () => (state.editing ? 'Sửa người dùng' : 'Thêm người dùng'),
-    [state.editing]
+    [state.editing],
   );
 
   return (
@@ -187,9 +187,9 @@ export function UsersClient() {
         target={
           state.deleteTarget
             ? {
-                id: state.deleteTarget.id,
-                label: state.deleteTarget.fullName || state.deleteTarget.email,
-              }
+              id: state.deleteTarget.id,
+              label: state.deleteTarget.fullName || state.deleteTarget.email,
+            }
             : null
         }
         onCancel={() => state.setDeleteTarget(null)}

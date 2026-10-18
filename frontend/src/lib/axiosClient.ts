@@ -12,7 +12,7 @@ const axiosClient = axios.create({
 
 export const parseAxiosError = (
   error: any,
-  customMessage?: string
+  customMessage?: string,
 ): { statusCode: number; message: string } => {
   let statusCode = 500;
   if (axios.isAxiosError(error)) {
@@ -43,8 +43,8 @@ export const parseAxiosError = (
   };
 };
 
-let setAuthTokenInContext: ((token: string | null) => void) | null = null;
-let currentAccessToken: string | null = null;
+const setAuthTokenInContext: ((token: string | null) => void) | null = null;
+const currentAccessToken: string | null = null;
 
 let isRefreshing = false;
 let failedQueue: any[] = [];
@@ -84,7 +84,7 @@ axiosClient.interceptors.request.use(
   (error) => {
     console.error('[Axios] Request error:', error);
     return Promise.reject(error);
-  }
+  },
 );
 
 // Response Interceptor
@@ -144,7 +144,7 @@ axiosClient.interceptors.response.use(
       }
     }
     return Promise.reject(error);
-  }
+  },
 );
 
 export default axiosClient;

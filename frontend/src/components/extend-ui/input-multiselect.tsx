@@ -136,7 +136,7 @@ export const InputMultiSelect: React.FC<{
                     'border-muted-foreground/50 mr-1 flex h-4 w-4 items-center justify-center rounded-md border',
                     selectedValue.length === options.length
                       ? 'bg-primary text-primary-foreground'
-                      : 'opacity-50 [&_svg]:invisible'
+                      : 'opacity-50 [&_svg]:invisible',
                   )}
                 >
                   <CheckIcon className="h-3.5 w-3.5" />
@@ -161,7 +161,7 @@ export const InputMultiSelect: React.FC<{
                         'border-muted-foreground/50 mr-1 flex h-4 w-4 items-center justify-center rounded-md border',
                         isSelected
                           ? 'bg-primary text-primary-foreground'
-                          : 'opacity-50 [&_svg]:invisible'
+                          : 'opacity-50 [&_svg]:invisible',
                       )}
                     >
                       <CheckIcon className="h-3.5 w-3.5" />
@@ -208,70 +208,70 @@ export const InputMultiSelectTrigger = React.forwardRef<
     className?: string;
     children?: (v: SelectOption) => React.ReactNode;
     style?: React.CSSProperties;
-  }
->(
-  (
-    {
-      options,
-      // onValueChange,
-      placeholder,
-      truncateCount,
-      disabled,
-      selectedValue,
-      // setSelectedValue,
-      // isPopoverOpen,
-      setIsPopoverOpen,
-      onOptionSelect,
-      onClearAllOptions,
-      className,
-      style,
-      children,
-    },
-    ref
-  ) => {
-    const onTogglePopover = () => {
-      setIsPopoverOpen((prev) => !prev);
-    };
+      }
+      >(
+      (
+        {
+          options,
+          // onValueChange,
+          placeholder,
+          truncateCount,
+          disabled,
+          selectedValue,
+          // setSelectedValue,
+          // isPopoverOpen,
+          setIsPopoverOpen,
+          onOptionSelect,
+          onClearAllOptions,
+          className,
+          style,
+          children,
+        },
+        ref,
+      ) => {
+        const onTogglePopover = () => {
+          setIsPopoverOpen((prev) => !prev);
+        };
 
-    return (
-      <Button
-        ref={ref}
-        onClick={onTogglePopover}
-        variant="outline"
-        type="button"
-        disabled={disabled}
-        className={cn(
-          'flex h-auto min-h-11 w-full items-center justify-between p-1 [&_svg]:pointer-events-auto',
-          'hover:bg-transparent',
-          disabled && '[&_svg]:pointer-events-none',
-          className
-        )}
-        style={style}
-      >
-        {selectedValue.length > 0 ? (
-          <div className="flex w-full items-center justify-between">
-            <div className="flex flex-wrap items-center px-1">
-              {selectedValue.slice(0, truncateCount).map((value, index) => {
-                const option = options.find((o) => o.value === value);
+        return (
+          <Button
+            ref={ref}
+            onClick={onTogglePopover}
+            variant="outline"
+            type="button"
+            disabled={disabled}
+            className={cn(
+              'flex h-auto min-h-11 w-full items-center justify-between p-1 [&_svg]:pointer-events-auto',
+              'hover:bg-transparent',
+              disabled && '[&_svg]:pointer-events-none',
+              className,
+            )}
+            style={style}
+          >
+            {selectedValue.length > 0 ? (
+              <div className="flex w-full items-center justify-between">
+                <div className="flex flex-wrap items-center px-1">
+                  {selectedValue.slice(0, truncateCount).map((value, index) => {
+                    const option = options.find((o) => o.value === value);
 
-                if (!option) {
-                  return <div key={`${index}-${value}`}></div>;
-                }
+                    if (!option) {
+                      return <div key={`${index}-${value}`}></div>;
+                    }
 
-                if (children) {
-                  return <div key={`${index}-${value}`}>{children(option)}</div>;
-                }
+                    if (children) {
+                      return <div key={`${index}-${value}`}>{children(option)}</div>;
+                    }
 
-                return (
-                  <Badge
-                    key={`${index}-${value}`}
-                    className={cn(
-                      'bg-muted text-foreground hover:bg-muted mr-1 flex cursor-default items-center border-transparent'
-                    )}
-                  >
-                    {option?.icon && <option.icon className="mr-1 h-3.5 w-3.5" />}
-                    {option?.label}
-                    {/* <X
+                    return (
+                      <Badge
+                        key={`${index}-${value}`}
+                        className={cn(
+                          'bg-muted text-foreground hover:bg-muted mr-1 flex cursor-default items-center border-transparent',
+                        )}
+                      >
+                        {option?.icon && <option.icon className="mr-1 h-3.5 w-3.5" />}
+                        {option?.label}
+                        {/* <X
                       className="text-muted-foreground hover:text-foreground ml-1 h-3.5 w-3.5 cursor-pointer bg-red-200"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -279,44 +279,44 @@ export const InputMultiSelectTrigger = React.forwardRef<
                         console.log('Cleared option:', value);
                       }}
                     /> */}
-                    <span
-                      className="text-muted-foreground hover:text-destructive ml-1 h-4 w-4 cursor-pointer"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOptionSelect(value);
-                      }}
-                    >
+                        <span
+                          className="text-muted-foreground hover:text-destructive ml-1 h-4 w-4 cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOptionSelect(value);
+                          }}
+                        >
                       X
-                    </span>
-                  </Badge>
-                );
-              })}
-              {selectedValue.length > truncateCount && (
-                <div className={cn('text-muted-foreground cursor-default py-1 pl-1.5')}>
-                  {`+${selectedValue.length - truncateCount}`}
+                        </span>
+                      </Badge>
+                    );
+                  })}
+                  {selectedValue.length > truncateCount && (
+                    <div className={cn('text-muted-foreground cursor-default py-1 pl-1.5')}>
+                      {`+${selectedValue.length - truncateCount}`}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-            <div className="flex items-center justify-between">
-              <X
-                className="text-muted-foreground mx-2 h-4 cursor-pointer"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClearAllOptions();
-                }}
-              />
-              <Separator orientation="vertical" className="flex h-full min-h-6" />
-              <ChevronDown className="text-muted-foreground mx-2 h-4 cursor-pointer" />
-            </div>
-          </div>
-        ) : (
-          <div className="mx-auto flex w-full items-center justify-between">
-            <span className="text-muted-foreground mx-3 text-sm">{placeholder}</span>
-            <ChevronDown className="text-muted-foreground mx-2 h-4 cursor-pointer" />
-          </div>
-        )}
-      </Button>
-    );
-  }
-);
+                <div className="flex items-center justify-between">
+                  <X
+                    className="text-muted-foreground mx-2 h-4 cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onClearAllOptions();
+                    }}
+                  />
+                  <Separator orientation="vertical" className="flex h-full min-h-6" />
+                  <ChevronDown className="text-muted-foreground mx-2 h-4 cursor-pointer" />
+                </div>
+              </div>
+            ) : (
+              <div className="mx-auto flex w-full items-center justify-between">
+                <span className="text-muted-foreground mx-3 text-sm">{placeholder}</span>
+                <ChevronDown className="text-muted-foreground mx-2 h-4 cursor-pointer" />
+              </div>
+            )}
+          </Button>
+        );
+      },
+      );
 InputMultiSelectTrigger.displayName = 'InputMultiSelectTrigger';

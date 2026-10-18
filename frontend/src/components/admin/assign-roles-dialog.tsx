@@ -40,12 +40,12 @@ export function AssignRolesDialog({ user, onCancel }: AssignRolesDialogProps) {
         })),
       },
     ],
-    [roles.data]
+    [roles.data],
   );
 
   const defaultValues = useMemo<RoleForm>(
     () => ({ roleIds: (user?.roles ?? []).map((role) => String(role.id)) }),
-    [user]
+    [user],
   );
 
   const save = useMutation({
@@ -54,7 +54,7 @@ export function AssignRolesDialog({ user, onCancel }: AssignRolesDialogProps) {
       // Backend `PATCH /users/:id/roles` nhận `{roleIds: number[]}` (docs/BACKEND.md).
       await userApi.updateUserRoles(
         user.id,
-        roleIds.map((roleId) => Number(roleId)).filter((roleId) => !Number.isNaN(roleId))
+        roleIds.map((roleId) => Number(roleId)).filter((roleId) => !Number.isNaN(roleId)),
       );
     },
     onSuccess: () => {
@@ -79,7 +79,7 @@ export function AssignRolesDialog({ user, onCancel }: AssignRolesDialogProps) {
       defaultValues={defaultValues}
       onSubmit={(values) =>
         save.mutateAsync(Array.isArray(values.roleIds) ? (values.roleIds as string[]) : []).catch(
-          () => undefined
+          () => undefined,
         )
       }
       submitting={save.isPending}

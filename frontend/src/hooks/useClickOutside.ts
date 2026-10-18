@@ -5,7 +5,7 @@ type EventType = 'mousedown' | 'mouseup' | 'touchstart' | 'touchend' | 'focusin'
 function useClickOutside<T extends HTMLElement = HTMLElement>(
   ref: React.RefObject<T>,
   handler: (event: MouseEvent | TouchEvent | FocusEvent) => void,
-  eventType: EventType = 'mousedown'
+  eventType: EventType = 'mousedown',
 ) {
   React.useEffect(() => {
     const root = window.document;

@@ -307,7 +307,7 @@ export default function UserProfileForm() {
   // check xác thực bơi email, gg, fb, apple
   const verifiedBy = (user: User | null) => {
     if (!user || !user.isVerified) return '';
-    let providerText = 'Xác thực bằng: ';
+    const providerText = 'Xác thực bằng: ';
 
     const provider = 'email';
     return providerText + provider;

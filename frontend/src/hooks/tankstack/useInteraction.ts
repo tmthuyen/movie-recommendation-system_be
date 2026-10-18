@@ -51,7 +51,7 @@ function usePagedInteractionsQuery(
     page: number;
     limit: number;
   }) => Promise<ApiPaginatedResponse<Interaction[]>>,
-  enabled: boolean
+  enabled: boolean,
 ) {
   return useQuery({
     queryKey: [source, page, limit],
@@ -76,7 +76,7 @@ export function useMyHistory(page: number = 1, limit: number = 12, enabled: bool
     page,
     limit,
     interactionApi.getMyHistory,
-    enabled && isAuthenticated
+    enabled && isAuthenticated,
   );
 }
 
@@ -92,7 +92,7 @@ export function useMyFavoritesPaged(page: number = 1, limit: number = 12, enable
     page,
     limit,
     interactionApi.getMyFavorites,
-    enabled && isAuthenticated
+    enabled && isAuthenticated,
   );
 }
 
@@ -142,11 +142,11 @@ export function useToggleInteraction() {
       queryClient.setQueriesData<Interaction[]>({ queryKey: [FAVORITES_KEY] }, (old) => {
         if (!old) return old;
         const exists = old.some(
-          (item) => `${item.movie?.id ?? item.movieId}:${item.type}` === `${movieId}:${type}`
+          (item) => `${item.movie?.id ?? item.movieId}:${item.type}` === `${movieId}:${type}`,
         );
         if (exists) {
           return old.filter(
-            (item) => `${item.movie?.id ?? item.movieId}:${item.type}` !== `${movieId}:${type}`
+            (item) => `${item.movie?.id ?? item.movieId}:${item.type}` !== `${movieId}:${type}`,
           );
         }
         return [...old, { id: -Date.now(), score: 0, type, movieId } as Interaction];
@@ -166,7 +166,7 @@ export function useToggleInteraction() {
       toast.success(
         result.action === 'added'
           ? 'Đã thêm vào danh sách của bạn.'
-          : 'Đã xóa khỏi danh sách của bạn.'
+          : 'Đã xóa khỏi danh sách của bạn.',
       );
     },
     onSettled: () => {

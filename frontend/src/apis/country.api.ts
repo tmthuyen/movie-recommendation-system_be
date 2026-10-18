@@ -27,7 +27,7 @@ export const countryApi = {
   /** Cập nhật (ADMIN) — backend nhận `PATCH`. */
   update: async (
     id: number | string,
-    input: Partial<{ name: string; code: string }>
+    input: Partial<{ name: string; code: string }>,
   ): Promise<ApiResponse<Country>> => {
     const { data } = await axiosClient.patch(`/countries/${id}`, input);
     return data;

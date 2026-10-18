@@ -1,4 +1,5 @@
 import { Metadata } from 'next';
+import { Suspense } from 'react';
 import VerifyEmail from '@/app/auth/verify-email/verify-email';
 
 export const metadata: Metadata = {
@@ -6,11 +7,19 @@ export const metadata: Metadata = {
   description: 'Xác thực email | Movie Recommendation App',
 };
 
-export default function Page() {
+function VerifyEmailContent() {
   console.log('VerifyEmail component rendered');
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
       <VerifyEmail />
     </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center px-4">Loading...</div>}>
+      <VerifyEmailContent />
+    </Suspense>
   );
 }

@@ -11,7 +11,7 @@ export type TmdbImageSize = 'w200' | 'w342' | 'w500' | 'w780' | 'original';
 
 export function getTmdbImageUrl(
   path?: string | null,
-  size: TmdbImageSize = 'w500'
+  size: TmdbImageSize = 'w500',
 ): string | null {
   if (!path) return null;
   return `${TMDB_IMAGE_BASE_URL}/${size}${path}`;

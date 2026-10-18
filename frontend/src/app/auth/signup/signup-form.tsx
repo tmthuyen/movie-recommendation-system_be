@@ -71,7 +71,7 @@ function SignUpForm() {
     signupMutation.mutate(data, {
       onSuccess: (response) => {
         toast.success(
-          response.message || 'Đăng ký thành công! Vui lòng kiểm tra email để xác minh.'
+          response.message || 'Đăng ký thành công! Vui lòng kiểm tra email để xác minh.',
         );
         reset();
         router.push('/auth/login');

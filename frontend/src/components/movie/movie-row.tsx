@@ -62,7 +62,7 @@ export function MovieRow({ movies, max = 12, className }: MovieRowProps) {
         className={cn(
           // 1 hàng ngang: 2 → 3 → 4 → 6 card, không wrap, ẩn scrollbar
           'no-scrollbar flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 md:gap-4',
-          className
+          className,
         )}
         role="list"
       >

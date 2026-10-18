@@ -228,7 +228,7 @@ export default function HomePage() {
   const { topRated, mostViewed, newest } = useMemo(() => {
     const sortedByRating = [...movies].sort((a, b) => (b.voteAverage ?? 0) - (a.voteAverage ?? 0));
     const sortedByViews = [...movies].sort(
-      (a, b) => (Number(b.viewCount) || 0) - (Number(a.viewCount) || 0)
+      (a, b) => (Number(b.viewCount) || 0) - (Number(a.viewCount) || 0),
     );
     const sortedByNewest = [...movies].sort((a, b) => {
       const dateA = new Date(a.releaseDate || a.createdAt).getTime();

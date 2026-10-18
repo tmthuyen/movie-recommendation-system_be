@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 // get all (public)
 export function useGetCountries(
   staleTime: number = 1000 * 60 * 5,
-  gcTime: number = 1000 * 60 * 10
+  gcTime: number = 1000 * 60 * 10,
 ) {
   return useQuery({
     queryKey: ['countries'],

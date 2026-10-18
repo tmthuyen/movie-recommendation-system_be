@@ -57,7 +57,7 @@ export function DataPagination({
       aria-label={ariaLabel}
       className={cn(
         'mt-8 flex flex-col items-center justify-between gap-4 border-t pt-4 sm:flex-row',
-        className
+        className,
       )}
     >
       <p className="text-muted-foreground text-sm">
@@ -94,7 +94,7 @@ export function DataPagination({
             >
               {item}
             </Button>
-          )
+          ),
         )}
 
         <Button

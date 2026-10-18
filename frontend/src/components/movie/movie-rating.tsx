@@ -69,7 +69,7 @@ export function MovieRating({ movie }: MovieRatingProps) {
                 key={index}
                 className={cn(
                   'size-4',
-                  index < displayStar ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground/40 fill-muted-foreground/20'
+                  index < displayStar ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground/40 fill-muted-foreground/20',
                 )}
               />
             ))}
@@ -97,7 +97,7 @@ export function MovieRating({ movie }: MovieRatingProps) {
                 'rounded p-1.5 transition-all hover:bg-accent focus-visible:ring-ring cursor-pointer focus-visible:ring-2 focus-visible:outline-none active:scale-90 disabled:cursor-not-allowed disabled:opacity-50',
                 value <= displayStar
                   ? 'text-yellow-500'
-                  : 'text-muted-foreground hover:text-muted-foreground/80'
+                  : 'text-muted-foreground hover:text-muted-foreground/80',
               )}
             >
               <Star className="size-6" />

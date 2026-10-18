@@ -92,7 +92,7 @@ export function createCrudHooks<T, TInput>(api: CrudApi<T, TInput>) {
 /** Mutation "chỉ xóa" cho các danh sách read-only (rating/comment/interaction ở trang admin). */
 export function useDeleteOnly(
   domain: string,
-  remove: (id: string) => Promise<unknown>
+  remove: (id: string) => Promise<unknown>,
 ): UseMutationResult<unknown, Error, string> {
   const queryClient = useQueryClient();
   return useMutation({
@@ -109,7 +109,7 @@ export function useDeleteOnly(
 /** Query "chỉ list phân trang" cho danh sách read-only (hỗ trợ `enabled` để không fetch tab ẩn). */
 export function usePagedList<T>(
   domain: string,
-  fetcher: (params: { page: number; limit: number }) => Promise<ApiPaginatedResponse<T[]>>
+  fetcher: (params: { page: number; limit: number }) => Promise<ApiPaginatedResponse<T[]>>,
 ) {
   return function usePagedListQuery({
     page,
@@ -145,7 +145,7 @@ interface CrudPageMutations<TInput> {
  * dialog xóa xác nhận. Mỗi trang chỉ khai báo columns/fields — không lặp wiring.
  */
 export function useCrudPage<T extends { id: number | string }, TInput>(
-  mutations: CrudPageMutations<TInput>
+  mutations: CrudPageMutations<TInput>,
 ) {
   const [page, setPage] = useState(1);
   const [keywordInput, setKeywordInput] = useState('');

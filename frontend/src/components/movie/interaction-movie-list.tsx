@@ -130,7 +130,7 @@ export function MyInteractionList({ source }: MyInteractionListProps) {
   const favoritesQuery = useInteraction.useMyFavoritesPaged(
     page,
     PAGE_LIMIT,
-    source === 'favorites'
+    source === 'favorites',
   );
 
   const { data, isLoading, isError, isFetching, refetch } =
@@ -179,7 +179,7 @@ export function MyInteractionList({ source }: MyInteractionListProps) {
       <ul
         className={cn(
           'space-y-3 transition-opacity',
-          isFetching ? 'opacity-60' : 'opacity-100'
+          isFetching ? 'opacity-60' : 'opacity-100',
         )}
       >
         {items.map((interaction) => (

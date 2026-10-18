@@ -10,7 +10,7 @@ export function useGetAll(
   staleTime: number = 1000 * 60 * 5,
   gcTime: number = 1000 * 60 * 10,
   page: number = 1,
-  limit: number = 10
+  limit: number = 10,
 ) {
   return useQuery({
     queryKey: ['users'],
@@ -27,7 +27,7 @@ export function useGetAll(
 export function useGetOne(
   id: number,
   staleTime: number = 1000 * 60 * 2,
-  gcTime: number = 1000 * 60 * 5
+  gcTime: number = 1000 * 60 * 5,
 ) {
   return useQuery({
     queryKey: ['users', id],

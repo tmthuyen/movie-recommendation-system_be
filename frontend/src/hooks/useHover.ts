@@ -2,7 +2,7 @@
 import React from 'react';
 
 function useHover<T extends HTMLElement = HTMLElement>(
-  elementRef: React.RefObject<T>
+  elementRef: React.RefObject<T>,
 ): { isHovered: boolean } {
   const [isHovered, setIsHovered] = React.useState(false);
 

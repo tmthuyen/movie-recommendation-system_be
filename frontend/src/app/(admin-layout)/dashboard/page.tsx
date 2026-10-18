@@ -1,5 +1,4 @@
 import React from 'react';
-import { PageHeader } from '@/components/common/PageHeader';
 import { DashboardClient } from './dashboard-client';
 
 export const metadata = {
@@ -10,10 +9,8 @@ export const metadata = {
 
 export default function DashBoardPage() {
   return (
-    <div className="flex h-full w-full flex-col gap-4">
-      <PageHeader title={metadata.title} description={metadata.description} />
-
-      {/* content */}
+    <div className="flex h-full w-full min-w-0 flex-col gap-4">
+      {/* Tiêu đề + thanh công cụ (lọc thời gian, làm mới, xuất CSV) nằm trong client vì cần state */}
       <DashboardClient />
     </div>
   );

@@ -30,7 +30,7 @@ export function ErrorState({
       role="alert"
       className={cn(
         'flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed p-10 text-center',
-        className
+        className,
       )}
     >
       <AlertTriangle className="text-destructive size-10" aria-hidden />

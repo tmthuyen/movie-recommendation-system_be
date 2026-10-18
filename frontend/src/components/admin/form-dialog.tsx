@@ -108,7 +108,7 @@ export function CrudFormDialog<T extends Record<string, unknown>>({
             id={fieldId}
             className={cn(
               'border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm shadow-xs transition-[color,box-shadow] focus-visible:ring-2 focus-visible:outline-none',
-              inputClassName
+              inputClassName,
             )}
             {...register(field.name as Path<T>)}
           >
@@ -122,7 +122,7 @@ export function CrudFormDialog<T extends Record<string, unknown>>({
           <div
             className={cn(
               'max-h-44 space-y-1.5 overflow-y-auto rounded-md border p-2',
-              error && 'border-destructive'
+              error && 'border-destructive',
             )}
             role="group"
             aria-label={field.label}
@@ -132,7 +132,7 @@ export function CrudFormDialog<T extends Record<string, unknown>>({
             ) : (
               (field.options ?? []).map((option) => {
                 const selected = ((watchFormValue(field.name) as string[] | undefined) ?? []).includes(
-                  option.value
+                  option.value,
                 );
                 return (
                   <label
@@ -212,7 +212,7 @@ export function CrudFormDialog<T extends Record<string, unknown>>({
 /** Build `defaultValues` từ dữ liệu edit/create — dùng chung ở mọi trang. */
 export function buildDefaults<T extends Record<string, unknown>>(
   fields: CrudFormField[],
-  source?: object | null
+  source?: object | null,
 ): T {
   const record = source as Record<string, unknown> | null | undefined;
   const defaults: Record<string, unknown> = {};
@@ -233,8 +233,8 @@ export function buildDefaults<T extends Record<string, unknown>>(
  */
 export function useCrudFormValues<T extends Record<string, unknown>>(
   fields: CrudFormField[],
-  editing: object | null
+  editing: object | null,
 ): T {
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   return useMemo(() => buildDefaults<T>(fields, editing), [editing, fields]);
 }

@@ -38,7 +38,7 @@ export const userApi = {
   /** Gán vai trò cho user (ADMIN) — `PATCH /users/:id/roles` `{roleIds}`. */
   updateUserRoles: async (
     id: number | string,
-    roleIds: Array<number | string>
+    roleIds: Array<number | string>,
   ): Promise<ApiResponse<User>> => {
     const { data } = await axiosClient.patch(`/users/${id}/roles`, { roleIds });
     return data;

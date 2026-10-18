@@ -108,7 +108,7 @@ export function MovieActions({ movieId, variant = 'card', className }: MovieActi
             className={cn(
               'inline-flex shrink-0 items-center justify-center rounded-full border bg-background/80 backdrop-blur transition-all duration-200 hover:bg-accent focus-visible:ring-ring cursor-pointer focus-visible:ring-2 focus-visible:outline-none active:scale-95 disabled:opacity-60',
               variant === 'card' ? 'size-9' : 'size-11',
-              active ? activeClass : 'text-foreground border-border hover:text-foreground'
+              active ? activeClass : 'text-foreground border-border hover:text-foreground',
             )}
           >
             <Icon

@@ -15,7 +15,7 @@ export const authApi = {
   },
 
   register: async (
-    registerData: RegisterData
+    registerData: RegisterData,
   ): Promise<ApiResponse<{ accessToken: string; refreshToken: string }>> => {
     const { data } = await axiosClient.post('/auth/register', registerData);
 

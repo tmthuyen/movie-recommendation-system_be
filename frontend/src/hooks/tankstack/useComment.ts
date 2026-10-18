@@ -8,7 +8,7 @@ import { useAuthStore } from '@/stores/auth.store';
 /** Bình luận của một phim — `parentId` undefined → root. */
 export function useGetComments(
   movieId: number | string,
-  options: { page?: number; limit?: number; parentId?: number | string } = {}
+  options: { page?: number; limit?: number; parentId?: number | string } = {},
 ) {
   const { page = 1, limit = 5, parentId } = options;
 

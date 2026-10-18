@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 export function useGetRatings(
   movieId: number | string,
   page: number = 1,
-  limit: number = 5
+  limit: number = 5,
 ) {
   return useQuery({
     queryKey: ['ratings', String(movieId), page, limit],

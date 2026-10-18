@@ -16,7 +16,7 @@ export default function ReactQueryProvider({ children }: { children: React.React
             gcTime: 10 * 60 * 1000, // 10 minutes
           },
         },
-      })
+      }),
   );
 
   return (

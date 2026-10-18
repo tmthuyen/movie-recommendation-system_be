@@ -1,17 +1,26 @@
-import { Metadata } from "next";
-import LoginForm from "./login-form"
+import { Metadata } from 'next';
+import { Suspense } from 'react';
+import LoginForm from './login-form';
 
 export const metadata: Metadata = {
-  title: "Login",
-  description: "Sign in to your account",
+  title: 'Login',
+  description: 'Sign in to your account',
 };
 
-export default function LoginPage() {
+function LoginContent() {
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
       <LoginForm />
     </div>
-  )
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center px-4">Loading...</div>}>
+      <LoginContent />
+    </Suspense>
+  );
 }
 
 

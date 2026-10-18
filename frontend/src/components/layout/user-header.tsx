@@ -5,6 +5,7 @@ import {
   MobileSearchExpanded,
   MobileSearchToggle,
 } from '@/components/layout/header-search';
+import { QuickNavDropdown } from '@/components/layout/quick-nav-dropdown';
 import { UserMenu } from '@/components/layout/user-menu';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Moon, Sun } from 'lucide-react';
@@ -30,7 +31,9 @@ export default function UserHeader({ className }: { className?: string }) {
   /** Trạng thái mở rộng ô tìm kiếm trên mobile (`< md`). */
   const [searchOpen, setSearchOpen] = useState(false);
 
+  // useEffect để tránh hydration mismatch
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 
@@ -62,6 +65,9 @@ export default function UserHeader({ className }: { className?: string }) {
         <div className="ms-auto flex items-center gap-1 sm:gap-2">
           {/* Icon tìm kiếm (mobile) — mở rộng thành hàng input */}
           <MobileSearchToggle onClick={() => setSearchOpen(true)} />
+
+          {/* Dropdown điều hướng nhanh (route + tính năng) — dùng chung với admin */}
+          <QuickNavDropdown variant="user" />
 
           {/* Toggle theme */}
           <button

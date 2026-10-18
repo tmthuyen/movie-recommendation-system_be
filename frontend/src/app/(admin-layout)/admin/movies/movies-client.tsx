@@ -144,7 +144,7 @@ export function MoviesClient() {
         })),
       },
     ],
-    [genres.data, countries.data, peoples.data]
+    [genres.data, countries.data, peoples.data],
   );
 
   const defaultValues = useCrudFormValues<MovieForm>(fields, state.editing);

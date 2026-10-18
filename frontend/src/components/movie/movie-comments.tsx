@@ -170,7 +170,7 @@ export function MovieComments({ movieId }: MovieCommentsProps) {
           setPage(1);
           notifyTyping(false);
         },
-      }
+      },
     );
   };
 
@@ -189,7 +189,7 @@ export function MovieComments({ movieId }: MovieCommentsProps) {
           setReplyTo(null);
           if (replyTo !== null) setExpanded((prev) => new Set(prev).add(replyTo));
         },
-      }
+      },
     );
   };
 
@@ -284,7 +284,7 @@ export function MovieComments({ movieId }: MovieCommentsProps) {
                       }}
                       className={cn(
                         'text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs font-medium transition-colors',
-                        'cursor-pointer'
+                        'cursor-pointer',
                       )}
                       aria-expanded={replyTo === comment.id}
                     >

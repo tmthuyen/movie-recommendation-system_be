@@ -101,7 +101,7 @@ function LoginForm() {
       const user: User = meRes.result;
       if (!meRes.success || !meRes.result) {
         toast.error(
-          'Đăng nhập thất bại.' + (meRes.message || 'Không thể lấy thông tin người dùng.')
+          'Đăng nhập thất bại.' + (meRes.message || 'Không thể lấy thông tin người dùng.'),
         );
         return;
       }

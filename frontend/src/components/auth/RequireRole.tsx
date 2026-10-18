@@ -59,7 +59,7 @@ export default function RequireRole({ requiredRoles, children }: RequireRoleProp
   const userRoleCodes = roleUtil.mapRoleToCodes(user.roles);
 
   const hasRequiredRole = requiredRoles.some((requiredRole) =>
-    userRoleCodes.includes(requiredRole)
+    userRoleCodes.includes(requiredRole),
   );
 
   // forbidden

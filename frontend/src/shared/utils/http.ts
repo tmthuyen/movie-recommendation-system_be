@@ -32,7 +32,7 @@ const fetcher = async <T>(url: string, options?: FetchOptions): Promise<ApiRespo
     body: options?.body ? JSON.stringify(options.body) : undefined,
     ...(options &&
       Object.fromEntries(
-        Object.entries(options).filter(([key]) => !['method', 'headers', 'body'].includes(key))
+        Object.entries(options).filter(([key]) => !['method', 'headers', 'body'].includes(key)),
       )),
   };
 

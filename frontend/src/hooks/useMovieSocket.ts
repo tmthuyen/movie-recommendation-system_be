@@ -81,13 +81,13 @@ export function useMovieSocket({
 
     socket.on(commentEvent, (comment: any) => handlersRef.current.onComment?.(comment));
     socket.on(ratingEvent, (payload: MovieRatingPayload) =>
-      handlersRef.current.onRating?.(payload)
+      handlersRef.current.onRating?.(payload),
     );
     socket.on(viewCountEvent, (payload: MovieViewCountPayload) =>
-      handlersRef.current.onViewCount?.(payload)
+      handlersRef.current.onViewCount?.(payload),
     );
     socket.on(typingEvent, (payload: MovieTypingPayload) =>
-      handlersRef.current.onTyping?.(payload)
+      handlersRef.current.onTyping?.(payload),
     );
 
     return () => {
@@ -108,7 +108,7 @@ export function useMovieSocket({
 export function emitTypingComment(
   movieId: number | string,
   isTyping: boolean,
-  userFullName?: string
+  userFullName?: string,
 ) {
   getSharedSocket().emit('typingComment', {
     movieId: Number(movieId),

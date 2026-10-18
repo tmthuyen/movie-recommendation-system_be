@@ -103,6 +103,7 @@ frontend/
     │   │   ├── useUser.ts      # Quản lý user
     │   │   ├── admin-crud.ts   # Factory CRUD admin: createCrudHooks (list+create/update/delete), useCrudPage (state orchestration: pagination, debounce 400ms, dialog), usePagedList/useDeleteOnly
     │   │   ├── admin.ts        # Bộ hooks admin theo domain (adminGenres/Countries/Peoples/Movies/Users/Roles) + interactions/ratings/comments read-only
+    │   │   ├── admin-dashboard.ts # useAdminDashboard({days}) — gom 6 list API + memo thống kê dashboard + refresh()
     │   │   └── useInteraction.ts # useToggleInteraction (optimistic + invalidate), useMyFavorites/useMyFavoriteKeys (trạng thái nút card),
     │   │                          # useMyHistory + useMyFavoritesPaged (phân trang, queryKey root riêng my-history/my-favorites-page)
     │   ├── useAuth.ts       # ⚠ Đang đọc mock AuthContext — sẽ dọn khi chuyển hẳn useAuthStore
@@ -117,10 +118,14 @@ frontend/
     ├── components/
     │   ├── ui/              # shadcn/ui sinh từ CLI (button, dialog, table, sidebar, sonner…)
     │   ├── layout/          # UserLayout (shell user: UserHeader + content wrapper min-w-0 + SiteFooter + MobileBottomNav),
-    │   │                    # AdminLayout, RoleLayout (bọc theo role), user-header (top header + dropdown user),
-    │   │                    # user-menu (dropdown nội dung dùng chung header/sidebar), mobile-bottom-nav (nav màn hình nhỏ),
-    │   │                    # site-footer (footer info website)
-    │   ├── sidebar/         # nav-main.tsx (dataBar nhiều group), nav-user.tsx (trigger sidebar, dùng chung UserMenuContent), user-sidebar, admin-sidebar
+    │   │                    # AdminLayout (shell admin: AdminSidebar + admin-header + SiteFooter + AdminMobileBottomNav),
+    │   │                    # RoleLayout (bọc theo role), user-header (top header + dropdown điều hướng nhanh + dropdown user),
+    │   │                    # quick-nav-dropdown (QuickNavDropdown variant user/admin — nhảy route nhanh từ header),
+    │   │                    # user-menu (dropdown nội dung dùng chung header/sidebar),
+    │   │                    # mobile-bottom-nav (khung BottomNav dùng chung + MobileBottomNav user + AdminMobileBottomNav),
+    │   │                    # site-footer (footer info website, dùng chung cả user & admin)
+    │   ├── sidebar/         # nav-data.ts (NAV_SECTIONS + BOTTOM_NAV — nguồn route duy nhất cho sidebar/header dropdown/bottom nav),
+    │   │                    # nav-main.tsx (render NavSection từ nav-data), nav-user.tsx (trigger sidebar, dùng chung UserMenuContent), user-sidebar, admin-sidebar
     │   ├── auth/            # RequireRole.tsx (phân quyền), RequireAuth.tsx (chỉ cần đăng nhập — guard trang cá nhân), RequireLoginDialog.tsx (hộp thoại yêu cầu đăng nhập khi guest bấm tương tác), InitAuth.tsx (bootstrap token khi F5)
     │   ├── common/          # UI kit dùng chung: PageHeader, SectionHeader, EmptyState, ErrorState, DataPagination,
     │   │                    # PaginatedView, paginations/Pagination (PaginatedTable), ConfirmDialog, AppModal,
@@ -133,7 +138,7 @@ frontend/
     │   │                    # MovieList, LatestMovies, MovieDetailView/Detail (chi tiết /movies/[id]), MovieRating (sao
     │   │                    # realtime), MovieComments (phân cấp + typing realtime), MovieViewCount (realtime), SimilarMovies (placeholder),
     │   │                    # InteractionMovieList (dùng chung /my-history + /my-favorites: hàng poster + badge type + phân trang)
-    │   ├── header/          # admin-header
+    │   ├── header/          # admin-header (logo Admin + QuickNavDropdown + nút về trang user + toggle theme + UserMenu)
     │   ├── dropdown/        # user-dropdown, notification-dropdown, streak-dropdown, dropdown-container
     │   ├── loading/         # AdminSkeletonLayout, redirecting, spining
     │   ├── custom-modal/    # Modal tùy chỉnh
@@ -153,6 +158,7 @@ frontend/
         ├── types/           # api.types.ts (ApiResponse, ApiPaginatedResponse, Pagination, User, Role, Genre…),
         │                    # ui.types.ts, global.d.ts
         ├── utils/           # snakeToCamel.ts (keysToCamel), formatting, helpers, roleUtil (mapRoleToCodes),
+        │                    # admin-dashboard.ts (hàm thuần thống kê dashboard: top/bucket/phân bố, toCsv/downloadCsv),
         │                    # validation, mapStatus, http.ts (⚠ legacy — KHÔNG dùng)
         └── config/          # app.config.ts (hằng số app)
 ```
@@ -177,7 +183,7 @@ frontend/
 | `/contact` | `src/app/(main)/contact/page.tsx` | ✅ Trang thông tin tĩnh (server component, placeholder thông tin liên hệ) |
 | `/privacy` | `src/app/(main)/privacy/page.tsx` | ✅ Trang thông tin tĩnh (server component) |
 | `/terms` | `src/app/(main)/terms/page.tsx` | ✅ Trang thông tin tĩnh (server component) |
-| `/dashboard` | `src/app/(admin-layout)/dashboard/page.tsx` (+ `dashboard-client.tsx`) | ✅ Thật — 4 thẻ chỉ số (`pagination.total` từ movies/users/genres/interactions) + 3 biểu đồ recharts (top phim xem nhiều, phim theo thể loại, tương tác theo loại — tổng hợp client-side từ 100 bản ghi đầu tiên, có ghi chú trên trang) |
+| `/dashboard` | `src/app/(admin-layout)/dashboard/page.tsx` (+ `dashboard-client.tsx`) | ✅ Thật — 6 thẻ chỉ số chính xác (`pagination.total`: phim/người dùng/thể loại/tương tác/đánh giá/bình luận) + 7 biểu đồ recharts (top phim xem nhiều, tương tác theo loại, top người dùng hoạt động, phân bố đánh giá 1–5 sao, phim theo thể loại, phim theo quốc gia, top phim điểm cao) + bảng "Hoạt động gần đây" + cảnh báo dữ liệu phim thiếu; toolbar lọc 7/30/90/Tất cả, "Làm mới", "Xuất CSV". Biểu đồ/bảng tổng hợp client-side từ ≤100 bản ghi mẫu (backend chưa có endpoint aggregate/sort/filter thời gian) — có ghi chú cỡ mẫu trên trang |
 | `/admin/movies` | `src/app/(admin-layout)/admin/movies/page.tsx` (+ `movies-client.tsx`) | ✅ Thật — CRUD phim (multiselect thể loại/người, select quốc gia) |
 | `/admin/genres` | `src/app/(admin-layout)/admin/genres/page.tsx` (+ `genres-client.tsx`) | ✅ Thật — CRUD thể loại |
 | `/admin/countries` | `src/app/(admin-layout)/admin/countries/page.tsx` (+ `countries-client.tsx`) | ✅ Thật — CRUD quốc gia |
@@ -193,13 +199,25 @@ Mẫu chung cho trang admin: trang server `export metadata` (title/description t
 `UserLayout` (`components/layout/UserLayout.tsx` — dùng cho guest + USER ở route group `(main)`):
 
 - `SidebarProvider` + `UserSidebar`: sidebar **desktop (`md+`)**; mobile ẩn mặc định (chỉ mở tay qua Sheet của shadcn).
-- `UserHeader` (`components/layout/user-header.tsx`): top header sticky — logo/link về `/`, toggle theme, dropdown tài khoản `UserMenu`; `SidebarTrigger` chỉ hiện `md+`.
+- `UserHeader` (`components/layout/user-header.tsx`): top header sticky — logo/link về `/`, toggle theme, dropdown **điều hướng nhanh** `QuickNavDropdown variant="user"` (nhảy route/tính năng nhanh không cần mở sidebar), dropdown tài khoản `UserMenu`; `SidebarTrigger` chỉ hiện `md+`.
 - Content wrapper **block** `mx-auto w-full max-w-7xl min-w-0 flex-1` (không dùng flex row) + `SidebarInset` có `min-w-0` — fix lỗi scroll ngang toàn trang (trước đây flex item `w-full` có `min-width:auto` khiến overflow nội bộ hàng `MovieRow` đẩy ra ngoài trang).
 - `SiteFooter` (`components/layout/site-footer.tsx`): footer info website — giới thiệu, Khám phá, Thông tin (About/Contact), Pháp lý (Chính sách/Điều khoản), social (placeholder `SOCIAL_LINKS` — chủ website điền URL thật), copyright.
-- `MobileBottomNav` (`components/layout/mobile-bottom-nav.tsx`): bottom nav cố định `md:hidden`, chừa `env(safe-area-inset-bottom)`; guest: Trang chủ/Phim/Đăng nhập — user: + Thông báo/Tài khoản; item active theo pathname.
+- `MobileBottomNav` (`components/layout/mobile-bottom-nav.tsx`): khung `BottomNav` **dùng chung** (cố định `md:hidden`, chừa `env(safe-area-inset-bottom)`, item active theo pathname) cho 2 biến thể:
+  - `MobileBottomNav` (user, đọc `BOTTOM_NAV.user`): guest Trang chủ/Phim/Đăng nhập — user + Thông báo/Tài khoản.
+  - `AdminMobileBottomNav` (admin, đọc `BOTTOM_NAV.admin`): Tổng quan/Phim/Tương tác/Tài khoản/Hồ sơ.
 - `SidebarInset` có `pb-16 md:pb-0` để không bị bottom nav che footer.
 - Nội dung dropdown tài khoản **dùng chung** `UserMenuContent` (`components/layout/user-menu.tsx`) giữa header và sidebar (`nav-user.tsx`) — route shortcuts (Trang chủ, Phim, Lịch sử xem, Yêu thích, Hồ sơ, Thông báo, Dashboard nếu ADMIN), Đăng nhập/Đăng xuất.
 - `<RequireLoginDialog />` mount trong `UserLayout`: guest bấm tương tác cần JWT (thích/yêu thích/muốn xem trên card, đánh giá/bình luận ở `/movies/[id]`) → hiện **hộp thoại** xác nhận, xác nhận mới chuyển `/auth/login?return-page=…` (không redirect ngay) — guard tập trung qua hook `useRequireLogin()` + `stores/require-login.store.ts`.
+
+## Layout shell khu vực admin (`AdminLayout`)
+
+`AdminLayout` (`components/layout/AdminLayout.tsx` — bọc `RequireRole(['ADMIN'])`, route group `(admin-layout)`):
+
+- `SidebarProvider` + `AdminSidebar`: sidebar **desktop (`md+`)**; mobile ẩn, điều hướng qua `AdminMobileBottomNav`.
+- `admin-header` (`components/header/admin-header.tsx`): sticky — logo "Admin" (link `/dashboard`), `QuickNavDropdown variant="admin"` (route quản trị nhanh), nút về trang người dùng `/`, toggle theme, `UserMenu` (dropdown tài khoản dùng chung).
+- Content wrapper **block** `mx-auto w-full max-w-7xl min-w-0 flex-1` + `SidebarInset` `min-w-0` — cùng cách fix scroll ngang như `UserLayout` (bảng `DataTable` rộng cuộn trong khung `overflow-x-auto` của nó, không đẩy scroll ngang toàn trang).
+- `SiteFooter` **dùng chung** với khu vực user; `SidebarInset` có `pb-16 md:pb-0` để bottom nav mobile không che nội dung.
+- Điều hướng nhanh & bottom nav đọc từ `components/sidebar/nav-data.ts` (`NAV_SECTIONS`, `BOTTOM_NAV`) — sửa route chỉ cần sửa 1 chỗ.
 
 ## Kết nối API
 
@@ -304,7 +322,7 @@ Tóm tắt (chi tiết, bắt buộc: [FRONTEND_RULES.md](./FRONTEND_RULES.md)):
 - **UI**: shadcn style `new-york`, dark mode class-based, design token trong `globals.css` (CSS variable, không hardcode hex), text tiếng Việt.
 - **Responsive**: mobile-first, grid phim ≥2 cột mobile → 4–6 cột desktop, touch target ≥44px, kiểm tra width 375px.
 - **Mượt**: skeleton/loading cho mọi trang, optimistic update khi toggle tương tác, debounced search, giữ tỉ lệ poster `aspect-[2/3]` tránh layout shift.
-- **Thêm API mới**: `src/apis/<domain>.api.ts` → hook trong `src/hooks/tankstack/` → trang vào route group đúng (`(main)` user / `(admin-layout)` admin) → thêm nav vào `nav-main.tsx`/`nav-user.tsx`.
+- **Thêm API mới**: `src/apis/<domain>.api.ts` → hook trong `src/hooks/tankstack/` → trang vào route group đúng (`(main)` user / `(admin-layout)` admin) → thêm route vào `components/sidebar/nav-data.ts` (`NAV_SECTIONS`, và `BOTTOM_NAV` nếu cần hiện ở bottom nav mobile) — **không copy danh sách route vào từng component nav/dropdown**.
 - **Auth/roles**: chỉ dùng `useAuthStore` (không dùng mock `AuthContext`), trang admin bọc `RequireRole(['ADMIN'])`.
 - **Git**: không commit/push khi chưa được yêu cầu.
 

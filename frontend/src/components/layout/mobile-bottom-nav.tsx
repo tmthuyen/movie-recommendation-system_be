@@ -1,26 +1,17 @@
 'use client';
 
+import { BOTTOM_NAV, BottomNavItemData } from '@/components/sidebar/nav-data';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth.store';
-import { Bell, Film, Home, LogIn, User as UserIcon } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import type { ElementType } from 'react';
 
-interface BottomNavItem {
-  href: string;
-  label: string;
-  icon: ElementType;
-  /** So khớp chặt chẽ (trang chủ) thay vì startsWith. */
-  exact?: boolean;
-}
-
-function isActivePath(pathname: string, item: BottomNavItem) {
+function isActivePath(pathname: string, item: BottomNavItemData) {
   if (item.exact) return pathname === item.href;
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
-function BottomNavButton({ item, pathname }: { item: BottomNavItem; pathname: string }) {
+function BottomNavButton({ item, pathname }: { item: BottomNavItemData; pathname: string }) {
   const active = isActivePath(pathname, item);
   return (
     <Link
@@ -28,7 +19,7 @@ function BottomNavButton({ item, pathname }: { item: BottomNavItem; pathname: st
       aria-current={active ? 'page' : undefined}
       className={cn(
         'flex min-w-0 flex-1 flex-col items-center gap-0.5 px-1 py-2 text-[11px] transition-colors',
-        active ? 'text-primary font-medium' : 'text-muted-foreground hover:text-foreground'
+        active ? 'text-primary font-medium' : 'text-muted-foreground hover:text-foreground',
       )}
     >
       <item.icon className={cn('size-5', active && 'text-primary')} aria-hidden="true" />
@@ -37,30 +28,16 @@ function BottomNavButton({ item, pathname }: { item: BottomNavItem; pathname: st
   );
 }
 
-/**
- * Bottom navigation cho **màn hình nhỏ** (`< md`) — thay cho sidebar (sidebar trên
- * mobile chỉ mở tay qua Sheet, mặc định ẩn). Cố định đáy, chừa safe-area,
- * item active theo pathname.
- */
-export function MobileBottomNav() {
+/** Khung bottom nav dùng chung (user & admin) — cố định đáy, chừa safe-area. */
+function BottomNav({ items, ariaLabel }: { items: BottomNavItemData[]; ariaLabel: string }) {
   const pathname = usePathname();
-  const user = useAuthStore((state) => state.user);
 
-  const items: BottomNavItem[] = [
-    { href: '/', label: 'Trang chủ', icon: Home, exact: true },
-    { href: '/movies', label: 'Phim', icon: Film },
-    ...(user
-      ? [{ href: '/notification', label: 'Thông báo', icon: Bell }]
-      : []),
-    user
-      ? { href: '/profile', label: 'Tài khoản', icon: UserIcon }
-      : { href: '/auth/login', label: 'Đăng nhập', icon: LogIn },
-  ];
+  if (items.length === 0) return null;
 
   return (
     <nav
-      aria-label="Điều hướng chính"
-      className="fixed right-0 bottom-0 left-0 z-40 border-t bg-background/95 shadow-lg backdrop-blur-md md:hidden"
+      aria-label={ariaLabel}
+      className="bg-background/95 fixed right-0 bottom-0 left-0 z-40 border-t shadow-lg backdrop-blur-md md:hidden"
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       <div className="mx-auto flex w-full max-w-md items-stretch">
@@ -70,4 +47,27 @@ export function MobileBottomNav() {
       </div>
     </nav>
   );
+}
+
+/**
+ * Bottom navigation cho khu vực **người dùng** trên màn hình nhỏ (`< md`) — thay cho
+ * sidebar (mobile chỉ mở tay qua Sheet). Item lấy từ `BOTTOM_NAV.user`, lọc theo đăng nhập.
+ */
+export function MobileBottomNav() {
+  const user = useAuthStore((state) => state.user);
+
+  const items = BOTTOM_NAV.user.filter((item) =>
+    item.guestOnly ? !user : item.requiresAuth ? !!user : true,
+  );
+
+  return <BottomNav items={items} ariaLabel="Điều hướng chính" />;
+}
+
+/**
+ * Bottom navigation cho khu vực **admin** trên màn hình nhỏ (`< md`) — lối tắt tới
+ * các trang quản trị thường dùng (Dashboard/Phim/Tương tác/Tài khoản).
+ * Item lấy từ `BOTTOM_NAV.admin`.
+ */
+export function AdminMobileBottomNav() {
+  return <BottomNav items={BOTTOM_NAV.admin} ariaLabel="Điều hướng quản trị" />;
 }

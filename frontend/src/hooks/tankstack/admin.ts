@@ -91,11 +91,11 @@ export const adminRoles = createCrudHooks<Role, RoleInput>({
  * + xóa từng bản ghi. Backend không filter theo type → filter client-side.
  */
 export const useAdminInteractions = usePagedList('admin-interactions', (params) =>
-  interactionApi.getAll(params)
+  interactionApi.getAll(params),
 );
 export const useAdminRatings = usePagedList('admin-ratings', (params) => ratingApi.getAll(params));
 export const useAdminComments = usePagedList('admin-comments', (params) =>
-  commentApi.getAll(params)
+  commentApi.getAll(params),
 );
 
 export const useDeleteInteraction = () => useDeleteOnly('admin-interactions', interactionApi.remove);

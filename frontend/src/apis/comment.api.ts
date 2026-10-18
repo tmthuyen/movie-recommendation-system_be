@@ -18,7 +18,7 @@ export const commentApi = {
    */
   getByMovie: async (
     movieId: number | string,
-    params: { page?: number; limit?: number; parentId?: number | string } = {}
+    params: { page?: number; limit?: number; parentId?: number | string } = {},
   ): Promise<ApiPaginatedResponse<Comment[]>> => {
     const { page, limit, parentId } = params;
     const { data } = await axiosClient.get(`/comments/movie/${movieId}`, {

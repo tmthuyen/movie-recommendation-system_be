@@ -7,7 +7,7 @@ type ThemeColor = 'rose' | 'emerald' | 'blue' | 'violet' | 'orange';
 export const ColorContext = React.createContext<{
   color: ThemeColor;
   changeColor: (color: ThemeColor) => void;
-} | null>(null);
+    } | null>(null);
 
 export function ColorProvider({ children }: { children: React.ReactNode }) {
   const [color, setColor] = React.useState<ThemeColor>('blue');

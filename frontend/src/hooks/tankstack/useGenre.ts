@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 export function useGetAll(
   params: GenreQuery = {},
   staleTime: number = 1000 * 60 * 5,
-  gcTime: number = 1000 * 60 * 10
+  gcTime: number = 1000 * 60 * 10,
 ) {
   const { page, limit, keyword } = params;
   return useQuery({

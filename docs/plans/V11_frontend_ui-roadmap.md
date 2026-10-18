@@ -1,6 +1,6 @@
 # V11 — Frontend UI Roadmap (User-facing + Admin CRUD)
 
-- **Trạng thái**: Đang thực hiện — **Phase 0 (baseline) xong ở mức môi trường**, **Phase 1 (nền tảng + trang chủ + danh sách phim + movie card UX) hoàn thành → đã đóng**, **Phase 2 (chi tiết phim `/movies/[id]`) hoàn thành → đã đóng**, **Phase 1.5 (base layout shell responsive: fix scroll ngang, bottom nav, header user dropdown, footer site info + trang about/contact/privacy/terms) hoàn thành → đã đóng**, **Phase 3 (tương tác cá nhân: `/my-history`, `/my-favorites`, dislike ở chi tiết, nav cá nhân, guard đăng nhập) hoàn thành → đã đóng**, **Phase 5 (admin CRUD + dashboard: kit data-table/form-dialog, CRUD movies/genres/countries/people/users/roles, trang interaction 3 tab, dashboard recharts) hoàn thành → đã đóng**; còn lại **Phase 4 (semantic search — ⚠ đang bị chặn bởi ai-service lỗi 500 + CORS)**. Lưu ý: DoD `lint`/`build` đang bị chặn bởi lỗi baseline có sẵn trong repo (xem "Ghi chú triển khai Phase 1").
+- **Trạng thái**: Đang thực hiện — **Phase 0 (baseline) xong ở mức môi trường**, **Phase 1 (nền tảng + trang chủ + danh sách phim + movie card UX) hoàn thành → đã đóng**, **Phase 2 (chi tiết phim `/movies/[id]`) hoàn thành → đã đóng**, **Phase 1.5 (base layout shell responsive: fix scroll ngang, bottom nav, header user dropdown, footer site info + trang about/contact/privacy/terms) hoàn thành → đã đóng**, **Phase 3 (tương tác cá nhân: `/my-history`, `/my-favorites`, dislike ở chi tiết, nav cá nhân, guard đăng nhập) hoàn thành → đã đóng**, **Phase 5 (admin CRUD + dashboard: kit data-table/form-dialog, CRUD movies/genres/countries/people/users/roles, trang interaction 3 tab, dashboard recharts) hoàn thành → đã đóng**, **Mở rộng Phase 5 (fix cuộn ngang admin, bottom nav mobile admin, dropdown điều hướng nhanh header user+admin, footer admin, nâng cấp Dashboard: 6 thẻ chỉ số + 7 biểu đồ + hoạt động gần đây + cảnh báo dữ liệu + lọc thời gian/làm mới/xuất CSV) hoàn thành** — một số thống kê cần backend aggregate (trend theo thời gian, người dùng mới trong kỳ) chưa làm, đã ghi rõ trong plan; còn lại **Phase 4 (semantic search — ⚠ đang bị chặn bởi ai-service lỗi 500 + CORS)**. Lưu ý: DoD `lint`/`build` đang bị chặn bởi lỗi baseline có sẵn trong repo (xem "Ghi chú triển khai Phase 1").
 - **Người thực hiện**: AI Agent
 - **Thời gian**: 2026-10-17
 - **Phạm vi**: `frontend/` — xây dựng toàn bộ giao diện user-facing (trang chủ, danh sách phim, chi tiết phim, tương tác cá nhân, semantic search) và khu vực admin CRUD (movies/genres/countries/peoples/users/roles/interaction + dashboard). Không sửa backend/ai-service.
@@ -221,6 +221,50 @@
 - [x] Bọc toàn bộ trang admin bằng `RequireRole requiredRoles={['ADMIN']}` — **đã có sẵn trong `AdminLayout.tsx`**, chỉ cần kiểm tra lại
 - [x] Dashboard `frontend/src/app/(admin-layout)/dashboard/page.tsx` — thẻ chỉ số + biểu đồ `recharts` (top phim xem nhiều, phim theo thể loại, tương tác theo loại)
 - [x] Đảm bảo mọi trang admin có skeleton + error state (tiếng Việt) và responsive (table → card/overflow trên mobile)
+
+### Mở rộng Phase 5 (yêu cầu mới)
+
+- [x] Fix thanh cuộn ngang ở khu vực admin — `AdminLayout` content wrapper chuyển sang **block + `min-w-0`** (giống `UserLayout` Phase 1.5), `SidebarInset` thêm `min-w-0`
+- [x] Thêm bottom nav cho admin trên mobile — `AdminMobileBottomNav` (dùng chung khung `BottomNav` với user)
+- [x] Thêm dropdown trên header dùng shadcn `DropdownMenu` để nhảy route + truy cập tính năng nhanh — `QuickNavDropdown` dùng chung cho **cả user và admin**
+- [x] Admin dùng chung footer `SiteFooter` của user
+- [x] Dashboard admin — liệt kê đề xuất vào plan (developer xem xét) **rồi nâng cấp luôn** theo yêu cầu 2026-10-18 (xem mục "Nâng cấp Dashboard" bên dưới)
+
+#### Nâng cấp Dashboard (đã triển khai 2026-10-18)
+
+Đã làm (client-side, tận dụng list API + hook admin sẵn có):
+
+| Nhóm | Hạng mục | Trạng thái |
+|---|---|---|
+| Chỉ số | 6 thẻ: Phim, Người dùng, Thể loại, Tương tác, **Đánh giá**, **Bình luận** (`pagination.total` — số liệu chính xác) | ✅ |
+| Biểu đồ | **Top người dùng hoạt động** (gộp tương tác + đánh giá + bình luận trong mẫu) | ✅ |
+| Biểu đồ | **Phân bố đánh giá theo số sao (1–5)** | ✅ |
+| Biểu đồ | **Phim theo quốc gia** | ✅ |
+| Biểu đồ | **Top phim đánh giá cao** (điểm trung bình, tối thiểu 2 lượt trong mẫu) | ✅ |
+| Biểu đồ | Giữ nguyên: Top phim xem nhiều, Tương tác theo loại, Phim theo thể loại | ✅ |
+| Vận hành | **Bảng "Hoạt động gần đây"** (gộp 3 nguồn, sort `createdAt` giảm dần, dùng lại `DataTable`) | ✅ |
+| Vận hành | **Cảnh báo dữ liệu phim thiếu** (poster/mô tả/thể loại/quốc gia) + link sang `/admin/movies` | ✅ |
+| Trải nghiệm | **Lọc khoảng thời gian 7/30/90/Tất cả** (áp dụng cho bảng hoạt động — trên mẫu đã tải) | ✅ |
+| Trải nghiệm | **Nút "Làm mới"** (invalidate toàn bộ query dashboard) + **Xuất CSV** (client-side, có BOM UTF-8) | ✅ |
+| Trải nghiệm | Ghi chú minh bạch cỡ mẫu + số bản ghi đang phân tích trên trang | ✅ |
+| Chỉ số | Tỷ lệ tương tác/người dùng, **người dùng mới trong kỳ** | ⏳ cần backend (list user không hỗ trợ filter theo `createdAt`; dashboard chỉ lấy `limit=1` để đếm tổng) |
+| Biểu đồ | **Trend theo thời gian** (ngày–tuần–tháng) | ⏳ cần backend `sort`/filter `createdAt` hoặc endpoint aggregate — list API không sort, mẫu 100 bản ghi có thể lệch |
+| Biểu đồ | Phân bố tương tác **theo thể loại phim** (cần join sâu hơn) | ⏳ cần backend aggregate |
+
+#### Ghi chú triển khai Mở rộng Phase 5
+
+- **Nguồn nav duy nhất**: tách config nav ra `src/components/sidebar/nav-data.ts` (`NAV_SECTIONS`, `BOTTOM_NAV`, types) — sidebar (`nav-main.tsx`), dropdown header (`quick-nav-dropdown.tsx`) và bottom nav (`mobile-bottom-nav.tsx`) đều đọc từ đây, không copy lại danh sách route.
+- **`quick-nav-dropdown.tsx`** (`QuickNavDropdown variant="user" | "admin"`, shadcn `DropdownMenu`): nhóm item theo `NAV_SECTIONS`; guest chỉ thấy nhóm công khai (ẩn Cá nhân/Settings); admin có thêm mục "Xem trang người dùng". Gắn ở `user-header.tsx` (user) và `admin-header.tsx` (admin).
+- **`mobile-bottom-nav.tsx`**: rút khung `BottomNav` dùng chung (safe-area, `z-40`, `md:hidden`); `MobileBottomNav` (user, lọc theo đăng nhập) + `AdminMobileBottomNav` (admin: Tổng quan/Phim/Tương tác/Tài khoản/Hồ sơ).
+- **`AdminLayout.tsx`**: `SidebarInset` thêm `min-w-0` + `pb-16 md:pb-0`; content wrapper đổi `flex` → **block + `min-w-0`** (nguyên nhân gây scroll ngang toàn trang khi bảng rộng); thêm `<SiteFooter />` và `<AdminMobileBottomNav />`. Dọn import không dùng (`Button`, `Bell`, `Flame`, `PlusCircle`, `usePathname`).
+- **`admin-header.tsx`**: viết lại — nút sidebar + logo "Admin" (link `/dashboard`) + `QuickNavDropdown` + nút về trang người dùng + toggle theme + `UserMenu` (dropdown tài khoản, tái sử dụng).
+- **Kiểm chứng**: `tsc --noEmit` 0 lỗi (4 lỗi baseline trước đó — mock `api/auth/*`, `ui/drawer.tsx`, `ui/calendar.tsx` — đã được dọn ở thời điểm chạy, không liên quan thay đổi này); smoke-test `/`, `/dashboard`, `/admin/movies`, `/admin/users`, `/movies` trên dev `:3002` đều 200 và bundle Turbopack chứa `QuickNavDropdown` (user + admin), `AdminMobileBottomNav`, `SiteFooter`.
+- **Dashboard nâng cấp (2026-10-18)**:
+  - `src/hooks/tankstack/admin-dashboard.ts`: `useAdminDashboard({ days })` — gọi **6 list API đúng 1 lần/domain** (movies `limit=100`, genres/users `limit=1` để lấy `pagination.total`, interactions/ratings/comments `limit=100`), `useMemo` toàn bộ số liệu dẫn xuất, `refresh()` invalidate 6 queryKey root `admin-*`.
+  - `src/shared/utils/admin-dashboard.ts`: **hàm thuần** (không React) — build top phim xem nhiều/thể loại/quốc gia/loại tương tác/phân bố sao/top phim điểm cao/top user hoạt động/cảnh báo dữ liệu, `filterWithinDays`, `buildRecentActivity` (gộp 3 nguồn), `toCsv` + `downloadCsv` (BOM UTF-8 cho Excel).
+  - `dashboard-client.tsx`: `PageHeader` + toolbar (lọc 7/30/90/Tất cả, "Làm mới" xoay icon khi `isFetching`, "Xuất CSV"), 6 thẻ chỉ số, 7 biểu đồ (`HorizontalBarChart` dùng chung + donut tương tác), bảng hoạt động **tái sử dụng `DataTable`**, thẻ cảnh báo dữ liệu có link sang trang quản trị; `dashboard/page.tsx` rút còn metadata + client.
+  - **Trung thực dữ liệu**: chỉ số = `pagination.total` (chính xác); biểu đồ/bảng/cảnh báo = tổng hợp từ mẫu ≤100 bản ghi, có ghi chú cỡ mẫu ngay trên trang; các mục cần backend (người dùng mới trong kỳ, trend theo thời gian, phân bố theo thể loại phim) **không làm** vì list API chưa hỗ trợ `sort`/filter `createdAt`/aggregate — đã ghi trong bảng trạng thái ⏳ phía trên.
+  - **Kiểm chứng logic**: chạy script tạm với `tsx` (đã xoá sau khi chạy) — 17 assert PASS cho toàn bộ hàm thuần (gộp "Khác", đếm đa thể loại, bucket 1–5 sao, `minVotes`, lọc theo ngày, sort hoạt động, escape CSV).
 
 ### Ghi chú triển khai Phase 5
 
