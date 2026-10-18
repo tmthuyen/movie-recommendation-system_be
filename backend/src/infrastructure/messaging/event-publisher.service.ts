@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { ChannelWrapper } from 'amqp-connection-manager';
 import { randomUUID } from 'crypto';
 import { ConfigService } from '@nestjs/config';
-import { MESSAGE_BUS_CLIENT, MESSAGE_BUS_CONFIG } from './messaging.constants';
+import { MESSAGE_BUS_CLIENT } from './messaging.constants';
 import { EventEnvelope } from './event.types';
 
 @Injectable()
@@ -42,7 +42,7 @@ export class EventPublisherService {
       .publish(exchange, eventType, event, {
         persistent: true,
       })
-      .catch(error => {
+      .catch((error: Error) => {
         this.logger.error(`Failed to publish ${eventType}: ${error.message}`);
       });
   }

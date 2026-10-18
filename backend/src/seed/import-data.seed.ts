@@ -74,15 +74,17 @@ async function bootstrap() {
             genres.push(genre);
           }
         })
-        .on('end', async () => {
-          try {
-            // Lưu theo batch để tối ưu
-            await genreRepo.save(genres, { chunk: 1000 });
-            console.log(`✅ Đã seed thành công ${genres.length} Genres.`);
-            resolve();
-          } catch (error) {
-            reject(error);
-          }
+        .on('end', () => {
+          void (async () => {
+            try {
+              // Lưu theo batch để tối ưu
+              await genreRepo.save(genres, { chunk: 1000 });
+              console.log(`✅ Đã seed thành công ${genres.length} Genres.`);
+              resolve();
+            } catch (error) {
+              reject(error instanceof Error ? error : new Error(String(error)));
+            }
+          })();
         })
         .on('error', error => reject(error));
     });
@@ -97,7 +99,7 @@ async function bootstrap() {
 
       fs.createReadStream(moviesFilePath)
         .pipe(parse({ columns: true, trim: true }))
-        .on('data', async row => {
+        .on('data', row => {
           // Bỏ qua những row chưa có movieId
           // if (!row.movieId) return;
           if (row.movieId) return;
@@ -132,7 +134,7 @@ async function bootstrap() {
           // Nếu file quá lớn (vd 40k dòng), nên xử lý theo chunk trong stream thay vì lưu tất cả vào memory
           // Tuy nhiên với 40k dòng memory vẫn chịu được, ta sẽ chờ đến khi kết thúc stream để save chunk
         })
-        .on('end', async () => {
+        .on('end', () => {
           try {
             console.log(`Chuẩn bị lưu ${batch.length} Movies vào Database...`);
             // Lưu theo chunk 1000 để tránh quá tải DB parameters
@@ -141,7 +143,7 @@ async function bootstrap() {
             console.log(`✅ Đã seed thành công ${batch.length} Movies.`);
             resolve();
           } catch (error) {
-            reject(error);
+            reject(error instanceof Error ? error : new Error(String(error)));
           }
         })
         .on('error', error => reject(error));
@@ -186,22 +188,24 @@ async function bootstrap() {
 
           // return Promise.resolve();
         })
-        .on('end', async () => {
-          try {
-            // Lưu trực tiếp vào bảng trung gian 'movie_genres'
-            for (const relation of relations) {
-              await dataSource
-                .createQueryBuilder()
-                .insert()
-                .into('movie_genres')
-                .values(relation)
-                .execute();
+        .on('end', () => {
+          void (async () => {
+            try {
+              // Lưu trực tiếp vào bảng trung gian 'movie_genres'
+              for (const relation of relations) {
+                await dataSource
+                  .createQueryBuilder()
+                  .insert()
+                  .into('movie_genres')
+                  .values(relation)
+                  .execute();
+              }
+              console.log('✅ Code minh họa seed Movie Genres.');
+              resolve();
+            } catch (error) {
+              reject(error instanceof Error ? error : new Error(String(error)));
             }
-            console.log('✅ Code minh họa seed Movie Genres.');
-            resolve();
-          } catch (error) {
-            reject(error);
-          }
+          })();
         });
     });
   }

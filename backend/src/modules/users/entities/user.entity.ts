@@ -7,7 +7,6 @@ import {
   JoinTable,
   ManyToMany,
   OneToMany,
-  PrimaryColumn,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { Rating } from '@/modules/ratings/entities/rating.entity';
@@ -53,7 +52,7 @@ export class User extends BaseAuditEntity {
   avatarUrl: string;
 
   @Column({ name: 'preference_data', nullable: true, type: 'jsonb' })
-  preferenceData: Record<string, any>;
+  preferenceData: Record<string, object>;
 
   @Column({ type: 'date', nullable: true })
   birthDate: Date;

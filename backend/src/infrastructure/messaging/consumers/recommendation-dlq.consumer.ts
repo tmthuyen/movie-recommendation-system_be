@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { MESSAGE_BUS_CLIENT, MESSAGE_BUS_CONFIG } from '../messaging.constants';
-import type { ChannelWrapper } from 'amqp-connection-manager';
-import type { Channel, ConsumeMessage } from 'amqplib';
+import type { ChannelWrapper, SetupFunc } from 'amqp-connection-manager';
+import type { Channel, ConsumeMessage, XDeath } from 'amqplib';
 import { FailedEventsService } from '@/modules/failed-events/failed-events.service';
 import { FailedEventDto } from '@/modules/failed-events/dtos/failed-event.dto';
 import { EventEnvelope } from '../event.types';
@@ -36,10 +36,10 @@ export class RecommendationConsumer implements OnModuleInit {
     @Inject(MESSAGE_BUS_CLIENT) private readonly channelWrapper: ChannelWrapper,
   ) {}
 
-  onModuleInit(): void {
+  async onModuleInit(): Promise<void> {
     this.logger.log('Initializing Recommendation Consumer...');
 
-    this.channelWrapper.addSetup(this.setupConsumer.bind(this));
+    await this.channelWrapper.addSetup(this.setupConsumer.bind(this));
   }
 
   async setupConsumer(channel: Channel): Promise<void> {
@@ -116,7 +116,7 @@ export class RecommendationConsumer implements OnModuleInit {
   }
 
   private toFailedEvent(msg: ConsumeMessage): FailedEventDto {
-    const data = JSON.parse(msg.content.toString()) as EventEnvelope<any>;
+    const data = JSON.parse(msg.content.toString()) as EventEnvelope<object>;
 
     const originalMsg = JSON.stringify(msg);
     this.logger.log(`Original DLQ header msg: ${originalMsg}`);
@@ -171,7 +171,7 @@ export class RecommendationConsumer implements OnModuleInit {
     const firstDeathExchange = headers['x-first-death-exchange'];
 
     const originalDeath = xDeath.find(
-      (death: any) =>
+      (death: XDeath) =>
         death.queue === firstDeathQueue &&
         death.exchange === firstDeathExchange,
     );
@@ -181,8 +181,8 @@ export class RecommendationConsumer implements OnModuleInit {
 
     const originalQueue = firstDeathQueue ?? originalDeath?.queue ?? 'unknown';
 
-    const originalExchange =
-      firstDeathExchange ?? originalDeath?.exchange ?? 'unknown';
+    // const originalExchange =
+    //   firstDeathExchange ?? originalDeath?.exchange ?? 'unknown';
 
     const originalReason =
       headers['x-first-death-reason'] ?? originalDeath?.reason ?? 'unknown';

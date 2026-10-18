@@ -38,8 +38,6 @@ import { FilesModule } from './modules/files/files.module';
 import { FailedEvent } from './modules/failed-events/entities/failed-event.entity';
 import { FailedEventsModule } from './modules/failed-events/failed-events.module';
 import { InteractionsModule } from './modules/interactions/interactions.module';
-import { EventsModule } from './modules/events/events.module';
-import { Interaction } from './modules/interactions/entities/interaction.entity';
 @Module({
   imports: [
     // Configuration

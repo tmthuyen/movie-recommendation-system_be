@@ -2,7 +2,10 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsNumber, IsString, IsOptional } from 'class-validator';
 
 export class CreateCommentDto {
-  @ApiProperty({ example: 'Phim này rất hay!', description: 'Nội dung bình luận' })
+  @ApiProperty({
+    example: 'Phim này rất hay!',
+    description: 'Nội dung bình luận',
+  })
   @IsNotEmpty({ message: 'Nội dung bình luận không được để trống' })
   @IsString()
   content: string;
@@ -12,7 +15,11 @@ export class CreateCommentDto {
   @IsNumber()
   movieId: number;
 
-  @ApiProperty({ example: 1, description: 'ID bình luận cha (nếu là reply)', required: false })
+  @ApiProperty({
+    example: 1,
+    description: 'ID bình luận cha (nếu là reply)',
+    required: false,
+  })
   @IsOptional()
   @IsNumber()
   parentId?: number;

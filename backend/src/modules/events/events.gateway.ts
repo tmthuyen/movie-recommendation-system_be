@@ -8,8 +8,8 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { UseGuards } from '@nestjs/common';
-import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
+import { Comment } from '@/modules/comments/entities/comment.entity';
+import { Rating } from '@/modules/ratings/entities/rating.entity';
 
 @WebSocketGateway({
   cors: {
@@ -28,7 +28,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     console.log(`Client disconnected: ${client.id}`);
   }
 
-  broadcastComment(movieId: number, comment: any) {
+  broadcastComment(movieId: number, comment: Comment) {
     this.server.emit(`movie-${movieId}-comment`, comment);
   }
 

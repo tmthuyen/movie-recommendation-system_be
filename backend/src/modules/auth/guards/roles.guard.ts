@@ -1,4 +1,5 @@
 import { ROLES_KEY } from '@/common/decorators/roles.decorator';
+import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
 import {
   Injectable,
   CanActivate,
@@ -29,11 +30,13 @@ export class RolesGuard implements CanActivate {
 
     const { user } = req;
 
-    if (!user || !user.scopes) {
+    const jwtUser: JwtPayload = user;
+
+    if (!user || !jwtUser.scopes) {
       throw new UnauthorizedException('Not login');
     }
 
-    const scopes = user.scopes as string[];
+    const scopes = jwtUser.scopes;
 
     const hasRole = requiredRoles.some(scope =>
       scopes.includes(scope.toUpperCase()),

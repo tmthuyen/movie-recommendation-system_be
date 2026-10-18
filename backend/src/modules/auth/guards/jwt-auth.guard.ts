@@ -27,6 +27,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   }
 
   handleRequest(err, user, info) {
+    this.logger.log(err, user, info);
     if (err || !user) {
       throw (
         err ||
@@ -37,6 +38,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     this.logger.log(
       `[User ID] ${user.sub} [${user.email}] authenticated successfully`,
     );
+
     return user;
   }
 }

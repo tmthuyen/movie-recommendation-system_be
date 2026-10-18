@@ -20,7 +20,6 @@ import {
   MovieCreatedPayload,
   MovieUpdatedPayload,
 } from '@/infrastructure/messaging/event.types';
-import { PaginatedResult } from '@/common/dtos/paginated-result.interface';
 
 @Injectable()
 export class MoviesService {
@@ -116,7 +115,7 @@ export class MoviesService {
 
   async create(createMovieDto: CreateMovieDto) {
     await this.validateRelations(createMovieDto);
-    const entity = this.mapDtoToEntity(createMovieDto);
+    const entity = this.mapDtoToEntity(createMovieDto) as Partial<Movie>;
     const saved = await this.repo.create(entity);
 
     // Fetch full movie with relations for queue

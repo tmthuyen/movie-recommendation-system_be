@@ -52,13 +52,8 @@ export class S3StorageService implements IStorageService {
       ContentType: file.mimetype,
     });
 
-    try {
-      await this.s3Client.send(command);
-      return `${this.publicUrl}/${fileName}`;
-    } catch (error) {
-      this.logger.error(`Error uploading file to S3/R2: ${error.message}`);
-      throw error;
-    }
+    await this.s3Client.send(command);
+    return `${this.publicUrl}/${fileName}`;
   }
 
   async deleteFile(fileUrl: string): Promise<void> {
@@ -76,6 +71,12 @@ export class S3StorageService implements IStorageService {
       Key: key,
     });
     const data = await this.s3Client.send(command);
+
+    const res = data.Body;
+    if (typeof res === 'string') {
+      return res;
+    }
+
     return data.Body as any;
   }
 }

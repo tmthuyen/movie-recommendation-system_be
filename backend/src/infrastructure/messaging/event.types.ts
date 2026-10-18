@@ -37,6 +37,12 @@ export interface UserCreatedPayload {
   status: string;
 }
 
+export type UserUpdatedPayload = UserCreatedPayload;
+
+export interface UserDeletedPayload {
+  userId: string;
+}
+
 export interface EmailVerificationRequestedPayload {
   userId: string;
   email: string;
@@ -46,4 +52,13 @@ export interface EmailVerificationRequestedPayload {
 export interface UserEmailVerifiedPayload {
   userId: string;
   email?: string;
+}
+
+// Interactions
+export interface InteractionCreatedPayload {
+  userId: string;
+  movieId: number;
+  action: string;
+  score: number;
+  createdAt: Date;
 }

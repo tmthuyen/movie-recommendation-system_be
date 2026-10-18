@@ -1,6 +1,5 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { CreateInteractionDto } from './dto/create-interaction.dto';
-import { UpdateInteractionDto } from './dto/update-interaction.dto';
 import { IInteractionRepository } from './interactions.repository';
 import { PaginationDto } from '@/common/dtos/pagination.dto';
 import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
@@ -8,6 +7,8 @@ import {
   InteractionScoreMap,
   InteractionType,
 } from './entities/interaction.entity';
+import { Movie } from '@/modules/movies/entities/movie.entity';
+import { User } from '@/modules/users/entities/user.entity';
 
 @Injectable()
 export class InteractionsService {
@@ -35,22 +36,17 @@ export class InteractionsService {
     const newInteraction = await this.repo.create({
       score,
       type,
-      movie: { id: movieId } as any,
-      user: { id: userId } as any,
+      movie: { id: movieId } as Movie,
+      user: { id: userId } as User,
     });
 
-    // Publish to AI Service for real-time vector update
-    try {
-      this.interactionProducer.publishInteractionCreated({
-        userId,
-        movieId,
-        action: type.toLowerCase(),
-        rating: score,
-      });
-    } catch (e) {
-      // Log and continue, don't break main API flow
-      console.error('Failed to publish interaction event', e);
-    }
+    this.interactionProducer.publishInteractionCreated({
+      userId,
+      movieId,
+      action: type.toLowerCase(),
+      score: score,
+      createdAt: newInteraction.createdAt,
+    });
 
     return { success: true, action: 'added', type, data: newInteraction };
   }

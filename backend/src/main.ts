@@ -11,6 +11,7 @@ import { HttpExceptionFilter } from '@/common/filters/http-exception.filter';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import cookieParser from 'cookie-parser';
 import { NextFunction, Request } from 'express';
+import { Logger } from 'winston';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -33,7 +34,7 @@ async function bootstrap() {
     next();
   });
 
-  const winstonLogger = app.get(WINSTON_MODULE_NEST_PROVIDER);
+  const winstonLogger: Logger = app.get(WINSTON_MODULE_NEST_PROVIDER);
   app.useLogger(winstonLogger);
 
   app.setGlobalPrefix('api');
@@ -88,4 +89,12 @@ async function bootstrap() {
 
   await app.listen(port);
 }
-bootstrap();
+
+bootstrap()
+  .then(() => {
+    const PORT = process.env.APP_PORT || 3000;
+    console.log(`Application is running on: http://localhost:${PORT}`);
+  })
+  .catch(error => {
+    console.error(error);
+  });

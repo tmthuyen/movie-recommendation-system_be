@@ -1,12 +1,20 @@
 import { Injectable } from '@nestjs/common';
-import { EventPublisherService } from '../event-publisher.service';
-import { MESSAGE_BUS_CONFIG, MESSAGE_EVENTS } from '../messaging.constants';
+import { EventPublisherService } from '@/infrastructure/messaging/event-publisher.service';
+import {
+  MESSAGE_BUS_CONFIG,
+  MESSAGE_EVENTS,
+} from '@/infrastructure/messaging/messaging.constants';
+import {
+  EmailVerificationRequestedPayload,
+  UserCreatedPayload,
+  UserUpdatedPayload,
+} from '@/infrastructure/messaging/event.types';
 
 @Injectable()
 export class UserProducer {
   constructor(private readonly eventPublisher: EventPublisherService) {}
 
-  publishUserCreated(payload: any, correlationId?: string) {
+  publishUserCreated(payload: UserCreatedPayload, correlationId?: string) {
     this.eventPublisher.publish(
       MESSAGE_BUS_CONFIG.USER_EXCHANGE,
       MESSAGE_EVENTS.USER_CREATED,
@@ -15,7 +23,7 @@ export class UserProducer {
     );
   }
 
-  publishUserUpdated(payload: any, correlationId?: string) {
+  publishUserUpdated(payload: UserUpdatedPayload, correlationId?: string) {
     this.eventPublisher.publish(
       MESSAGE_BUS_CONFIG.USER_EXCHANGE,
       'user.updated',
@@ -33,7 +41,10 @@ export class UserProducer {
     );
   }
 
-  publishEmailVerificationRequested(payload: any, correlationId?: string) {
+  publishEmailVerificationRequested(
+    payload: EmailVerificationRequestedPayload,
+    correlationId?: string,
+  ) {
     this.eventPublisher.publish(
       MESSAGE_BUS_CONFIG.USER_EXCHANGE,
       MESSAGE_EVENTS.USER_EMAIL_VERIFICATION_REQUESTED,

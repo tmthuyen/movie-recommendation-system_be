@@ -19,10 +19,7 @@ import { Roles } from '@/common/decorators/roles.decorator';
 import { PaginationDto } from '@/common/dtos/pagination.dto';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
 import type { Request } from 'express';
-import {
-  ApiResponse,
-  ApiResponseWithPagination,
-} from '@/common/dtos/api-response.dto';
+import { ApiResponseWithPagination } from '@/common/dtos/api-response.dto';
 import { Comment } from '@/modules/comments/entities/comment.entity';
 
 @ApiTags('Comments')

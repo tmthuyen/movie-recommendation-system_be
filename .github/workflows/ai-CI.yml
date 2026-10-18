@@ -5,12 +5,12 @@ on:
     branches: [dev, ci-cd]
     paths:
       - 'ai-service/**'
-      - '.github/workflows/ai-service-CI.yml'
+      - '.github/workflows/ai-CI.yml'
   pull_request:
     branches: [dev, ci-cd]
     paths:
       - 'ai-service/**'
-      - '.github/workflows/ai-service-CI.yml'
+      - '.github/workflows/ai-CI.yml'
 
 concurrency:
   group: ai-service-ci-${{ github.ref }}
@@ -38,6 +38,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
+          # Repo không có requirements.txt → cache theo pyproject.toml
+          cache-dependency-path: ai-service/pyproject.toml
 
       - name: Install dependencies
         run: |
@@ -78,3 +80,7 @@ jobs:
         run: |
           python -c "import src.api.server; print('BUILD_OK')"
         shell: bash
+        env:
+          # Settings yêu cầu 2 biến này (không có default) — giá trị dummy cho CI
+          JWT_SECRET_KEY: ci-dummy-secret
+          JWT_ALGORITHM: HS256

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { EventPublisherService } from '../event-publisher.service';
-import { MESSAGE_BUS_CONFIG, MESSAGE_EVENTS } from '../messaging.constants';
+import { EventPublisherService } from '@/infrastructure/messaging/event-publisher.service';
+import { MESSAGE_BUS_CONFIG } from '@/infrastructure/messaging/messaging.constants';
+import { InteractionCreatedPayload } from '@/infrastructure/messaging/event.types';
 
 @Injectable()
 export class InteractionProducer {
@@ -11,7 +12,10 @@ export class InteractionProducer {
   /**
    * Publish a real-time interaction event for EMA update
    */
-  publishInteractionCreated(payload: any, correlationId?: string): void {
+  publishInteractionCreated(
+    payload: InteractionCreatedPayload,
+    correlationId?: string,
+  ): void {
     this.logger.log(
       `Publishing interaction event for User: ${payload.userId} -> Movie: ${payload.movieId}`,
     );
@@ -26,7 +30,10 @@ export class InteractionProducer {
   /**
    * Publish a batch of interactions for background training
    */
-  publishTrainingBatch(interactions: any[], correlationId?: string): void {
+  publishTrainingBatch(
+    interactions: InteractionCreatedPayload[],
+    correlationId?: string,
+  ): void {
     this.logger.log(
       `Publishing training batch with ${interactions.length} records`,
     );

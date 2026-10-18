@@ -22,14 +22,18 @@ export class PeopleRepository implements IPeopleRepository {
     private readonly repo: Repository<People>,
   ) {}
 
-  async findAll(paginationDto: PaginationDto): Promise<PaginatedResult<People>> {
+  async findAll(
+    paginationDto: PaginationDto,
+  ): Promise<PaginatedResult<People>> {
     const { page = 1, limit = 10, keyword } = paginationDto;
     const skip = (page - 1) * limit;
 
     const queryBuilder = this.repo.createQueryBuilder('people');
 
     if (keyword) {
-      queryBuilder.where('people.fullName ILIKE :keyword', { keyword: `%${keyword}%` });
+      queryBuilder.where('people.fullName ILIKE :keyword', {
+        keyword: `%${keyword}%`,
+      });
     }
 
     queryBuilder.skip(skip).take(limit).orderBy('people.createdAt', 'DESC');

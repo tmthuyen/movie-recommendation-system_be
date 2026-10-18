@@ -9,7 +9,6 @@ import {
   Ip,
   UseGuards,
   Param,
-  Delete,
   UnauthorizedException,
   Get,
   Patch,

@@ -9,6 +9,7 @@ import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { Request, Response } from 'express';
 import { trace } from '@opentelemetry/api';
+import { AppException } from '../custom-exception/app-exception';
 
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
@@ -45,11 +46,32 @@ export class LoggingInterceptor implements NestInterceptor {
             `← ${method} ${originalUrl} ${statusCode} - ${duration}ms`,
           );
         },
-        error: err => {
+        error: (err: Error) => {
           const duration = Date.now() - now;
-          const statusCode = err?.statusCode || 500;
+          let statusCode = 500;
+          let message = 'Lỗi hệ thống';
+          let detailMessage = '';
+
+          if (err instanceof AppException) {
+            statusCode = err.statusCode;
+            message = err.message;
+            detailMessage = err.detailMessage;
+          } else if (err instanceof Error) {
+            message = err.message;
+            this.logger.error(
+              `← ${method} ${originalUrl} ${statusCode} - ${duration}ms - ${message}`,
+            );
+
+            // stack
+            if (err.stack) {
+              this.logger.error(err.stack);
+            }
+
+            return;
+          }
+
           this.logger.error(
-            `← ${method} ${originalUrl} ${statusCode} - ${duration}ms - ${err.message}`,
+            `← ${method} ${originalUrl} ${statusCode} - ${duration}ms - ${message} (detail: ${detailMessage})`,
           );
         },
       }),

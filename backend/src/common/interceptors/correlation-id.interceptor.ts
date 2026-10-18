@@ -16,7 +16,10 @@ export class CorrelationIdInterceptor implements NestInterceptor {
 
   intercept(context: ExecutionContext, next: CallHandler) {
     const req = context.switchToHttp().getRequest<Request>();
-    const correlationId = req.headers['x-correlation-id'] || uuidv4();
+    const headerId = req.headers['x-correlation-id'];
+    // Header có thể là string | string[] | undefined — chuẩn hoá về string
+    const correlationId =
+      (Array.isArray(headerId) ? headerId[0] : headerId) || uuidv4();
     req['correlationId'] = correlationId;
 
     const { method, originalUrl } = req;

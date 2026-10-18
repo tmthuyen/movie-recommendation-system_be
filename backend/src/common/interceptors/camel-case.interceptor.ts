@@ -4,6 +4,7 @@ import {
   Injectable,
   NestInterceptor,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { camelCase, isPlainObject, mapKeys, mapValues } from 'lodash';
 import { Observable } from 'rxjs';
 
@@ -13,7 +14,7 @@ export class CamelCaseInterceptor implements NestInterceptor {
     context: ExecutionContext,
     next: CallHandler,
   ): Observable<any> | Promise<Observable<any>> {
-    const req = context.switchToHttp().getRequest();
+    const req: Request = context.switchToHttp().getRequest();
 
     if (req.query && Object.keys(req.query).length > 0) {
       req.query = this.deepCamelCase(req.query);

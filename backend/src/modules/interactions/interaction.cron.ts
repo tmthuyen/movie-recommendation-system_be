@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { IInteractionRepository } from './interactions.repository';
 import { ISeedRatingRepository } from '../ratings/seed-ratings.repository';
 import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
+import { InteractionCreatedPayload } from '@/infrastructure/messaging/event.types';
 
 @Injectable()
 export class InteractionCronService {
@@ -64,17 +65,19 @@ export class InteractionCronService {
       }
 
       // Format seed ratings to match Interaction Event format
-      const formattedBatch = seedRatings.map(sr => ({
-        // Ensure userId is string to match App's UUID.
-        // Seed users have integer IDs originally, but stored as varchar/string.
-        userId: sr.userId.toString(),
-        movieId: sr.movieId,
-        // For seed ratings, action could be considered 'rate' or 'like' depending on your model.
-        // Let's use 'rate' and pass the explicit score.
-        action: 'rate',
-        rating: sr.score,
-        createdAt: sr.createdAt,
-      }));
+      const formattedBatch: InteractionCreatedPayload[] = seedRatings.map(
+        sr => ({
+          // Ensure userId is string to match App's UUID.
+          // Seed users have integer IDs originally, but stored as varchar/string.
+          userId: sr.userId.toString(),
+          movieId: sr.movieId,
+          // For seed ratings, action could be considered 'rate' or 'like' depending on your model.
+          // Let's use 'rate' and pass the explicit score.
+          action: 'rate',
+          score: sr.score,
+          createdAt: sr.createdAt,
+        }),
+      );
 
       // Publish to RabbitMQ
       this.interactionProducer.publishTrainingBatch(formattedBatch);
@@ -107,13 +110,15 @@ export class InteractionCronService {
     );
 
     // Format data for AI Service
-    const formattedInteractions = interactions.map(i => ({
-      userId: i.user?.id,
-      movieId: i.movie?.id,
-      action: i.type?.toLowerCase(),
-      rating: i.score,
-      createdAt: i.createdAt,
-    }));
+    const formattedInteractions: InteractionCreatedPayload[] = interactions.map(
+      i => ({
+        userId: i.user?.id,
+        movieId: i.movie?.id,
+        action: i.type?.toLowerCase(),
+        score: i.score,
+        createdAt: i.createdAt,
+      }),
+    );
 
     // Split into chunks if too large.
     const chunkSize = 10000;

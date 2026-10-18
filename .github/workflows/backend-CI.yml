@@ -22,7 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: ['18.x', '20.x', '22.x']
+        # NestJS 11 yêu cầu Node >= 20
+        node-version: ['20.x', '22.x']
     defaults:
       run:
         working-directory: backend

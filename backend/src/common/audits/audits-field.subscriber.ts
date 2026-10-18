@@ -8,6 +8,7 @@ import {
   UpdateEvent,
 } from 'typeorm';
 import { ClsService } from 'nestjs-cls';
+import { BaseAuditEntity } from './baseaudit.entity';
 
 @Injectable()
 @EventSubscriber()
@@ -25,7 +26,7 @@ export class AuditFieldsSubscriber
   }
 
   // Intercepts entity right before it is inserted into the database
-  beforeInsert(event: InsertEvent<any>) {
+  beforeInsert(event: InsertEvent<BaseAuditEntity>) {
     const userId = this.cls.get('userId');
     if (userId && 'createdBy' in event.entity) {
       event.entity.createdBy = userId;
@@ -34,7 +35,7 @@ export class AuditFieldsSubscriber
   }
 
   // Intercepts entity right before it is updated in the database
-  beforeUpdate(event: UpdateEvent<any>) {
+  beforeUpdate(event: UpdateEvent<BaseAuditEntity>) {
     const userId = this.cls.get('userId');
     if (userId && event.entity && 'updatedBy' in event.entity) {
       event.entity.updatedBy = userId;

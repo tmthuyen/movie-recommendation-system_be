@@ -9,7 +9,10 @@ export const IRatingRepository = Symbol('IRatingRepository');
 
 export interface IRatingRepository {
   findAll(paginationDto: PaginationDto): Promise<PaginatedResult<Rating>>;
-  findByMovie(movieId: number, paginationDto: PaginationDto): Promise<PaginatedResult<Rating>>;
+  findByMovie(
+    movieId: number,
+    paginationDto: PaginationDto,
+  ): Promise<PaginatedResult<Rating>>;
   findById(id: number): Promise<Rating | null>;
   create(rating: Partial<Rating>): Promise<Rating>;
   update(id: number, rating: Partial<Rating>): Promise<Rating | null>;
@@ -23,11 +26,14 @@ export class RatingRepository implements IRatingRepository {
     private readonly repo: Repository<Rating>,
   ) {}
 
-  async findAll(paginationDto: PaginationDto): Promise<PaginatedResult<Rating>> {
+  async findAll(
+    paginationDto: PaginationDto,
+  ): Promise<PaginatedResult<Rating>> {
     const { page = 1, limit = 10 } = paginationDto;
     const skip = (page - 1) * limit;
 
-    const queryBuilder = this.repo.createQueryBuilder('rating')
+    const queryBuilder = this.repo
+      .createQueryBuilder('rating')
       .leftJoinAndSelect('rating.user', 'user')
       .leftJoinAndSelect('rating.movie', 'movie')
       .skip(skip)
@@ -45,11 +51,15 @@ export class RatingRepository implements IRatingRepository {
     };
   }
 
-  async findByMovie(movieId: number, paginationDto: PaginationDto): Promise<PaginatedResult<Rating>> {
+  async findByMovie(
+    movieId: number,
+    paginationDto: PaginationDto,
+  ): Promise<PaginatedResult<Rating>> {
     const { page = 1, limit = 10 } = paginationDto;
     const skip = (page - 1) * limit;
 
-    const queryBuilder = this.repo.createQueryBuilder('rating')
+    const queryBuilder = this.repo
+      .createQueryBuilder('rating')
       .leftJoinAndSelect('rating.user', 'user')
       .where('rating.movie_id = :movieId', { movieId })
       .skip(skip)
@@ -68,7 +78,8 @@ export class RatingRepository implements IRatingRepository {
   }
 
   async findById(id: number): Promise<Rating | null> {
-    return this.repo.createQueryBuilder('rating')
+    return this.repo
+      .createQueryBuilder('rating')
       .leftJoinAndSelect('rating.user', 'user')
       .leftJoinAndSelect('rating.movie', 'movie')
       .where('rating.id = :id', { id })

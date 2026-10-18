@@ -28,6 +28,7 @@ Bảng theo dõi danh sách plan trong `docs/plans/`. Dùng để xác định `
 | 11 | V11_frontend_ui-roadmap.md | frontend | ui-roadmap | Frontend UI roadmap | |
 | 12 | V12_backend_docs-api-update.md | frontend | docs-api-update | Backend docs API update | Lưu ý: file là backend docs update nhưng scope trong tên là backend - OK. Kiểm tra lại nội dung nếu cần |
 | 13 | V13_frontend_ui-reuse.md | frontend | ui-reuse | Frontend UI reuse | |
+| 14 | V14_cicd_ci-cd-setup-fix-workflows.md | cicd | ci-cd-setup-fix-workflows | MovieApp: Sửa & hoàn thiện CI/CD (workflows xanh, CD placeholder) | |
 
 ## Đề xuất rename (cần xác nhận từ người dùng)
 Do "sai số thứ tự" (V1 trùng lặp về mặt ngữ nghĩa trong yêu cầu: có V1_legalai_ci-cd-split-workflows.md được tạo sau?), các file sau cần được điều chỉnh tên để khớp định dạng `V{index}_{scope}_{task_name}.md` và đảm bảo index liên tục:
@@ -44,10 +45,10 @@ Do "sai số thứ tự" (V1 trùng lặp về mặt ngữ nghĩa trong yêu c�
 
 **Lưu ý quan trọng:** Hiện tại có sự mâu thuẫn về index 1 (V1_backend-plan.md đã tồn tại). Theo yêu cầu user: "V1_legalai_ci-cd-split-workflows.md (scope cicd? ci-cd split → cicd)". Vì vậy, đề xuất **renumber toàn bộ** theo thứ tự logic: V0, V1(cicd), V2(backend retrieval validation), V3(backend retrieval api), rồi tiếp theo các plan khác được sắp xếp lại một cách tuần tự và nhất quán.
 
-**Cách tính next_index:** `max(index) = 13` → `next_index = 14`
+**Cách tính next_index:** `max(index) = 14` → `next_index = 15`
 
 ## next_index
-`14`
+`15`
 
 ## Cách xác định index khi tạo plan mới
 1. Đọc `docs/plans/PLAN_INDEX.md` → lấy `next_index`

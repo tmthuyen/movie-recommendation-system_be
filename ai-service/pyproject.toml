@@ -11,6 +11,9 @@ dependencies = [
     "numpy>=1.24.0",
     "pandas>=2.0.0",
     "scikit-learn>=1.3.0",
+
+    # Utils (src/utils/config_loader.py import yaml ở module level)
+    "pyyaml>=6.0",
     
     "fastapi>=0.100.0",
     "uvicorn>=0.23.0",

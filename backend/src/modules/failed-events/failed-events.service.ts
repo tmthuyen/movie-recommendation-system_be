@@ -3,7 +3,6 @@ import { IFailedEventRepository } from './failed-events.repository';
 import { FailedEventStatus } from './entities/failed-event.entity';
 import { EventPublisherService } from '@/infrastructure/messaging/event-publisher.service';
 import { MESSAGE_BUS_CONFIG } from '@/infrastructure/messaging/messaging.constants';
-import { EventEnvelope } from '@/infrastructure/messaging/event.types';
 import { FailedEventDto } from './dtos/failed-event.dto';
 
 @Injectable()
@@ -52,10 +51,12 @@ export class FailedEventsService {
       await this.repo.save(failedEvent);
 
       return true;
-    } catch (error: any) {
+    } catch (error) {
       failedEvent.status = FailedEventStatus.RETRIED_FAILED;
       failedEvent.retryCount += 1;
-      failedEvent.errorReason = error.message;
+      let message = '';
+      if (error instanceof Error) message = error.message;
+      failedEvent.errorReason = message;
       await this.repo.save(failedEvent);
       return false;
     }

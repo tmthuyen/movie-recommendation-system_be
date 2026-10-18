@@ -11,6 +11,9 @@ import {
 } from '@/modules/interactions/entities/interaction.entity';
 import { Comment } from './entities/comment.entity';
 import { EventsGateway } from '@/modules/events/events.gateway';
+import { User } from '../users/entities/user.entity';
+import { Movie } from '../movies/entities/movie.entity';
+import { PaginatedResult } from '@/common/dtos/api-response.dto';
 
 @Injectable()
 export class CommentsService {
@@ -21,7 +24,10 @@ export class CommentsService {
     private readonly eventsGateway: EventsGateway,
   ) {}
 
-  async create(userId: string, createCommentDto: CreateCommentDto) {
+  async create(
+    userId: string,
+    createCommentDto: CreateCommentDto,
+  ): Promise<Comment> {
     const { movieId, content, parentId } = createCommentDto;
 
     return await this.dataSource.transaction(async manager => {
@@ -29,8 +35,8 @@ export class CommentsService {
       const newComment = manager.create(Comment, {
         content,
         parentId,
-        movie: { id: movieId } as any,
-        user: { id: userId } as any,
+        movie: { id: movieId } as Movie,
+        user: { id: userId } as User,
       });
       const savedComment = await manager.save(newComment);
 
@@ -38,8 +44,8 @@ export class CommentsService {
       const interaction = manager.create(Interaction, {
         score: InteractionScoreMap[InteractionType.COMMENT],
         type: InteractionType.COMMENT,
-        movie: { id: movieId } as any,
-        user: { id: userId } as any,
+        movie: { id: movieId } as Movie,
+        user: { id: userId } as User,
       });
       await manager.save(interaction);
 
@@ -49,7 +55,9 @@ export class CommentsService {
     });
   }
 
-  async findAll(paginationDto: PaginationDto) {
+  async findAll(
+    paginationDto: PaginationDto,
+  ): Promise<PaginatedResult<Comment>> {
     return this.repo.findAll(paginationDto);
   }
 
