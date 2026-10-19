@@ -1,8 +1,8 @@
-# 1. Môi trường ảo (Quan trọng nhất)
+# venv
 venv/
-.env
 .venv/
-# 2. Python rác
+
+# python
 __pycache__/
 *.pyc
 *.pyo
@@ -11,29 +11,10 @@ __pycache__/
 dist/
 build/
 
-# 1. Bỏ qua toàn bộ Data (Siêu nặng)
-data/*
 
-# 2. Bỏ qua Logs (Rác sinh ra hàng ngày)
-logs/*
-!logs/.gitkeep
-
-# 5. Logs & Notebooks
-logs/*.log
-.ipynb_checkpoints/
-
-.venv/
-venv/
-*.pt
-*.pth
-logs/
-*.log
+# ide
 .vscode/
 .idea/
-
-# Python
-__pycache__/
-*.pyc
 
 # Virtual environment
 .venv/
@@ -42,12 +23,29 @@ venv/
 # Data 
 *.npy
 *.pkl
-*.csv
+# *.csv
 
 # Notebook checkpoints
 .ipynb_checkpoints/
 
 # OS
 .DS_Store
+ 
 
-model_artifacts/
+# data dir
+!data/
+data/**
+!data/**/
+!data/**/.gitkeep
+
+# logs dir
+logs/*
+!logs/.gitkeep
+
+# model file
+*.pt
+*.pth
+
+
+# secrets
+.env
