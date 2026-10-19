@@ -64,7 +64,3 @@ tsconfig.build.tsbuildinfo
 backup/
 
 !**/.gitkeep
-
-# AI skills
-skills/
-skills/
