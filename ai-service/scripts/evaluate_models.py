@@ -29,9 +29,11 @@ evaluate_models.py
 
 from __future__ import annotations
 
+import ast
 import json
 import math
 import os
+import re
 import sys
 import time
 from datetime import datetime
@@ -45,26 +47,89 @@ import pandas as pd
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
-# ─── Đường dẫn ───────────────────────────────────────────────────────────────
-CURRENT_DIR     = Path(__file__).resolve().parent          # ai-service/scripts
-AI_SERVICE_DIR  = CURRENT_DIR.parent                       # ai-service/
-PROJECT_ROOT    = AI_SERVICE_DIR.parent                    # repo root
+# ─── Đường dẫn & Import dùng chung ───────────────────────────────────────────
+CURRENT_DIR = Path(__file__).resolve().parent  # ai-service/scripts
+AI_SERVICE_DIR = CURRENT_DIR.parent  # ai-service/
+PROJECT_ROOT = AI_SERVICE_DIR.parent  # repo root
+SRC_DIR = AI_SERVICE_DIR / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+if str(CURRENT_DIR) not in sys.path:
+    sys.path.insert(0, str(CURRENT_DIR))
 
-CSV_PATH        = PROJECT_ROOT / "all_movies_fully_translated.csv"
-CHROMA_DIR      = AI_SERVICE_DIR / "data" / "chroma_db"
-GT_PATH         = AI_SERVICE_DIR / "experiments" / "ground_truth" / "ground_truth.json"
-OUTPUT_DIR      = AI_SERVICE_DIR / "experiments" / "evaluation"
+from build_vector_db import get_manifest_path, verify_vector_db
+
+from core.tokenizer import UndertheseaTokenizer
+
+# Tái sử dụng hàm dùng chung chuẩn hóa
+from data.data_loader import (
+    build_search_text,
+    compute_corpus_fingerprint,
+    extract_genre_names,
+    safe_int,
+)
+
+CSV_PATH = PROJECT_ROOT / "all_movies_fully_translated.csv"
+CHROMA_DIR = AI_SERVICE_DIR / "data" / "chroma_db"
+GT_PATH = AI_SERVICE_DIR / "experiments" / "ground_truth" / "ground_truth.json"
+OUTPUT_DIR = AI_SERVICE_DIR / "experiments" / "evaluation"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+TOKEN_CACHE_DIR = AI_SERVICE_DIR / "data" / "artifacts" / "lexical_search"
+TOKEN_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+TOKEN_CACHE_FILE = TOKEN_CACHE_DIR / "tokenized_corpus_underthesea.joblib"
 
-COLLECTION_NAME  = "movies"
+COLLECTION_NAME = "movies"
 SBERT_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
-TOP_K_VALUES     = [5, 10]
-WARMUP_QUERIES   = 3   # số lần chạy warmup trước khi đo latency chính thức
+TOP_K_VALUES = [5, 10]
+WARMUP_QUERIES = 3  # số lần chạy warmup trước khi đo latency chính thức
+BINARY_RELEVANCE_THRESHOLD = (
+    2  # Chuẩn hóa ngưỡng nhị phân: Grade >= 2 là relevant (Grade 1 chỉ dùng trong NDCG)
+)
+
+
+class VectorDBVerificationError(RuntimeError):
+    """Ngoại lệ ném ra khi ChromaDB không vượt qua bước kiểm tra tính hợp lệ/toàn vẹn."""
+
+    pass
+
+
+def check_vector_db_guard(
+    collection,
+    corpus: list[str],
+    movie_ids: list[int],
+    model_name: str,
+    manifest_path: Path,
+    embedding_model=None,
+) -> None:
+    """
+    Kiểm tra tính toàn vẹn của ChromaDB trước khi tiến hành benchmark.
+    Nếu không hợp lệ, ném ngoại lệ VectorDBVerificationError để dừng toàn bộ quá trình đánh giá,
+    ngăn chặn tạo kết quả từ dữ liệu sai lệch.
+    """
+    is_valid, v_msg = verify_vector_db(
+        collection=collection,
+        corpus=corpus,
+        movie_ids=movie_ids,
+        model_name=model_name,
+        manifest_path=manifest_path,
+        embedding_model=embedding_model,
+    )
+    if is_valid:
+        print(f"   [ChromaDB Audit] ✅ {v_msg}\n")
+    else:
+        err_msg = (
+            f"[ChromaDB Audit] ❌ LỖI XÁC MINH VECTOR DB: {v_msg}!\n"
+            f"   → DỪNG ĐÁNH GIÁ (ABORT BENCHMARK) để tránh tạo kết quả sai lệch.\n"
+            f"   → Vui lòng chạy lại 'python scripts/build_vector_db.py --force' để tái tạo ChromaDB đồng bộ với dữ liệu hiện tại."
+        )
+        print(f"\n{err_msg}\n")
+        raise VectorDBVerificationError(err_msg)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  CÁC HÀM TÍNH ĐỘ ĐO IR
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def precision_at_k(retrieved_ids: list[int], relevant_ids: set[int], k: int) -> float:
     """
@@ -92,7 +157,9 @@ def recall_at_k(retrieved_ids: list[int], relevant_ids: set[int], k: int) -> flo
     return hits / len(relevant_ids)
 
 
-def dcg_at_k(retrieved_ids: list[int], relevance_grades: dict[int, int], k: int) -> float:
+def dcg_at_k(
+    retrieved_ids: list[int], relevance_grades: dict[int, int], k: int
+) -> float:
     """
     DCG@K = Σ_{i=1}^{K} rel_i / log2(i + 1)
 
@@ -119,7 +186,9 @@ def ideal_dcg_at_k(relevance_grades: dict[int, int], k: int) -> float:
     return idcg
 
 
-def ndcg_at_k(retrieved_ids: list[int], relevance_grades: dict[int, int], k: int) -> float:
+def ndcg_at_k(
+    retrieved_ids: list[int], relevance_grades: dict[int, int], k: int
+) -> float:
     """
     NDCG@K = DCG@K / IDCG@K
 
@@ -156,8 +225,8 @@ def compute_all_metrics(
     metrics: dict[str, float] = {}
     for k in k_values:
         metrics[f"precision@{k}"] = precision_at_k(retrieved_ids, relevant_ids, k)
-        metrics[f"recall@{k}"]    = recall_at_k(retrieved_ids, relevant_ids, k)
-        metrics[f"ndcg@{k}"]      = ndcg_at_k(retrieved_ids, relevance_grades, k)
+        metrics[f"recall@{k}"] = recall_at_k(retrieved_ids, relevant_ids, k)
+        metrics[f"ndcg@{k}"] = ndcg_at_k(retrieved_ids, relevance_grades, k)
     metrics["rr"] = reciprocal_rank(retrieved_ids, relevant_ids)
     return metrics
 
@@ -170,15 +239,120 @@ def average_metrics(per_query: list[dict[str, float]]) -> dict[str, float]:
     return {k: round(float(np.mean([m[k] for m in per_query])), 4) for k in keys}
 
 
+def load_or_create_tokenized_cache(
+    cache_path: Path,
+    df: pd.DataFrame,
+    tokenizer: UndertheseaTokenizer,
+) -> list[list[str]]:
+    """
+    Quản lý cache tokenized corpus của Underthesea:
+    1. Tính fingerprint của corpus (search_text + movieId) và config hash của tokenizer.
+    2. Nếu cache tồn tại, xác minh fingerprint, tokenizer config, và số lượng văn bản.
+    3. Nếu hợp lệ: nạp tức thì từ cache.
+    4. Nếu không khớp hoặc cache cũ: tự động tạo lại cache và lưu cấu trúc metadata mới.
+    """
+    import joblib
+
+    corpus_texts = df["search_text"].tolist()
+    movie_ids = df["movieId"].tolist()
+    current_corpus_fp = compute_corpus_fingerprint(corpus_texts, movie_ids)
+    current_tok_hash = tokenizer.get_config_hash()
+
+    cache_valid = False
+    invalidation_reason = ""
+
+    if cache_path.exists():
+        try:
+            cached_obj = joblib.load(cache_path)
+            if isinstance(cached_obj, dict) and "tokenized_corpus" in cached_obj:
+                cached_fp = cached_obj.get("corpus_fingerprint")
+                cached_tok_hash = cached_obj.get("tokenizer_hash")
+                cached_count = cached_obj.get("num_records")
+
+                if cached_fp != current_corpus_fp:
+                    invalidation_reason = (
+                        "Corpus search_text hoặc danh sách movieId đã thay đổi"
+                    )
+                elif cached_tok_hash != current_tok_hash:
+                    invalidation_reason = (
+                        "Cấu hình tokenizer hoặc danh sách stop words đã thay đổi"
+                    )
+                elif cached_count != len(df):
+                    invalidation_reason = f"Số lượng văn bản thay đổi (cache: {cached_count} vs hiện tại: {len(df)})"
+                elif len(cached_obj["tokenized_corpus"]) != len(df):
+                    invalidation_reason = (
+                        "Độ dài tokenized_corpus không khớp với số dòng DataFrame"
+                    )
+                else:
+                    cache_valid = True
+            else:
+                invalidation_reason = (
+                    "Cache phiên bản cũ (chưa có metadata fingerprint xác thực)"
+                )
+        except Exception as e:
+            invalidation_reason = f"Lỗi đọc file cache: {e}"
+
+    if cache_valid:
+        print(
+            f"   [Tokenizer Cache] ✅ Cache hợp lệ ({len(df):,} tài liệu, khớp corpus fingerprint & tokenizer config). Nạp tức thì!"
+        )
+        return cached_obj["tokenized_corpus"]
+    else:
+        if cache_path.exists():
+            print(
+                f"   [Tokenizer Cache] ⚠️ Cache không hợp lệ ({invalidation_reason})."
+            )
+            print(f"   [Tokenizer Cache] Đang tự động tách từ lại với Underthesea...")
+        else:
+            print(
+                f"   [Tokenizer Cache] Chưa có cache. Đang tách từ {len(df):,} phim bằng Underthesea..."
+            )
+
+        t0 = time.time()
+        tokenized_corpus = [tokenizer.tokenize(text) for text in corpus_texts]
+        elapsed = time.time() - t0
+        print(f"   [Tokenizer Cache] Tách từ hoàn tất trong {elapsed:.1f}s.")
+
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "corpus_fingerprint": current_corpus_fp,
+            "num_records": len(df),
+            "tokenizer_hash": current_tok_hash,
+            "tokenizer_class": tokenizer.__class__.__name__,
+            "stop_words_count": len(tokenizer.stop_words),
+            "tokenized_corpus": tokenized_corpus,
+            "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        joblib.dump(payload, cache_path)
+        print(
+            f"   [Tokenizer Cache] Đã lưu cache mới kèm metadata xác thực tại: {cache_path}"
+        )
+        return tokenized_corpus
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  HÀM TÌM KIẾM TỪNG MÔ HÌNH
 # ══════════════════════════════════════════════════════════════════════════════
 
-def search_tfidf(query: str, tfidf_vec, tfidf_matrix, df: pd.DataFrame, top_k: int) -> tuple[list[int], float]:
+
+def search_tfidf(
+    query: str,
+    tfidf_vec,
+    tfidf_matrix,
+    df: pd.DataFrame,
+    top_k: int,
+    tokenizer: UndertheseaTokenizer | None = None,
+) -> tuple[list[int], float]:
     """Tìm kiếm bằng TF-IDF, trả về (list of movie_ids, latency_ms)."""
     from sklearn.metrics.pairwise import cosine_similarity
+
     t0 = time.perf_counter()
-    q_vec = tfidf_vec.transform([query])
+    if tokenizer is not None:
+        q_tokens = tokenizer.tokenize(query)
+        q_str = " ".join(q_tokens)
+    else:
+        q_str = query
+    q_vec = tfidf_vec.transform([q_str])
     scores = cosine_similarity(q_vec, tfidf_matrix).flatten()
     top_idx = scores.argsort()[::-1][:top_k]
     latency = (time.perf_counter() - t0) * 1000
@@ -187,10 +361,19 @@ def search_tfidf(query: str, tfidf_vec, tfidf_matrix, df: pd.DataFrame, top_k: i
     return movie_ids[:top_k], latency
 
 
-def search_bm25(query: str, bm25_model, df: pd.DataFrame, top_k: int) -> tuple[list[int], float]:
+def search_bm25(
+    query: str,
+    bm25_model,
+    df: pd.DataFrame,
+    top_k: int,
+    tokenizer: UndertheseaTokenizer | None = None,
+) -> tuple[list[int], float]:
     """Tìm kiếm bằng BM25, trả về (list of movie_ids, latency_ms)."""
-    tokens = [w.lower() for w in query.split() if len(w) > 1]
     t0 = time.perf_counter()
+    if tokenizer is not None:
+        tokens = tokenizer.tokenize(query)
+    else:
+        tokens = [w.lower() for w in re.findall(r"\w+", str(query)) if len(w) > 1]
     scores = np.array(bm25_model.get_scores(tokens))
     top_idx = scores.argsort()[::-1][:top_k]
     latency = (time.perf_counter() - t0) * 1000
@@ -199,7 +382,9 @@ def search_bm25(query: str, bm25_model, df: pd.DataFrame, top_k: int) -> tuple[l
     return movie_ids[:top_k], latency
 
 
-def search_sbert(query: str, collection, sbert_model, top_k: int) -> tuple[list[int], float]:
+def search_sbert(
+    query: str, collection, sbert_model, top_k: int
+) -> tuple[list[int], float]:
     """Tìm kiếm bằng SBERT + ChromaDB, trả về (list of movie_ids, latency_ms)."""
     t0 = time.perf_counter()
     embedding = sbert_model.encode(query).tolist()
@@ -225,6 +410,7 @@ def search_sbert(query: str, collection, sbert_model, top_k: int) -> tuple[list[
 #  SINH BÁO CÁO MARKDOWN
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def generate_markdown_report(results: dict[str, Any]) -> str:
     """Tạo báo cáo Markdown học thuật từ dict kết quả."""
     ts = results["evaluated_at"]
@@ -242,18 +428,37 @@ def generate_markdown_report(results: dict[str, Any]) -> str:
     lines.append(f"|---|---|")
     lines.append(f"| Tập dữ liệu | **{ds:,} bộ phim** (TMDB + MovieLens) |")
     lines.append(f"| Tập Ground Truth | **{nq} câu truy vấn** (human-annotated) |")
-    lines.append(f"| Nhóm thử nghiệm | A: Semantic Mismatch, B: Slang/Colloquial, C: Emotional Tone, D: Animation/Fantasy, E: Action/Superhero |")
-    lines.append(f"| Độ đo | Precision@K, Recall@K, NDCG@K (K=5,10), MRR |")
-    lines.append(f"| Relevance grades | 3=Rất liên quan, 2=Liên quan, 1=Một phần, 0=Không liên quan |")
+    lines.append(
+        f"| Nhóm thử nghiệm | A: Semantic Mismatch, B: Slang/Colloquial, C: Emotional Tone, D: Animation/Fantasy, E: Action/Superhero |"
+    )
+    lines.append(f"| Độ đo | Precision@K, Recall@K, NDCG@K (K=5,10), MRR@10 |")
+    lines.append(
+        f"| Ngưỡng nhị phân (Binary Cutoff) | **Grade >= {BINARY_RELEVANCE_THRESHOLD}** (Grade 1 chỉ dùng trong NDCG đa cấp) |"
+    )
+    lines.append(
+        f"| Tokenizer Lexical | **UndertheseaTokenizer** (Tách từ ghép tiếng Việt, xử lý stop words) |"
+    )
+    lines.append(
+        f"| Hàm Search Text | `data.data_loader.build_search_text` (Khớp 100% với ChromaDB) |"
+    )
+    lines.append(
+        f"| Relevance grades | 3=Rất liên quan, 2=Liên quan, 1=Một phần, 0=Không liên quan |"
+    )
     lines.append(f"| Thời gian đánh giá | {ts} |")
     lines.append("")
     lines.append("### Mô hình so sánh")
     lines.append("")
     lines.append("| # | Mô hình | Loại | Mô tả |")
     lines.append("|---|---|---|---|")
-    lines.append("| 1 | **TF-IDF** | Lexical Baseline | Đối chiếu từ khóa thống kê truyền thống |")
-    lines.append("| 2 | **BM25** | Lexical Baseline | BM25Okapi — tìm kiếm từ khóa cải tiến |")
-    lines.append("| 3 | **SBERT + ChromaDB** | **Semantic (Đề xuất)** | Sentence-BERT đa ngôn ngữ + HNSW Vector Index |")
+    lines.append(
+        "| 1 | **TF-IDF** | Lexical Baseline | Đối chiếu từ khóa thống kê truyền thống |"
+    )
+    lines.append(
+        "| 2 | **BM25** | Lexical Baseline | BM25Okapi — tìm kiếm từ khóa cải tiến |"
+    )
+    lines.append(
+        "| 3 | **SBERT + ChromaDB** | **Semantic (Đề xuất)** | Sentence-BERT đa ngôn ngữ + HNSW Vector Index |"
+    )
     lines.append("")
     lines.append("---")
     lines.append("")
@@ -264,9 +469,15 @@ def generate_markdown_report(results: dict[str, Any]) -> str:
 
     # Main comparison table
     model_order = ["TF-IDF", "BM25", "SBERT_ChromaDB"]
-    model_display = {"TF-IDF": "TF-IDF", "BM25": "BM25", "SBERT_ChromaDB": "**SBERT + ChromaDB ✨**"}
-    
-    lines.append("| Mô hình | P@5 | P@10 | R@5 | R@10 | NDCG@5 | NDCG@10 | MRR | Latency (ms) |")
+    model_display = {
+        "TF-IDF": "TF-IDF",
+        "BM25": "BM25",
+        "SBERT_ChromaDB": "**SBERT + ChromaDB ✨**",
+    }
+
+    lines.append(
+        "| Mô hình | P@5 | P@10 | R@5 | R@10 | NDCG@5 | NDCG@10 | MRR | Latency (ms) |"
+    )
     lines.append("|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|")
 
     for model in model_order:
@@ -319,7 +530,15 @@ def generate_markdown_report(results: dict[str, Any]) -> str:
         lines.append(" ".join(headers))
         lines.append(" ".join(divs))
 
-        for metric in ["precision@5", "precision@10", "recall@5", "recall@10", "ndcg@5", "ndcg@10", "rr"]:
+        for metric in [
+            "precision@5",
+            "precision@10",
+            "recall@5",
+            "recall@10",
+            "ndcg@5",
+            "ndcg@10",
+            "rr",
+        ]:
             label = metric.upper().replace("RR", "MRR")
             row_parts = [f"| {label}"]
             s_val = sbert.get(metric, 0)
@@ -351,16 +570,18 @@ def generate_markdown_report(results: dict[str, Any]) -> str:
 
     group_names = {
         "A_semantic_mismatch": "A — Ngữ nghĩa trừu tượng / Vocabulary Mismatch",
-        "B_slang_colloquial":  "B — Tiếng lóng / Ngôn ngữ thông thường",
-        "C_emotional_tone":    "C — Tông cảm xúc",
+        "B_slang_colloquial": "B — Tiếng lóng / Ngôn ngữ thông thường",
+        "C_emotional_tone": "C — Tông cảm xúc",
         "D_animation_fantasy": "D — Hoạt hình / Thế giới kỳ ảo",
-        "E_action_superhero":  "E — Hành động / Siêu anh hùng",
+        "E_action_superhero": "E — Hành động / Siêu anh hùng",
     }
 
     for group_id, group_label in group_names.items():
         if group_id not in per_group:
             continue
-        lines.append(f"### 3.{list(group_names.keys()).index(group_id)+1}. Nhóm {group_label}")
+        lines.append(
+            f"### 3.{list(group_names.keys()).index(group_id)+1}. Nhóm {group_label}"
+        )
         lines.append("")
         gdata = per_group[group_id]
         lines.append("| Mô hình | P@5 | NDCG@5 | MRR |")
@@ -385,20 +606,24 @@ def generate_markdown_report(results: dict[str, Any]) -> str:
 
     sbert_metrics = model_results.get("SBERT_ChromaDB", {}).get("avg_metrics", {})
     tfidf_metrics = model_results.get("TF-IDF", {}).get("avg_metrics", {})
-    bm25_metrics  = model_results.get("BM25", {}).get("avg_metrics", {})
+    bm25_metrics = model_results.get("BM25", {}).get("avg_metrics", {})
 
     sbert_lat = model_results.get("SBERT_ChromaDB", {}).get("avg_latency_ms", 0)
     tfidf_lat = model_results.get("TF-IDF", {}).get("avg_latency_ms", 0)
 
     ndcg5_sbert = sbert_metrics.get("ndcg@5", 0)
     ndcg5_tfidf = tfidf_metrics.get("ndcg@5", 0)
-    ndcg5_bm25  = bm25_metrics.get("ndcg@5", 0)
+    ndcg5_bm25 = bm25_metrics.get("ndcg@5", 0)
     mrr_sbert = sbert_metrics.get("rr", 0)
     mrr_tfidf = tfidf_metrics.get("rr", 0)
 
-    improve_ndcg_vs_tfidf = ((ndcg5_sbert - ndcg5_tfidf) / ndcg5_tfidf * 100) if ndcg5_tfidf > 0 else 0
-    improve_ndcg_vs_bm25  = ((ndcg5_sbert - ndcg5_bm25) / ndcg5_bm25 * 100) if ndcg5_bm25 > 0 else 0
-    improve_mrr           = ((mrr_sbert - mrr_tfidf) / mrr_tfidf * 100) if mrr_tfidf > 0 else 0
+    improve_ndcg_vs_tfidf = (
+        ((ndcg5_sbert - ndcg5_tfidf) / ndcg5_tfidf * 100) if ndcg5_tfidf > 0 else 0
+    )
+    improve_ndcg_vs_bm25 = (
+        ((ndcg5_sbert - ndcg5_bm25) / ndcg5_bm25 * 100) if ndcg5_bm25 > 0 else 0
+    )
+    improve_mrr = ((mrr_sbert - mrr_tfidf) / mrr_tfidf * 100) if mrr_tfidf > 0 else 0
 
     lines.append(
         f"Kết quả thực nghiệm trên tập **{nq} câu truy vấn tiếng Việt** với **{ds:,} bộ phim** "
@@ -440,6 +665,7 @@ def generate_markdown_report(results: dict[str, Any]) -> str:
 #  HÀM CHÍNH
 # ══════════════════════════════════════════════════════════════════════════════
 
+
 def main() -> None:
     print("=" * 80)
     print("   ĐÁNH GIÁ ĐỊNH LƯỢNG MÔ HÌNH IR — Precision@K, NDCG@K, MRR")
@@ -471,106 +697,150 @@ def main() -> None:
         sys.exit(1)
 
     df = pd.read_csv(CSV_PATH, low_memory=False)
-    df = df.dropna(subset=["movieId"]).drop_duplicates(subset=["movieId"]).copy()
-    df["movieId"] = df["movieId"].astype(int)
-    df["title_vi"]    = df["title_vi"].fillna("")
-    df["overview_vi"] = df["overview_vi"].fillna("")
-    df["overview"]    = df["overview"].fillna("")
-    df["genres"]      = df["genres"].fillna("")
-    df["title"]       = df["title"].fillna("")
-    df["search_text"] = (
-        df["title_vi"] + " " + df["title"] + " " + df["genres"] + " " +
-        df["overview_vi"] + " " + df["overview"]
-    ).str.strip()
-    df = df[df["search_text"].str.len() > 10].reset_index(drop=True)
-    print(f"✅ Đã nạp {len(df):,} phim hợp lệ.\n")
+    # Thống nhất 100% logic tạo search_text và lọc ID với build_vector_db.py qua hàm dùng chung
+    df["search_text"] = df.apply(build_search_text, axis=1)
+    df = df[df["search_text"].str.len() > 20].copy()
+    id_col = (
+        "movieId" if "movieId" in df.columns and df["movieId"].notna().any() else "id"
+    )
+    df[id_col] = df[id_col].apply(safe_int)
+    df = df[df[id_col] > 0].drop_duplicates(subset=[id_col]).reset_index(drop=True)
+    df["movieId"] = df[id_col]
+    print(f"✅ Đã nạp {len(df):,} phim hợp lệ (thống nhất hoàn toàn với ChromaDB).\n")
 
-    # ── 3. Khởi tạo TF-IDF & BM25 ──────────────────────────────────────────
-    print("⏳ [3/5] Đang khởi tạo mô hình TF-IDF và BM25 ...")
+    # ── 3. Khởi tạo TF-IDF & BM25 (Underthesea Tokenizer) ──────────────────
+    print("⏳ [3/5] Đang khởi tạo mô hình TF-IDF và BM25 (Underthesea Tokenizer) ...")
+    tok = UndertheseaTokenizer()
+    tokenized_corpus = load_or_create_tokenized_cache(TOKEN_CACHE_FILE, df, tok)
+
+    # TF-IDF trên tập văn bản đã tách từ ghép tiếng Việt
     from sklearn.feature_extraction.text import TfidfVectorizer
 
-    tfidf_vec = TfidfVectorizer(max_features=25_000, ngram_range=(1, 2))
-    tfidf_matrix = tfidf_vec.fit_transform(df["search_text"])
-    print(f"   [TF-IDF] Vocab: {len(tfidf_vec.vocabulary_):,} tokens | Matrix: {tfidf_matrix.shape}")
+    corpus_text_tokenized = [" ".join(tokens) for tokens in tokenized_corpus]
+    tfidf_vec = TfidfVectorizer(
+        max_features=25_000, ngram_range=(1, 2), sublinear_tf=True
+    )
+    tfidf_matrix = tfidf_vec.fit_transform(corpus_text_tokenized)
+    print(
+        f"   [TF-IDF] Vocab: {len(tfidf_vec.vocabulary_):,} tokens (từ ghép Underthesea + bigrams) | Matrix: {tfidf_matrix.shape}"
+    )
 
     try:
         from rank_bm25 import BM25Okapi
-        tokenized_corpus = [
-            [w.lower() for w in doc.split() if len(w) > 1]
-            for doc in df["search_text"]
-        ]
+
         bm25_model = BM25Okapi(tokenized_corpus)
         bm25_available = True
-        print(f"   [BM25]   BM25Okapi sẵn sàng.")
+        print(f"   [BM25]   BM25Okapi sẵn sàng (Underthesea tokenized corpus).")
     except ImportError:
         bm25_model = None
         bm25_available = False
         print("   [BM25]   rank-bm25 chưa cài — bỏ qua BM25.")
 
-    # ── 4. Khởi tạo SBERT + ChromaDB ────────────────────────────────────────
+    # ── 4. Khởi tạo SBERT + ChromaDB & Xác minh Tính Toàn Vẹn ───────────────
     print("\n⏳ [4/5] Đang nạp SBERT model và kết nối ChromaDB ...")
     import chromadb
     from sentence_transformers import SentenceTransformer
 
-    chroma_client  = chromadb.PersistentClient(path=str(CHROMA_DIR))
-    collection     = chroma_client.get_collection(name=COLLECTION_NAME)
-    sbert_model    = SentenceTransformer(SBERT_MODEL_NAME)
-    chroma_count   = collection.count()
-    print(f"   [SBERT + ChromaDB] {chroma_count:,} vectors đã lập chỉ mục.\n")
+    chroma_client = chromadb.PersistentClient(path=str(CHROMA_DIR))
+    collection = chroma_client.get_collection(name=COLLECTION_NAME)
+    sbert_model = SentenceTransformer(SBERT_MODEL_NAME)
+    chroma_count = collection.count()
+    print(f"   [SBERT + ChromaDB] {chroma_count:,} vectors đã lập chỉ mục.")
+
+    # Xác minh tính toàn vẹn của ChromaDB (Corpus hash, search_text và model)
+    manifest_path = get_manifest_path(CHROMA_DIR, COLLECTION_NAME)
+    check_vector_db_guard(
+        collection=collection,
+        corpus=df["search_text"].tolist(),
+        movie_ids=df["movieId"].tolist(),
+        model_name=SBERT_MODEL_NAME,
+        manifest_path=manifest_path,
+        embedding_model=sbert_model,
+    )
 
     # Warmup để loại trừ thời gian khởi tạo khỏi latency đo chính thức
-    print(f"   Warmup {WARMUP_QUERIES} queries ...")
+    print(
+        f"   Warmup {WARMUP_QUERIES} queries (bao gồm cả TF-IDF, BM25 và ChromaDB HNSW) ..."
+    )
     warmup_q = "phim tình yêu và phiêu lưu"
+    w_toks = tok.tokenize(warmup_q)
+    w_str = " ".join(w_toks)
     for _ in range(WARMUP_QUERIES):
-        tfidf_vec.transform([warmup_q])
+        tfidf_vec.transform([w_str])
         if bm25_available:
-            bm25_model.get_scores(warmup_q.split())
-        sbert_model.encode(warmup_q)
+            bm25_model.get_scores(w_toks)
+        w_emb = sbert_model.encode(warmup_q).tolist()
+        collection.query(query_embeddings=[w_emb], n_results=5)
     print("   Warmup hoàn tất.\n")
 
     # ── 5. Chạy đánh giá ────────────────────────────────────────────────────
     print("=" * 80)
-    print("🚀 [5/5] CHẠY ĐÁNH GIÁ TRÊN 20 QUERY GROUND TRUTH")
+    print(
+        f"🚀 [5/5] CHẠY ĐÁNH GIÁ TRÊN {len(queries_gt)} QUERY GROUND TRUTH (Ngưỡng nhị phân Grade >= {BINARY_RELEVANCE_THRESHOLD})"
+    )
     print("=" * 80 + "\n")
 
     MAX_RETRIEVE = max(TOP_K_VALUES)
 
     # Lưu metrics theo từng model
     all_model_metrics: dict[str, list[dict]] = {
-        "TF-IDF": [], "BM25": [], "SBERT_ChromaDB": []
+        "TF-IDF": [],
+        "BM25": [],
+        "SBERT_ChromaDB": [],
     }
     all_model_latencies: dict[str, list[float]] = {
-        "TF-IDF": [], "BM25": [], "SBERT_ChromaDB": []
+        "TF-IDF": [],
+        "BM25": [],
+        "SBERT_ChromaDB": [],
     }
     per_group_metrics: dict[str, dict[str, list[dict]]] = {}
 
     for qi, qentry in enumerate(queries_gt, start=1):
-        qid   = qentry["query_id"]
+        qid = qentry["query_id"]
         query = qentry["query"]
         group = qentry["group"]
         rel_list = qentry["relevant_movies"]
 
-        relevant_ids    = {r["movie_id"] for r in rel_list}
-        relevance_grades = {r["movie_id"]: r["relevance_grade"] for r in rel_list}
+        # Chuẩn hóa ngưỡng nhị phân: Chỉ tính Grade >= 2 là relevant
+        relevant_ids = {
+            r["movie_id"]
+            for r in rel_list
+            if r.get("relevance_grade", 0) >= BINARY_RELEVANCE_THRESHOLD
+        }
+        relevance_grades = {
+            r["movie_id"]: r.get("relevance_grade", 0) for r in rel_list
+        }
 
         print(f"[{qi:02d}/20] {qid} | {query[:60]}")
 
         # ── TF-IDF ──
-        ids_tfidf, lat_tfidf = search_tfidf(query, tfidf_vec, tfidf_matrix, df, MAX_RETRIEVE)
-        m_tfidf = compute_all_metrics(ids_tfidf, relevant_ids, relevance_grades, TOP_K_VALUES)
+        ids_tfidf, lat_tfidf = search_tfidf(
+            query, tfidf_vec, tfidf_matrix, df, MAX_RETRIEVE, tokenizer=tok
+        )
+        m_tfidf = compute_all_metrics(
+            ids_tfidf, relevant_ids, relevance_grades, TOP_K_VALUES
+        )
         all_model_metrics["TF-IDF"].append(m_tfidf)
         all_model_latencies["TF-IDF"].append(lat_tfidf)
 
         # ── BM25 ──
         if bm25_available:
-            ids_bm25, lat_bm25 = search_bm25(query, bm25_model, df, MAX_RETRIEVE)
-            m_bm25 = compute_all_metrics(ids_bm25, relevant_ids, relevance_grades, TOP_K_VALUES)
+            ids_bm25, lat_bm25 = search_bm25(
+                query, bm25_model, df, MAX_RETRIEVE, tokenizer=tok
+            )
+            m_bm25 = compute_all_metrics(
+                ids_bm25, relevant_ids, relevance_grades, TOP_K_VALUES
+            )
             all_model_metrics["BM25"].append(m_bm25)
             all_model_latencies["BM25"].append(lat_bm25)
 
         # ── SBERT + ChromaDB ──
-        ids_sbert, lat_sbert = search_sbert(query, collection, sbert_model, MAX_RETRIEVE)
-        m_sbert = compute_all_metrics(ids_sbert, relevant_ids, relevance_grades, TOP_K_VALUES)
+        ids_sbert, lat_sbert = search_sbert(
+            query, collection, sbert_model, MAX_RETRIEVE
+        )
+        m_sbert = compute_all_metrics(
+            ids_sbert, relevant_ids, relevance_grades, TOP_K_VALUES
+        )
         all_model_metrics["SBERT_ChromaDB"].append(m_sbert)
         all_model_latencies["SBERT_ChromaDB"].append(lat_sbert)
 
@@ -607,9 +877,9 @@ def main() -> None:
         if not all_model_metrics[model]:
             continue
         model_results[model] = {
-            "avg_metrics":     average_metrics(all_model_metrics[model]),
-            "avg_latency_ms":  round(float(np.mean(all_model_latencies[model])), 2),
-            "per_query":       all_model_metrics[model],
+            "avg_metrics": average_metrics(all_model_metrics[model]),
+            "avg_latency_ms": round(float(np.mean(all_model_latencies[model])), 2),
+            "per_query": all_model_metrics[model],
         }
 
     per_group_avg: dict[str, dict[str, dict]] = {}
@@ -623,7 +893,9 @@ def main() -> None:
     print("=" * 80)
     print("📊 KẾT QUẢ TỔNG HỢP (TRUNG BÌNH TRÊN 20 QUERY)")
     print("=" * 80)
-    print(f"{'Mô hình':<22} {'P@5':>8} {'P@10':>8} {'NDCG@5':>10} {'NDCG@10':>10} {'MRR':>8} {'Latency':>10}")
+    print(
+        f"{'Mô hình':<22} {'P@5':>8} {'P@10':>8} {'NDCG@5':>10} {'NDCG@10':>10} {'MRR':>8} {'Latency':>10}"
+    )
     print("-" * 80)
     for model in ["TF-IDF", "BM25", "SBERT_ChromaDB"]:
         if model not in model_results:
@@ -644,13 +916,13 @@ def main() -> None:
     # ── Xuất JSON ───────────────────────────────────────────────────────────
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dict = {
-        "evaluated_at":         datetime.now().isoformat(),
-        "dataset_size":         int(len(df)),
+        "evaluated_at": datetime.now().isoformat(),
+        "dataset_size": int(len(df)),
         "ground_truth_queries": len(queries_gt),
-        "K_values":             TOP_K_VALUES,
-        "sbert_model":          SBERT_MODEL_NAME,
-        "model_results":        model_results,
-        "per_group_results":    per_group_avg,
+        "K_values": TOP_K_VALUES,
+        "sbert_model": SBERT_MODEL_NAME,
+        "model_results": model_results,
+        "per_group_results": per_group_avg,
     }
     json_path = OUTPUT_DIR / f"evaluation_results_{timestamp}.json"
     with json_path.open("w", encoding="utf-8") as f:
@@ -663,8 +935,13 @@ def main() -> None:
     with md_path.open("w", encoding="utf-8") as f:
         f.write(md_content)
     print(f"✅ Đã lưu báo cáo MD  : {md_path}")
-    print("\n🎉 Đánh giá hoàn tất! Xem EVALUATION_REPORT.md để có bảng kết quả cho báo cáo giữa kỳ.")
+    print(
+        "\n🎉 Đánh giá hoàn tất! Xem EVALUATION_REPORT.md để có bảng kết quả cho báo cáo giữa kỳ."
+    )
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except VectorDBVerificationError:
+        sys.exit(1)

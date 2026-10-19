@@ -34,29 +34,31 @@ from sklearn.metrics.pairwise import cosine_similarity
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
-CURRENT_DIR    = Path(__file__).resolve().parent
+CURRENT_DIR = Path(__file__).resolve().parent
 AI_SERVICE_DIR = CURRENT_DIR.parent
-PROJECT_ROOT   = AI_SERVICE_DIR.parent
+PROJECT_ROOT = AI_SERVICE_DIR.parent
+SRC_DIR = AI_SERVICE_DIR / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+from data.data_loader import build_search_text, safe_int
 
 CSV_PATH = PROJECT_ROOT / "all_movies_fully_translated.csv"
-GT_PATH  = AI_SERVICE_DIR / "experiments" / "ground_truth" / "ground_truth.json"
+GT_PATH = AI_SERVICE_DIR / "experiments" / "ground_truth" / "ground_truth.json"
 
 
 def load_df() -> pd.DataFrame:
-    """Nạp và tiền xử lý DataFrame phim."""
+    """Nạp và tiền xử lý DataFrame phim bằng hàm build_search_text chuẩn hóa chung."""
     df = pd.read_csv(CSV_PATH, low_memory=False)
-    df = df.dropna(subset=["movieId"]).drop_duplicates(subset=["movieId"]).copy()
-    df["movieId"]    = df["movieId"].astype(int)
-    df["title_vi"]   = df["title_vi"].fillna("")
-    df["overview_vi"]= df["overview_vi"].fillna("")
-    df["overview"]   = df["overview"].fillna("")
-    df["genres"]     = df["genres"].fillna("")
-    df["title"]      = df["title"].fillna("")
-    df["search_text"]= (
-        df["title_vi"] + " " + df["title"] + " " + df["genres"] + " " +
-        df["overview_vi"] + " " + df["overview"]
-    ).str.strip()
-    return df[df["search_text"].str.len() > 10].reset_index(drop=True)
+    df["search_text"] = df.apply(build_search_text, axis=1)
+    df = df[df["search_text"].str.len() > 20].copy()
+    id_col = (
+        "movieId" if "movieId" in df.columns and df["movieId"].notna().any() else "id"
+    )
+    df[id_col] = df[id_col].apply(safe_int)
+    df = df[df[id_col] > 0].drop_duplicates(subset=[id_col]).reset_index(drop=True)
+    df["movieId"] = df[id_col]
+    return df
 
 
 def get_genre_names(genres_str: str) -> list[str]:
@@ -68,14 +70,18 @@ def get_genre_names(genres_str: str) -> list[str]:
         return []
 
 
-def search_candidates(query: str, df: pd.DataFrame, top_k: int = 20, genre_filter: str = "") -> pd.DataFrame:
+def search_candidates(
+    query: str, df: pd.DataFrame, top_k: int = 20, genre_filter: str = ""
+) -> pd.DataFrame:
     """Tìm kiếm ứng viên bằng TF-IDF để hỗ trợ annotation."""
     # Lọc theo thể loại nếu có
     if genre_filter:
         mask = df["genres"].str.contains(genre_filter, case=False, na=False)
         df_search = df[mask].reset_index(drop=True)
         if len(df_search) < 5:
-            print(f"  [WARN] Chỉ có {len(df_search)} phim thuộc thể loại '{genre_filter}', mở rộng tìm kiếm.")
+            print(
+                f"  [WARN] Chỉ có {len(df_search)} phim thuộc thể loại '{genre_filter}', mở rộng tìm kiếm."
+            )
             df_search = df
     else:
         df_search = df
@@ -92,17 +98,23 @@ def search_candidates(query: str, df: pd.DataFrame, top_k: int = 20, genre_filte
         row = df_search.iloc[idx]
         sc = float(scores[idx])
         genres_list = get_genre_names(row["genres"])
-        result_rows.append({
-            "rank":         rank,
-            "movie_id":     int(row["movieId"]),
-            "title_vi":     row["title_vi"] if row["title_vi"] else row["title"],
-            "title_en":     row["title"],
-            "vote_average": float(row.get("vote_average", 0)),
-            "release_date": str(row.get("release_date", ""))[:4],
-            "genres":       ", ".join(genres_list),
-            "tfidf_score":  round(sc, 4),
-            "overview_snippet": str(row["overview_vi"])[:120] + "..." if row["overview_vi"] else str(row["overview"])[:120] + "...",
-        })
+        result_rows.append(
+            {
+                "rank": rank,
+                "movie_id": int(row["movieId"]),
+                "title_vi": row["title_vi"] if row["title_vi"] else row["title"],
+                "title_en": row["title"],
+                "vote_average": float(row.get("vote_average", 0)),
+                "release_date": str(row.get("release_date", ""))[:4],
+                "genres": ", ".join(genres_list),
+                "tfidf_score": round(sc, 4),
+                "overview_snippet": (
+                    str(row["overview_vi"])[:120] + "..."
+                    if row["overview_vi"]
+                    else str(row["overview"])[:120] + "..."
+                ),
+            }
+        )
     return pd.DataFrame(result_rows)
 
 
@@ -124,9 +136,9 @@ def validate_ground_truth(df: pd.DataFrame) -> None:
     print(f"{'='*70}")
 
     for q in gt_data["queries"]:
-        qid   = q["query_id"]
+        qid = q["query_id"]
         query = q["query"]
-        errs  = []
+        errs = []
         for rel in q["relevant_movies"]:
             mid = rel["movie_id"]
             if mid not in valid_ids:
@@ -165,13 +177,15 @@ def list_genres(df: pd.DataFrame) -> None:
 def print_candidates(cand_df: pd.DataFrame, query: str) -> None:
     """In danh sách ứng viên đẹp."""
     print(f"\n{'='*80}")
-    print(f"  KẾT QUẢ TÌM KIẾM ỨNG VIÊN CHO QUERY: \"{query}\"")
+    print(f'  KẾT QUẢ TÌM KIẾM ỨNG VIÊN CHO QUERY: "{query}"')
     print(f"{'='*80}")
-    print(f"{'Rank':>4} {'movieId':>8} {'Score':>7} {'⭐':>5} {'Năm':>4} | {'Tên phim':<40} {'Thể loại'}")
+    print(
+        f"{'Rank':>4} {'movieId':>8} {'Score':>7} {'⭐':>5} {'Năm':>4} | {'Tên phim':<40} {'Thể loại'}"
+    )
     print("-" * 80)
     for _, row in cand_df.iterrows():
         name_truncated = str(row["title_vi"])[:38]
-        genres_short   = str(row["genres"])[:30]
+        genres_short = str(row["genres"])[:30]
         print(
             f"{int(row['rank']):>4}  "
             f"{int(row['movie_id']):>8}  "
@@ -189,11 +203,24 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Công cụ hỗ trợ xây dựng Ground Truth cho đánh giá mô hình IR"
     )
-    parser.add_argument("--query",        type=str, default="", help="Câu truy vấn tìm kiếm")
-    parser.add_argument("--top_k",        type=int, default=20,  help="Số kết quả trả về (mặc định: 20)")
-    parser.add_argument("--genre",        type=str, default="",  help="Lọc theo thể loại (vd: 'Kinh Dị', 'Lãng Mạn')")
-    parser.add_argument("--list_genres",  action="store_true",   help="Hiển thị danh sách thể loại")
-    parser.add_argument("--validate",     action="store_true",   help="Kiểm tra tính hợp lệ của ground_truth.json")
+    parser.add_argument("--query", type=str, default="", help="Câu truy vấn tìm kiếm")
+    parser.add_argument(
+        "--top_k", type=int, default=20, help="Số kết quả trả về (mặc định: 20)"
+    )
+    parser.add_argument(
+        "--genre",
+        type=str,
+        default="",
+        help="Lọc theo thể loại (vd: 'Kinh Dị', 'Lãng Mạn')",
+    )
+    parser.add_argument(
+        "--list_genres", action="store_true", help="Hiển thị danh sách thể loại"
+    )
+    parser.add_argument(
+        "--validate",
+        action="store_true",
+        help="Kiểm tra tính hợp lệ của ground_truth.json",
+    )
     args = parser.parse_args()
 
     print("⏳ Đang nạp dữ liệu phim ...")
@@ -209,14 +236,20 @@ def main() -> None:
         return
 
     if not args.query:
-        print("[INFO] Không có query. Dùng --query \"...\" hoặc --validate hoặc --list_genres")
+        print(
+            '[INFO] Không có query. Dùng --query "..." hoặc --validate hoặc --list_genres'
+        )
         print("Ví dụ:")
-        print("  python scripts/build_ground_truth.py --query \"robot sát thủ tương lai\" --top_k 20")
+        print(
+            '  python scripts/build_ground_truth.py --query "robot sát thủ tương lai" --top_k 20'
+        )
         print("  python scripts/build_ground_truth.py --validate")
         print("  python scripts/build_ground_truth.py --list_genres")
         return
 
-    cand_df = search_candidates(args.query, df, top_k=args.top_k, genre_filter=args.genre)
+    cand_df = search_candidates(
+        args.query, df, top_k=args.top_k, genre_filter=args.genre
+    )
     print_candidates(cand_df, args.query)
 
     # In snippet mô tả cho từng ứng viên

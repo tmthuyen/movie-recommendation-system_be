@@ -15,12 +15,13 @@ def clean_text(text: str = "", type: str = "article"):
         text (str, optional): Văn bản đầu vào cần làm sạch. Mặc định "".
         type (str, optional): Kiểu văn bản. Mặc định 'article'.
     """
-
     if type == "normal":
-        # Loại bỏ các ký tự đặc biệt, giữ lại chữ cái, số và dấu cách
-        text = re.sub(r"[^a-zA-Z0-9\s]", "", text)
-        # Chuyển về chữ thường
-        text = text.lower()
+        # Chuẩn hóa Unicode NFC (quan trọng cho tiếng Việt có dấu)
+        text = unicodedata.normalize("NFC", text)
+        # Loại bỏ các ký tự đặc biệt, giữ lại chữ cái (kể cả tiếng Việt), số và dấu cách
+        text = re.sub(r"[^\w\s]|_", " ", text)
+        # Chuyển về chữ thường và chuẩn hóa khoảng trắng
+        text = re.sub(r"\s+", " ", text).strip().lower()
     elif type == "article":
 
         def encoding(text):

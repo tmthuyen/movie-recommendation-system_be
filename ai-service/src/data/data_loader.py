@@ -1,9 +1,67 @@
+import ast
+import hashlib
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, List, Tuple, Union
 
 import pandas as pd
 
 from utils.logger import setup_logger
+
+
+def extract_genre_names(raw: Any) -> str:
+    """Chuyển genres JSON-list string sang chuỗi tên thể loại cách nhau bằng khoảng trắng."""
+    if not isinstance(raw, str) or not raw.strip():
+        return ""
+    try:
+        items = ast.literal_eval(raw)
+        return " ".join(str(g.get("name", "")) for g in items if isinstance(g, dict))
+    except Exception:
+        return str(raw).strip()
+
+
+def safe_int(val: Any) -> int:
+    """Chuyển giá trị sang int một cách an toàn, trả về 0 nếu lỗi."""
+    try:
+        return int(float(val))
+    except (TypeError, ValueError):
+        return 0
+
+
+def safe_float(val: Any) -> float:
+    """Chuyển giá trị sang float một cách an toàn, trả về 0.0 nếu lỗi."""
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def build_search_text(row: Union[pd.Series, dict]) -> str:
+    """
+    Hàm tạo search_text chuẩn hóa duy nhất dùng chung cho toàn bộ hệ thống:
+    - title: ưu tiên title_vi, nếu thiếu fallback sang title (tiếng Anh)
+    - overview: ưu tiên overview_vi, nếu thiếu fallback sang overview
+    - genres: trích xuất tên thể loại sạch từ JSON list
+    """
+    title = str(row.get("title_vi") or row.get("title") or "").strip()
+    overview = str(row.get("overview_vi") or row.get("overview") or "").strip()
+    genres = extract_genre_names(row.get("genres", ""))
+    text = f"{title} {overview} {genres}"
+    return " ".join(text.split())
+
+
+def compute_corpus_fingerprint(texts: List[str], ids: List[int] = None) -> str:
+    """
+    Tính mã băm sha256 đại diện cho toàn bộ corpus search_text và danh sách movieId.
+    Phục vụ kiểm tra tính toàn vẹn và ngăn tái sử dụng cache/index cũ khi dữ liệu thay đổi.
+    """
+    hasher = hashlib.sha256()
+    if ids is not None:
+        for mid, txt in zip(ids, texts):
+            hasher.update(f"{mid}:{txt}\n".encode("utf-8"))
+    else:
+        for txt in texts:
+            hasher.update(f"{txt}\n".encode("utf-8"))
+    return hasher.hexdigest()
 
 
 class MovieDataLoader:
@@ -19,8 +77,7 @@ class MovieDataLoader:
 
     def load_catalog(self, language_mode: str = "vi") -> pd.DataFrame:
         """
-        Tải catalog phim từ file CSV.
-        Trong tương lai, hàm này có thể được sửa để fetch từ Backend API.
+        Tải catalog phim từ file CSV/Parquet và tạo search_text chuẩn hóa đồng nhất.
         """
         if not self.data_path.exists():
             raise FileNotFoundError(f"Không tìm thấy file data tại: {self.data_path}")
@@ -28,51 +85,25 @@ class MovieDataLoader:
         if self.data_path.suffix == ".parquet":
             df = pd.read_parquet(self.data_path)
         else:
-            df = pd.read_csv(self.data_path)
+            df = pd.read_csv(self.data_path, low_memory=False)
 
         self.logger.info(f"Đã tải {len(df)} dòng từ {self.data_path.name}")
 
-        # Tiền xử lý để tạo 'search_text' gộp chung nội dung
-        title_col = (
-            "title_vi"
-            if language_mode == "vi" and "title_vi" in df.columns
-            else "title"
+        # Tiền xử lý để tạo 'search_text' gộp chung nội dung bằng hàm chuẩn hóa duy nhất
+        df["search_text"] = df.apply(build_search_text, axis=1)
+
+        # Chỉ giữ lại các phim có text hợp lệ (> 20 ký tự chuẩn)
+        df = df[df["search_text"].str.len() > 20].copy()
+        id_col = (
+            "movieId"
+            if "movieId" in df.columns and df["movieId"].notna().any()
+            else "id"
         )
-        if title_col not in df.columns:
-            title_col = (
-                "original_title" if "original_title" in df.columns else "title_x"
-            )
+        df[id_col] = df[id_col].apply(safe_int)
+        df = df[df[id_col] > 0].drop_duplicates(subset=[id_col]).reset_index(drop=True)
+        if "movieId" not in df.columns or df["movieId"].isna().any():
+            df["movieId"] = df[id_col]
 
-        overview_col = (
-            "overview_vi"
-            if language_mode == "vi" and "overview_vi" in df.columns
-            else "overview"
-        )
-
-        # Fallback nếu không có cột _vi
-        if overview_col not in df.columns:
-            overview_col = "overview"
-
-        genres_col = (
-            "genres_text"
-            if "genres_text" in df.columns
-            else ("genres" if "genres" in df.columns else "")
-        )
-
-        df["search_text"] = (
-            (
-                df[title_col].fillna("")
-                + " "
-                + df[overview_col].fillna("")
-                + " "
-                + (df[genres_col].fillna("") if genres_col else "")
-            )
-            .str.replace(r"\s+", " ", regex=True)
-            .str.strip()
-        )
-
-        # Chỉ giữ lại các phim có text hợp lệ
-        df = df[df["search_text"].str.len() > 10].copy()
         self.logger.info(f"Số lượng phim hợp lệ để train: {len(df)}")
         return df
 
