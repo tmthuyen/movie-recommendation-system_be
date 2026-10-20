@@ -49,7 +49,11 @@ if str(SRC_DIR) not in sys.path:
 if str(CURRENT_DIR) not in sys.path:
     sys.path.insert(0, str(CURRENT_DIR))
 
-from build_vector_db import get_manifest_path, verify_vector_db
+from build_vector_db import (
+    format_query_text_for_model,
+    get_manifest_path,
+    verify_vector_db,
+)
 from core.tokenizer import UndertheseaTokenizer
 from data.data_loader import (
     build_search_text,
@@ -77,6 +81,13 @@ ANNOTATION_QUEUE_FILE = GT_DIR / "annotation_queue_v2.json"
 
 COLLECTION_NAME = "movies"
 SBERT_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
+
+E5_SMALL_COLLECTION_NAME = "movies_e5_small"
+E5_SMALL_MODEL_NAME = "intfloat/multilingual-e5-small"
+
+E5_BASE_COLLECTION_NAME = "movies_e5_base"
+E5_BASE_MODEL_NAME = "intfloat/multilingual-e5-base"
+
 DEFAULT_POOL_TOP_K = 10
 BINARY_RELEVANCE_THRESHOLD = 2
 SHUFFLE_SEED = 42
@@ -156,14 +167,17 @@ def verify_corpus_and_chromadb_guard(
     model_name: str = SBERT_MODEL_NAME,
 ) -> Any:
     """Tái sử dụng cơ chế verify_vector_db của Bước 1: kiểm tra toàn vẹn ChromaDB trước khi pooling."""
-    print("🔍 [Step 1 Guard] Kiểm tra tính toàn vẹn và fingerprint của ChromaDB...")
+    print(f"🔍 [Step 1 Guard] Kiểm tra tính toàn vẹn và fingerprint của ChromaDB ('{collection_name}')...")
     import chromadb
 
     if not chroma_dir.exists():
         raise RuntimeError(f"[FATAL] Thư mục ChromaDB không tồn tại: {chroma_dir}")
 
     client = chromadb.PersistentClient(path=str(chroma_dir))
-    col = client.get_collection(collection_name)
+    try:
+        col = client.get_collection(collection_name)
+    except Exception as e:
+        raise RuntimeError(f"[FATAL] Không thể mở collection '{collection_name}': {e}")
     manifest_path = get_manifest_path(chroma_dir, collection_name)
 
     corpus_texts = corpus_df["search_text"].tolist()
@@ -179,7 +193,7 @@ def verify_corpus_and_chromadb_guard(
 
     if not is_valid:
         raise RuntimeError(
-            f"[FATAL] ChromaDB không vượt qua bước kiểm tra toàn vẹn của Bước 1: {msg}. Dừng pooling!"
+            f"[FATAL] ChromaDB collection '{collection_name}' không vượt qua bước kiểm tra toàn vẹn của Bước 1: {msg}. Dừng pooling!"
         )
 
     print(f"   [Step 1 Guard] ✅ {msg}")
@@ -291,11 +305,19 @@ def verify_cross_db_mapping(
 
 
 class PoolingEngine:
-    """Động cơ Candidate Pooling từ TF-IDF, BM25 và SBERT (ChromaDB)."""
+    """Động cơ Candidate Pooling từ TF-IDF, BM25, SBERT, multilingual-e5-small và multilingual-e5-base."""
 
-    def __init__(self, corpus_df: pd.DataFrame, chroma_col: Any):
+    def __init__(
+        self,
+        corpus_df: pd.DataFrame,
+        chroma_col_sbert: Any,
+        chroma_col_e5_small: Optional[Any] = None,
+        chroma_col_e5_base: Optional[Any] = None,
+    ):
         self.df = corpus_df
-        self.chroma_col = chroma_col
+        self.chroma_col = chroma_col_sbert
+        self.chroma_e5_small = chroma_col_e5_small
+        self.chroma_e5_base = chroma_col_e5_base
         self.movie_meta_by_id: Dict[int, Dict[str, Any]] = {}
 
         # 1. Khởi tạo metadata phim với genres sạch (sửa lỗi tách ký tự)
@@ -334,11 +356,31 @@ class PoolingEngine:
         self.bm25 = BM25Okapi(self.tokenized_corpus)
 
         # 5. SBERT Model
-        print(f"📦 [Init] Nạp SentenceTransformer ({SBERT_MODEL_NAME})...")
         from sentence_transformers import SentenceTransformer
 
+        print(f"📦 [Init] Nạp SentenceTransformer ({SBERT_MODEL_NAME})...")
         self.sbert = SentenceTransformer(SBERT_MODEL_NAME)
-        print("   [Init] ✅ Toàn bộ 3 mô hình đã sẵn sàng cho Candidate Pooling!\n")
+
+        # 6. Multilingual E5 Small
+        if self.chroma_e5_small is not None:
+            print(f"📦 [Init] Nạp SentenceTransformer ({E5_SMALL_MODEL_NAME})...")
+            self.e5_small = SentenceTransformer(E5_SMALL_MODEL_NAME)
+        else:
+            self.e5_small = None
+
+        # 7. Multilingual E5 Base
+        if self.chroma_e5_base is not None:
+            print(f"📦 [Init] Nạp SentenceTransformer ({E5_BASE_MODEL_NAME})...")
+            self.e5_base = SentenceTransformer(E5_BASE_MODEL_NAME)
+        else:
+            self.e5_base = None
+
+        active_models = ["TF-IDF", "BM25", "SBERT"]
+        if self.e5_small is not None:
+            active_models.append("multilingual-e5-small")
+        if self.e5_base is not None:
+            active_models.append("multilingual-e5-base")
+        print(f"   [Init] ✅ Các mô hình sẵn sàng cho Candidate Pooling: {', '.join(active_models)}\n")
 
     def search_tfidf(self, query: str, top_k: int) -> List[Tuple[int, float]]:
         q_tokens = self.tokenizer.tokenize(query)
@@ -371,65 +413,92 @@ class PoolingEngine:
         return results
 
     def search_sbert(self, query: str, top_k: int) -> List[Tuple[int, float]]:
-        emb = self.sbert.encode(query).tolist()
+        emb = self.sbert.encode(query, normalize_embeddings=True).tolist()
         res = self.chroma_col.query(query_embeddings=[emb], n_results=top_k, include=["metadatas", "distances"])
         results = []
         ids = res.get("ids", [[]])[0]
         distances = res.get("distances", [[]])[0] if "distances" in res else [0.0] * len(ids)
 
         for sid, dist in zip(ids, distances):
-            if sid.isdigit():
-                results.append((int(sid), float(dist)))
+            if str(sid).isdigit():
+                sim = 1.0 - float(dist)
+                results.append((int(sid), sim))
+        return results[:top_k]
+
+    def search_e5_small(self, query: str, top_k: int) -> List[Tuple[int, float]]:
+        if self.e5_small is None or self.chroma_e5_small is None:
+            return []
+        formatted_q = format_query_text_for_model(query, E5_SMALL_MODEL_NAME)
+        emb = self.e5_small.encode(formatted_q, normalize_embeddings=True).tolist()
+        res = self.chroma_e5_small.query(query_embeddings=[emb], n_results=top_k, include=["metadatas", "distances"])
+        results = []
+        ids = res.get("ids", [[]])[0]
+        distances = res.get("distances", [[]])[0] if "distances" in res else [0.0] * len(ids)
+
+        for sid, dist in zip(ids, distances):
+            if str(sid).isdigit():
+                sim = 1.0 - float(dist)
+                results.append((int(sid), sim))
+        return results[:top_k]
+
+    def search_e5_base(self, query: str, top_k: int) -> List[Tuple[int, float]]:
+        if self.e5_base is None or self.chroma_e5_base is None:
+            return []
+        formatted_q = format_query_text_for_model(query, E5_BASE_MODEL_NAME)
+        emb = self.e5_base.encode(formatted_q, normalize_embeddings=True).tolist()
+        res = self.chroma_e5_base.query(query_embeddings=[emb], n_results=top_k, include=["metadatas", "distances"])
+        results = []
+        ids = res.get("ids", [[]])[0]
+        distances = res.get("distances", [[]])[0] if "distances" in res else [0.0] * len(ids)
+
+        for sid, dist in zip(ids, distances):
+            if str(sid).isdigit():
+                sim = 1.0 - float(dist)
+                results.append((int(sid), sim))
         return results[:top_k]
 
     def pool_candidates_for_query(
         self,
         query_info: Dict[str, Any],
         top_k: int = DEFAULT_POOL_TOP_K,
-        existing_verified_map: Optional[Dict[Tuple[str, int], Dict[str, Any]]] = None,
+        existing_candidates: Optional[Dict[int, Dict[str, Any]]] = None,
     ) -> List[Dict[str, Any]]:
-        """Thực hiện Candidate Pooling cho một câu truy vấn:
+        """Thực hiện Candidate Pooling cho một câu truy vấn từ các mô hình:
 
-        - Lấy Top-K từ TF-IDF, BM25, SBERT.
-        - Hợp nhất và theo dõi nguồn đóng góp (pooled_by) và xếp hạng (model_ranks).
-        - Đảm bảo phim nguồn có mặt trong pool nhưng KHÔNG gán sẵn grade 3 (để relevance_grade = null).
-        - Bảo toàn nhãn người đánh giá đã xác minh (nếu có từ trước).
+        - Lấy Top-K từ TF-IDF, BM25, SBERT, multilingual-e5-small, multilingual-e5-base.
+        - Hợp nhất và loại trùng theo movieId.
+        - Giữ lại toàn bộ ứng viên cũ và các nhãn đã có.
+        - Theo dõi nguồn đóng góp (pooled_by) và xếp hạng (model_ranks).
+        - Đảm bảo phim nguồn có mặt trong pool nhưng KHÔNG gán sẵn grade 3 (relevance_grade = null).
         """
         qid = query_info["query_id"]
         query_text = query_info["query"]
         source_id = int(query_info["source_movie_id"])
-        existing_verified_map = existing_verified_map or {}
+        existing_candidates = existing_candidates or {}
 
         tfidf_res = self.search_tfidf(query_text, top_k=top_k)
         bm25_res = self.search_bm25(query_text, top_k=top_k)
         sbert_res = self.search_sbert(query_text, top_k=top_k)
+        e5_small_res = self.search_e5_small(query_text, top_k=top_k)
+        e5_base_res = self.search_e5_base(query_text, top_k=top_k)
 
         pooled_map: Dict[int, Dict[str, Any]] = {}
+
+        # 1. BẢO TOÀN TOÀN BỘ ỨNG VIÊN CŨ ĐÃ CÓ CHO QUERY NÀY (giữ nhãn người dùng & LLM verdict)
+        for mid, old_cand in existing_candidates.items():
+            pooled_map[mid] = dict(old_cand)
+            if "pooled_by" not in pooled_map[mid]:
+                pooled_map[mid]["pooled_by"] = []
+            if "model_ranks" not in pooled_map[mid]:
+                pooled_map[mid]["model_ranks"] = {}
+            if "retrieval_scores" not in pooled_map[mid]:
+                pooled_map[mid]["retrieval_scores"] = {}
 
         def record_candidate(mid: int, model_name: str, rank: int, score: float):
             if mid not in self.movie_meta_by_id:
                 return
             if mid not in pooled_map:
                 meta = self.movie_meta_by_id[mid]
-                # Kiểm tra nếu nhãn này đã được con người xác minh trước đó
-                prev_annotation = existing_verified_map.get((qid, mid))
-
-                if prev_annotation:
-                    r_grade = prev_annotation.get("relevance_grade")
-                    v_human = True
-                    status = "verified"
-                    ann_by = prev_annotation.get("annotated_by", "")
-                    ann_at = prev_annotation.get("annotated_at", "")
-                    note_str = prev_annotation.get("notes", "")
-                else:
-                    # Quy tắc 1: Để null cho đến khi được người đánh giá xác nhận (kể cả phim nguồn)
-                    r_grade = None
-                    v_human = False
-                    status = "unassessed"
-                    ann_by = ""
-                    ann_at = ""
-                    note_str = ""
-
                 pooled_map[mid] = {
                     "movie_id": mid,
                     "tmdb_id": meta["tmdb_id"],
@@ -444,12 +513,12 @@ class PoolingEngine:
                     "model_ranks": {},
                     "retrieval_scores": {},
                     "is_source_movie": (mid == source_id),
-                    "relevance_grade": r_grade,
-                    "verified_by_human": v_human,
-                    "status": status,
-                    "annotated_by": ann_by,
-                    "annotated_at": ann_at,
-                    "notes": note_str,
+                    "relevance_grade": None,
+                    "verified_by_human": False,
+                    "status": "unassessed",
+                    "annotated_by": "",
+                    "annotated_at": "",
+                    "notes": "",
                 }
             if model_name not in pooled_map[mid]["pooled_by"]:
                 pooled_map[mid]["pooled_by"].append(model_name)
@@ -465,27 +534,16 @@ class PoolingEngine:
         for rank, (mid, sc) in enumerate(sbert_res, start=1):
             record_candidate(mid, "SBERT", rank, sc)
 
+        for rank, (mid, sc) in enumerate(e5_small_res, start=1):
+            record_candidate(mid, "multilingual-e5-small", rank, sc)
+
+        for rank, (mid, sc) in enumerate(e5_base_res, start=1):
+            record_candidate(mid, "multilingual-e5-base", rank, sc)
+
         # Đảm bảo source_movie_id có mặt trong pool nhưng KHÔNG tự ý gán grade 3
         if source_id in self.movie_meta_by_id:
             if source_id not in pooled_map:
                 meta = self.movie_meta_by_id[source_id]
-                prev_annotation = existing_verified_map.get((qid, source_id))
-                if prev_annotation:
-                    r_grade = prev_annotation.get("relevance_grade")
-                    v_human = True
-                    status = "verified"
-                    ann_by = prev_annotation.get("annotated_by", "")
-                    ann_at = prev_annotation.get("annotated_at", "")
-                    note_str = prev_annotation.get("notes", "")
-                else:
-                    # Quy tắc 1: relevance_grade = null cho đến khi con người thẩm định
-                    r_grade = None
-                    v_human = False
-                    status = "unassessed"
-                    ann_by = ""
-                    ann_at = ""
-                    note_str = "Phim nguồn tham chiếu ban đầu (chờ người đánh giá thẩm định)"
-
                 pooled_map[source_id] = {
                     "movie_id": source_id,
                     "tmdb_id": meta["tmdb_id"],
@@ -500,21 +558,17 @@ class PoolingEngine:
                     "model_ranks": {},
                     "retrieval_scores": {},
                     "is_source_movie": True,
-                    "relevance_grade": r_grade,
-                    "verified_by_human": v_human,
-                    "status": status,
-                    "annotated_by": ann_by,
-                    "annotated_at": ann_at,
-                    "notes": note_str,
+                    "relevance_grade": None,
+                    "verified_by_human": False,
+                    "status": "unassessed",
+                    "annotated_by": "",
+                    "annotated_at": "",
+                    "notes": "Phim nguồn tham chiếu ban đầu (chờ người đánh giá thẩm định)",
                 }
             else:
                 pooled_map[source_id]["is_source_movie"] = True
-                # Nếu đã có nhãn người dùng gán từ trước, giữ nguyên
-                if not pooled_map[source_id]["verified_by_human"]:
-                    pooled_map[source_id]["relevance_grade"] = None
-                    pooled_map[source_id]["verified_by_human"] = False
-                    pooled_map[source_id]["status"] = "unassessed"
-                    if not pooled_map[source_id]["notes"]:
+                if not pooled_map[source_id].get("verified_by_human"):
+                    if not pooled_map[source_id].get("notes"):
                         pooled_map[source_id]["notes"] = "Phim nguồn tham chiếu ban đầu (chờ người đánh giá thẩm định)"
 
         # Xáo trộn ứng viên có thể tái lập (Reproducible Shuffling) theo seed để đánh giá mù không thiên lệch
@@ -534,7 +588,7 @@ def run_ground_truth_v2_pipeline(
 ) -> Dict[str, Any]:
     """Chạy toàn bộ pipeline Candidate Pooling và xuất Ground Truth V2 kèm annotation queue."""
     t_start = time.time()
-    print("🚀 Bắt đầu Bước 3 — Xây dựng Ground Truth V2 bằng Candidate Pooling...")
+    print("🚀 Bắt đầu Bước 3 — Xây dựng Ground Truth V2 bằng Mở rộng Candidate Pooling...")
 
     # 1. Đọc 100 queries và phim nguồn Bước 2
     with open(BENCHMARK_QUERIES_FILE, "r", encoding="utf-8") as f:
@@ -549,11 +603,34 @@ def run_ground_truth_v2_pipeline(
     df_corpus = load_corpus()
 
     # 3. Tái sử dụng xác thực của Bước 1: verify_vector_db & verify_cross_db_mapping
-    chroma_col = verify_corpus_and_chromadb_guard(df_corpus)
+    chroma_col_sbert = verify_corpus_and_chromadb_guard(df_corpus, CHROMA_DIR, COLLECTION_NAME, SBERT_MODEL_NAME)
     verify_cross_db_mapping(queries, source_movies, df_corpus)
 
-    # 4. Kiểm tra và bảo toàn các nhãn người đánh giá đã xác minh từ trước (nếu có)
-    existing_verified: Dict[Tuple[str, int], Dict[str, Any]] = {}
+    # Kiểm tra ChromaDB collection cho E5-Small
+    chroma_col_e5_small = None
+    try:
+        chroma_col_e5_small = verify_corpus_and_chromadb_guard(
+            df_corpus, CHROMA_DIR, E5_SMALL_COLLECTION_NAME, E5_SMALL_MODEL_NAME
+        )
+    except Exception as e:
+        print(f"   [E5-Small Warning] Chưa thể nạp collection {E5_SMALL_COLLECTION_NAME}: {e}")
+
+    # Kiểm tra ChromaDB collection cho E5-Base
+    chroma_col_e5_base = None
+    try:
+        manifest_e5_base = get_manifest_path(CHROMA_DIR, E5_BASE_COLLECTION_NAME)
+        if manifest_e5_base.exists():
+            chroma_col_e5_base = verify_corpus_and_chromadb_guard(
+                df_corpus, CHROMA_DIR, E5_BASE_COLLECTION_NAME, E5_BASE_MODEL_NAME
+            )
+        else:
+            print(f"   [E5-Base Status] Collection {E5_BASE_COLLECTION_NAME} chưa có manifest (đang hoàn thiện hoặc bỏ qua).")
+    except Exception as e:
+        print(f"   [E5-Base Status] Bỏ qua E5-Base: {e}")
+
+    # 4. Kiểm tra và bảo toàn toàn bộ ứng viên và nhãn đã có từ trước
+    existing_candidates_by_query: Dict[str, Dict[int, Dict[str, Any]]] = defaultdict(dict)
+    initial_total_candidates = 0
     if GROUND_TRUTH_V2_FILE.exists():
         try:
             with open(GROUND_TRUTH_V2_FILE, "r", encoding="utf-8") as f:
@@ -561,50 +638,91 @@ def run_ground_truth_v2_pipeline(
             for q in old_gt.get("queries", []):
                 qid = q.get("query_id")
                 for c in q.get("candidates", []):
-                    if c.get("verified_by_human"):
-                        existing_verified[(qid, int(c["movie_id"]))] = {
-                            "relevance_grade": c.get("relevance_grade"),
-                            "verified_by_human": True,
-                            "status": "verified",
-                            "annotated_by": c.get("annotated_by", ""),
-                            "annotated_at": c.get("annotated_at", ""),
-                            "notes": c.get("notes", ""),
-                        }
+                    mid = int(c["movie_id"])
+                    existing_candidates_by_query[qid][mid] = dict(c)
+                    initial_total_candidates += 1
         except Exception as e:
-            print(f"   [Resume Warning] Không thể nạp nhãn cũ: {e}")
+            print(f"   [Resume Warning] Không thể nạp ứng viên cũ: {e}")
 
-    if existing_verified:
-        print(f"   [Resume] Tìm thấy {len(existing_verified)} nhãn đã được con người xác minh. Tự động bảo toàn 100%!")
+    if initial_total_candidates > 0:
+        print(f"   [Preserve Guard] Tìm thấy {initial_total_candidates:,} ứng viên đã có từ các phiên trước. Bảo toàn 100%!")
+
+    # Tích hợp kết quả đánh giá của Pilot LLM Judge và Checkpoint (nếu có)
+    for judge_src_file, label in [
+        (GT_DIR / "pilot_llm_judge_results.json", "Pilot"),
+        (GT_DIR / "llm_judge_checkpoint.json", "Full Checkpoint"),
+    ]:
+        if judge_src_file.exists():
+            try:
+                with open(judge_src_file, "r", encoding="utf-8") as f:
+                    src_data = json.load(f)
+                count_judged = 0
+                for j in src_data.get("judgments", []):
+                    pqid = j.get("query_id")
+                    pmid = int(j.get("movie_id"))
+                    if pqid in existing_candidates_by_query and pmid in existing_candidates_by_query[pqid]:
+                        cand = existing_candidates_by_query[pqid][pmid]
+                        cand["llm_grade"] = j.get("llm_grade")
+                        cand["llm_verdict"] = j.get("llm_verdict")
+                        cand["llm_reasoning"] = j.get("llm_reasoning")
+                        cand["judge_model"] = j.get("judge_model")
+                        cand["rubric_version"] = j.get("rubric_version")
+                        cand["llm_judged_at"] = j.get("llm_judged_at")
+                        if not cand.get("verified_by_human"):
+                            cand["status"] = "llm_judged"
+                        count_judged += 1
+                if count_judged > 0:
+                    print(f"   [LLM Judge {label}] Đã tích hợp {count_judged} kết quả vào candidates!")
+            except Exception as e:
+                print(f"   [LLM Judge Warning] Lỗi đọc {judge_src_file.name}: {e}")
 
     # 5. Khởi tạo engine pooling
-    engine = PoolingEngine(df_corpus, chroma_col)
+    engine = PoolingEngine(
+        corpus_df=df_corpus,
+        chroma_col_sbert=chroma_col_sbert,
+        chroma_col_e5_small=chroma_col_e5_small,
+        chroma_col_e5_base=chroma_col_e5_base,
+    )
 
     # 6. Candidate Pooling cho 100 queries
-    print(f"\n🔄 Đang thực hiện Candidate Pooling cho 100 benchmark queries (Top-{top_k} per model)...")
+    active_models_list = ["TF-IDF", "BM25", "SBERT"]
+    if chroma_col_e5_small is not None:
+        active_models_list.append("multilingual-e5-small")
+    if chroma_col_e5_base is not None:
+        active_models_list.append("multilingual-e5-base")
+
+    print(
+        f"\n🔄 Đang thực hiện Candidate Pooling cho 100 benchmark queries "
+        f"với {len(active_models_list)} mô hình ({', '.join(active_models_list)}), Top-{top_k} per model..."
+    )
     gt_queries = []
     annotation_queue_items = []
 
-    model_source_recall_hits = {"TF-IDF": 0, "BM25": 0, "SBERT": 0, "Ensemble": 0}
+    model_source_recall_hits = {m: 0 for m in active_models_list}
+    model_source_recall_hits["Ensemble"] = 0
     total_candidates_pooled = 0
     unique_movies_pooled: Set[int] = set()
     verified_human_total = 0
+    new_candidates_added_count = 0
 
     for idx, q in enumerate(queries, start=1):
         qid = q["query_id"]
         sid = int(q["source_movie_id"])
         q_type = q["query_type"]
 
+        existing_cands_for_q = existing_candidates_by_query.get(qid, {})
         candidates = engine.pool_candidates_for_query(
-            q, top_k=top_k, existing_verified_map=existing_verified
+            q, top_k=top_k, existing_candidates=existing_cands_for_q
         )
         total_candidates_pooled += len(candidates)
+        new_candidates_added_count += max(0, len(candidates) - len(existing_cands_for_q))
 
         # Kiểm tra sự xuất hiện của source_movie_id
         src_cand = next((c for c in candidates if c["movie_id"] == sid), None)
         if src_cand:
             models_retrieved = src_cand.get("pooled_by", [])
             hit_any = False
-            for m in ["TF-IDF", "BM25", "SBERT"]:
+            for m in active_models_list:
                 if m in models_retrieved:
                     model_source_recall_hits[m] += 1
                     hit_any = True
@@ -643,6 +761,13 @@ def run_ground_truth_v2_pipeline(
                     "annotated_by": c.get("annotated_by", ""),
                     "annotated_at": c.get("annotated_at", ""),
                     "notes": c.get("notes", ""),
+                    # Thông tin LLM-as-a-Judge (nếu đã được pilot)
+                    "llm_grade": c.get("llm_grade"),
+                    "llm_verdict": c.get("llm_verdict"),
+                    "llm_reasoning": c.get("llm_reasoning"),
+                    "judge_model": c.get("judge_model"),
+                    "rubric_version": c.get("rubric_version"),
+                    "llm_judged_at": c.get("llm_judged_at"),
                 }
             )
 
@@ -665,29 +790,37 @@ def run_ground_truth_v2_pipeline(
     avg_candidates_per_query = round(total_candidates_pooled / len(queries), 2)
     ensemble_recall_pct = round((model_source_recall_hits["Ensemble"] / len(queries)) * 100, 1)
 
-    print("\n📊 ─── THỐNG KÊ CANDIDATE POOLING (BƯỚC 3) ───")
+    print("\n📊 ─── THỐNG KÊ CANDIDATE POOLING MỞ RỘNG (BƯỚC 3) ───")
     print(f"  • Tổng số truy vấn: {len(queries)} queries (5 nhóm x 20)")
-    print(f"  • Tổng số ứng viên được pool: {total_candidates_pooled:,} lượt")
+    print(f"  • Số ứng viên ban đầu (trước mở rộng): {initial_total_candidates:,} ứng viên")
+    print(f"  • Tổng số ứng viên sau khi mở rộng: {total_candidates_pooled:,} ứng viên (+{new_candidates_added_count:,} mới)")
     print(f"  • Số lượng phim duy nhất trong pool: {len(unique_movies_pooled):,} bộ phim")
     print(f"  • Trung bình ứng viên/truy vấn: {avg_candidates_per_query} phim")
-    print(
-        f"  • Recall@10 thu hồi phim nguồn: Ensemble = {ensemble_recall_pct}% "
-        f"(TF-IDF: {model_source_recall_hits['TF-IDF']}%, BM25: {model_source_recall_hits['BM25']}%, SBERT: {model_source_recall_hits['SBERT']}%)"
-    )
+    print(f"  • Recall@10 thu hồi phim nguồn Ensemble: {ensemble_recall_pct}%")
+    for m in active_models_list:
+        m_rec = round((model_source_recall_hits[m] / len(queries)) * 100, 1)
+        print(f"      - {m}: {m_rec}%")
 
     # 8. Metadata đầy đủ
     gt_v2_payload = {
         "metadata": {
             "version": "2.0-ground-truth",
-            "created_at": datetime.now().strftime("%Y-%m-%d"),
-            "description": "Tập Ground Truth V2 chuẩn học thuật (Human-in-the-loop via Candidate Pooling) mở rộng từ 100 benchmark queries Bước 2.",
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "description": "Tập Ground Truth V2 mở rộng Candidate Pooling từ 100 benchmark queries Bước 2.",
             "corpus": {
                 "total_movies": len(df_corpus),
                 "fingerprint": compute_corpus_fingerprint(
                     df_corpus["search_text"].tolist(), df_corpus["movieId"].tolist()
                 ),
-                "vector_dim": 384,
-                "chroma_collection": COLLECTION_NAME,
+                "chroma_collections": {
+                    "movies": {"model": SBERT_MODEL_NAME, "vector_dim": 384},
+                    "movies_e5_small": {"model": E5_SMALL_MODEL_NAME, "vector_dim": 384},
+                    "movies_e5_base": {
+                        "model": E5_BASE_MODEL_NAME,
+                        "vector_dim": 768,
+                        "status": "active" if chroma_col_e5_base is not None else "building_or_omitted",
+                    },
+                },
             },
             "total_queries": len(queries),
             "query_distribution": {
@@ -698,16 +831,28 @@ def run_ground_truth_v2_pipeline(
                 "Short_Long": sum(1 for q in queries if q["query_type"] == "Short_Long"),
             },
             "candidate_pooling": {
-                "models": ["TF-IDF", "BM25", "SBERT"],
+                "models": active_models_list,
                 "pool_depth_per_model": top_k,
+                "candidates_before_expansion": initial_total_candidates,
                 "total_pooled_candidates": total_candidates_pooled,
+                "new_candidates_added": new_candidates_added_count,
                 "unique_movies_pooled": len(unique_movies_pooled),
                 "avg_candidates_per_query": avg_candidates_per_query,
                 "source_movie_recall_at_10_ensemble": ensemble_recall_pct,
                 "source_movie_recall_by_model": {
-                    "TF-IDF": round((model_source_recall_hits["TF-IDF"] / len(queries)) * 100, 1),
-                    "BM25": round((model_source_recall_hits["BM25"] / len(queries)) * 100, 1),
-                    "SBERT": round((model_source_recall_hits["SBERT"] / len(queries)) * 100, 1),
+                    m: round((model_source_recall_hits[m] / len(queries)) * 100, 1)
+                    for m in active_models_list
+                },
+                "bge_m3_evaluation": {
+                    "status": "excluded",
+                    "reason": (
+                        "BAAI/bge-m3 có 567 triệu tham số (~2.24 GB trọng số FP16, yêu cầu >3.5 GB RAM khi suy luận CPU). "
+                        "Hệ thống hiện tại chạy CPU với ~3.2 GB RAM khả dụng; tốc độ suy luận đo được ~6-7 văn bản/giây "
+                        "(mất >40 phút cho toàn bộ corpus và có nguy cơ Out-Of-Memory cao). "
+                        "Theo yêu cầu dự án, BGE-M3 được loại khỏi danh sách benchmark chính thức; "
+                        "khả năng biểu diễn ngữ nghĩa đa ngôn ngữ được đảm bảo toàn diện bởi paraphrase-multilingual-MiniLM-L12-v2, "
+                        "multilingual-e5-small và multilingual-e5-base."
+                    ),
                 },
                 "shuffled_reproducible": True,
                 "shuffle_seed": SHUFFLE_SEED,
@@ -767,7 +912,7 @@ def run_ground_truth_v2_pipeline(
         json.dump(queue_payload, f, ensure_ascii=False, indent=2)
 
     elapsed = round(time.time() - t_start, 1)
-    print(f"✅ Hoàn thành xuất Ground Truth V2 trong {elapsed}s!\n")
+    print(f"✅ Hoàn thành xuất Ground Truth V2 mở rộng trong {elapsed}s!\n")
     return gt_v2_payload
 
 
