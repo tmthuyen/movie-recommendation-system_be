@@ -73,6 +73,22 @@ def get_manifest_path(chroma_dir: Path, collection_name: str) -> Path:
     return chroma_dir / f"{collection_name}_manifest.json"
 
 
+def format_document_text_for_model(text: str, model_name: str) -> str:
+    """Định dạng chuỗi văn bản tài liệu theo chuẩn của từng mô hình (e.g. e5 yêu cầu 'passage: ')."""
+    if "e5" in model_name.lower():
+        if not text.startswith("passage: "):
+            return f"passage: {text}"
+    return text
+
+
+def format_query_text_for_model(query: str, model_name: str) -> str:
+    """Định dạng chuỗi truy vấn theo chuẩn của từng mô hình (e.g. e5 yêu cầu 'query: ')."""
+    if "e5" in model_name.lower():
+        if not query.startswith("query: "):
+            return f"query: {query}"
+    return query
+
+
 def save_collection_manifest(
     manifest_path: Path,
     collection_name: str,
@@ -223,7 +239,7 @@ def verify_vector_db(
                     )
 
                 # Tính vector mới từ search_text hiện tại và kiểm tra cosine similarity
-                sample_text = corpus[original_idx]
+                sample_text = format_document_text_for_model(corpus[original_idx], model_name)
                 vec_model = embedding_model.encode(
                     sample_text, normalize_embeddings=True
                 )
@@ -280,28 +296,50 @@ def build_metadata(row: pd.Series) -> dict:
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+def parse_args():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Encode movies and insert into ChromaDB")
+    parser.add_argument("--csv", type=Path, default=CSV_PATH, help="Path to all_movies_fully_translated.csv")
+    parser.add_argument("--chroma-dir", type=Path, default=CHROMA_DIR, help="Directory for ChromaDB")
+    parser.add_argument("--collection", type=str, default=COLLECTION_NAME, help="Collection name in ChromaDB")
+    parser.add_argument("--model", type=str, default=EMBEDDING_MODEL, help="SentenceTransformer model name")
+    parser.add_argument("--batch-size", type=int, default=BATCH_SIZE, help="Rows per batch")
+    parser.add_argument("--force", action="store_true", default=FORCE_REBUILD, help="Force drop and rebuild")
+    parser.add_argument("--verify-only", action="store_true", help="Verify existing collection and exit")
+    return parser.parse_args()
+
+
 def main() -> None:
     import chromadb
     from sentence_transformers import SentenceTransformer
     from tqdm import tqdm
 
+    args = parse_args()
+    csv_path = args.csv
+    chroma_dir = args.chroma_dir
+    collection_name = args.collection
+    model_name = args.model
+    batch_size = args.batch_size
+    force_rebuild = args.force
+
     print("=" * 65)
     print("  ChromaDB Vector DB Builder")
     print("=" * 65)
-    print(f"  CSV          : {CSV_PATH}")
-    print(f"  ChromaDB dir : {CHROMA_DIR}")
-    print(f"  Collection   : {COLLECTION_NAME}")
-    print(f"  Model        : {EMBEDDING_MODEL}")
-    print(f"  Batch size   : {BATCH_SIZE}")
-    print(f"  Force rebuild: {FORCE_REBUILD}")
+    print(f"  CSV          : {csv_path}")
+    print(f"  ChromaDB dir : {chroma_dir}")
+    print(f"  Collection   : {collection_name}")
+    print(f"  Model        : {model_name}")
+    print(f"  Batch size   : {batch_size}")
+    print(f"  Force rebuild: {force_rebuild}")
     print("=" * 65)
 
     # ── 1. Load CSV ───────────────────────────────────────────────────────
-    if not CSV_PATH.exists():
-        sys.exit(f"[ERROR] CSV not found: {CSV_PATH}")
+    if not csv_path.exists():
+        sys.exit(f"[ERROR] CSV not found: {csv_path}")
 
     print(f"\n[1/5] Loading CSV …")
-    df = pd.read_csv(CSV_PATH, low_memory=False)
+    df = pd.read_csv(csv_path, low_memory=False)
     print(f"      Rows loaded : {len(df):,}")
 
     # ── 2. Build search_text & filter ─────────────────────────────────────
@@ -327,36 +365,36 @@ def main() -> None:
     movie_ids = df[id_col].tolist()
     corpus_fingerprint = compute_corpus_fingerprint(corpus, movie_ids)
 
-    # ── 3. Load SBERT model ───────────────────────────────────────────────
-    print(f"\n[3/5] Loading model '{EMBEDDING_MODEL}' …")
+    # ── 3. Load SBERT / E5 model ──────────────────────────────────────────
+    print(f"\n[3/5] Loading model '{model_name}' …")
     t0 = time.time()
-    model = SentenceTransformer(EMBEDDING_MODEL)
+    model = SentenceTransformer(model_name)
     print(f"      Model loaded in {time.time() - t0:.1f}s")
 
     # ── 4. Open ChromaDB collection & verify integrity ────────────────────
-    print(f"\n[4/5] Opening ChromaDB at '{CHROMA_DIR}' …")
-    CHROMA_DIR.mkdir(parents=True, exist_ok=True)
-    client = chromadb.PersistentClient(path=str(CHROMA_DIR))
-    manifest_path = get_manifest_path(CHROMA_DIR, COLLECTION_NAME)
+    print(f"\n[4/5] Opening ChromaDB at '{chroma_dir}' …")
+    chroma_dir.mkdir(parents=True, exist_ok=True)
+    client = chromadb.PersistentClient(path=str(chroma_dir))
+    manifest_path = get_manifest_path(chroma_dir, collection_name)
 
     collection = None
     try:
-        collection = client.get_collection(name=COLLECTION_NAME)
+        collection = client.get_collection(name=collection_name)
     except Exception:
         pass
 
-    if FORCE_REBUILD:
+    if force_rebuild:
         rebuild_needed = True
-        rebuild_reason = "FORCE_REBUILD=1 được yêu cầu bởi người dùng."
+        rebuild_reason = "--force / FORCE_REBUILD=1 được yêu cầu bởi người dùng."
     elif collection is None:
         rebuild_needed = True
-        rebuild_reason = f"Collection '{COLLECTION_NAME}' chưa tồn tại."
+        rebuild_reason = f"Collection '{collection_name}' chưa tồn tại."
     else:
         is_valid, reason = verify_vector_db(
             collection=collection,
             corpus=corpus,
             movie_ids=movie_ids,
-            model_name=EMBEDDING_MODEL,
+            model_name=model_name,
             manifest_path=manifest_path,
             embedding_model=model,
         )
@@ -370,36 +408,44 @@ def main() -> None:
             rebuild_needed = True
             rebuild_reason = reason
 
+    if args.verify_only:
+        print(f"\n  ❌ Kiểm tra thất bại: {rebuild_reason}")
+        sys.exit(1)
+
     print(f"\n  ⚠️ Cần xây dựng lại ChromaDB: {rebuild_reason}")
     if collection is not None:
         try:
-            client.delete_collection(name=COLLECTION_NAME)
-            print(f"      Đã xóa collection cũ '{COLLECTION_NAME}'")
+            client.delete_collection(name=collection_name)
+            print(f"      Đã xóa collection cũ '{collection_name}'")
         except Exception as e:
             print(f"      Lỗi khi xóa collection cũ: {e}")
 
     collection = client.create_collection(
-        name=COLLECTION_NAME,
+        name=collection_name,
         metadata={"hnsw:space": "cosine"},
     )
 
     # ── 5. Encode & insert in batches ─────────────────────────────────────
-    print(f"\n[5/5] Encoding {len(corpus):,} movies in batches of {BATCH_SIZE} …")
-    total_batches = (len(corpus) + BATCH_SIZE - 1) // BATCH_SIZE
+    print(f"\n[5/5] Encoding {len(corpus):,} movies in batches of {batch_size} …")
+    total_batches = (len(corpus) + batch_size - 1) // batch_size
     inserted = 0
     t_start = time.time()
 
     for batch_idx in tqdm(range(total_batches), desc="Batches", unit="batch"):
-        start = batch_idx * BATCH_SIZE
-        end = min(start + BATCH_SIZE, len(corpus))
+        start = batch_idx * batch_size
+        end = min(start + batch_size, len(corpus))
 
         batch_texts = corpus[start:end]
         batch_ids = movie_ids[start:end]
         batch_rows = df.iloc[start:end]
 
-        # Encode — returns numpy (N, 384)
+        formatted_batch_texts = [
+            format_document_text_for_model(t, model_name) for t in batch_texts
+        ]
+
+        # Encode with unit-norm
         embeddings: np.ndarray = model.encode(
-            batch_texts,
+            formatted_batch_texts,
             batch_size=64,
             show_progress_bar=False,
             normalize_embeddings=True,  # unit-norm ⇒ cosine = dot product
@@ -426,22 +472,22 @@ def main() -> None:
         "get_embedding_dimension",
         getattr(model, "get_sentence_embedding_dimension", None),
     )
-    expected_dim = int(dim_fn()) if dim_fn else 384
+    expected_dim = int(dim_fn()) if dim_fn else embeddings.shape[1]
     save_collection_manifest(
         manifest_path=manifest_path,
-        collection_name=COLLECTION_NAME,
-        model_name=EMBEDDING_MODEL,
+        collection_name=collection_name,
+        model_name=model_name,
         embedding_dim=expected_dim,
         num_records=len(movie_ids),
         corpus_fingerprint=corpus_fingerprint,
-        csv_filename=str(CSV_PATH.name),
+        csv_filename=str(csv_path.name),
     )
 
     print(f"\n{'=' * 65}")
     print(f"  Done!  Inserted/updated : {inserted:,}")
     print(f"  Total vectors in DB     : {final_count:,}")
     print(f"  Elapsed time            : {elapsed:.1f}s  ({elapsed/60:.1f} min)")
-    print(f"  ChromaDB path           : {CHROMA_DIR.resolve()}")
+    print(f"  ChromaDB path           : {chroma_dir.resolve()}")
     print(f"  Manifest path           : {manifest_path.resolve()}")
     print(f"{'=' * 65}")
 
