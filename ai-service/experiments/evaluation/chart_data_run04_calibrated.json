@@ -1,0 +1,352 @@
+{
+  "models": [
+    "TF-IDF",
+    "BM25",
+    "SBERT MiniLM",
+    "Multilingual E5 Small",
+    "Multilingual E5 Base"
+  ],
+  "metrics_overall_conservative": {
+    "TF-IDF": {
+      "ndcg@5": 0.4246,
+      "ndcg@10": 0.4476,
+      "p@5": 0.228,
+      "p@10": 0.172,
+      "mrr": 0.5295,
+      "map@10": 0.3249,
+      "pr_recall@10": 0.4151,
+      "hit@10": 0.7,
+      "source_hit@10": 0.46,
+      "coverage@10": 98.0,
+      "latency_mean_ms": 10.39,
+      "latency_median_p50_ms": 10.08,
+      "latency_p95_ms": 12.31,
+      "init_time_seconds": 0.401
+    },
+    "BM25": {
+      "ndcg@5": 0.4759,
+      "ndcg@10": 0.4925,
+      "p@5": 0.284,
+      "p@10": 0.191,
+      "mrr": 0.5811,
+      "map@10": 0.3788,
+      "pr_recall@10": 0.4576,
+      "hit@10": 0.75,
+      "source_hit@10": 0.5,
+      "coverage@10": 98.1,
+      "latency_mean_ms": 38.33,
+      "latency_median_p50_ms": 39.22,
+      "latency_p95_ms": 65.28,
+      "init_time_seconds": 0.142
+    },
+    "SBERT MiniLM": {
+      "ndcg@5": 0.3286,
+      "ndcg@10": 0.3513,
+      "p@5": 0.19,
+      "p@10": 0.144,
+      "mrr": 0.4589,
+      "map@10": 0.2382,
+      "pr_recall@10": 0.3343,
+      "hit@10": 0.66,
+      "source_hit@10": 0.38,
+      "coverage@10": 93.6,
+      "latency_mean_ms": 22.62,
+      "latency_median_p50_ms": 22.11,
+      "latency_p95_ms": 29.3,
+      "init_time_seconds": 7.179
+    },
+    "Multilingual E5 Small": {
+      "ndcg@5": 0.4209,
+      "ndcg@10": 0.4345,
+      "p@5": 0.234,
+      "p@10": 0.174,
+      "mrr": 0.5716,
+      "map@10": 0.3203,
+      "pr_recall@10": 0.4052,
+      "hit@10": 0.73,
+      "source_hit@10": 0.43,
+      "coverage@10": 98.1,
+      "latency_mean_ms": 23.97,
+      "latency_median_p50_ms": 22.84,
+      "latency_p95_ms": 31.43,
+      "init_time_seconds": 9.58
+    },
+    "Multilingual E5 Base": {
+      "ndcg@5": 0.4514,
+      "ndcg@10": 0.4536,
+      "p@5": 0.268,
+      "p@10": 0.186,
+      "mrr": 0.5915,
+      "map@10": 0.3538,
+      "pr_recall@10": 0.4182,
+      "hit@10": 0.73,
+      "source_hit@10": 0.41,
+      "coverage@10": 93.1,
+      "latency_mean_ms": 57.3,
+      "latency_median_p50_ms": 55.77,
+      "latency_p95_ms": 77.6,
+      "init_time_seconds": 8.937
+    }
+  },
+  "sensitivity_bounds": {
+    "TF-IDF": {
+      "ndcg@10": [
+        0.4476,
+        0.4528
+      ],
+      "p@10": [
+        0.172,
+        0.192
+      ],
+      "hit@10": [
+        0.7,
+        0.72
+      ]
+    },
+    "BM25": {
+      "ndcg@10": [
+        0.4925,
+        0.496
+      ],
+      "p@10": [
+        0.191,
+        0.21
+      ],
+      "hit@10": [
+        0.75,
+        0.76
+      ]
+    },
+    "SBERT MiniLM": {
+      "ndcg@10": [
+        0.3513,
+        0.426
+      ],
+      "p@10": [
+        0.144,
+        0.208
+      ],
+      "hit@10": [
+        0.66,
+        0.87
+      ]
+    },
+    "Multilingual E5 Small": {
+      "ndcg@10": [
+        0.4345,
+        0.4766
+      ],
+      "p@10": [
+        0.174,
+        0.193
+      ],
+      "hit@10": [
+        0.73,
+        0.85
+      ]
+    },
+    "Multilingual E5 Base": {
+      "ndcg@10": [
+        0.4536,
+        0.5462
+      ],
+      "p@10": [
+        0.186,
+        0.255
+      ],
+      "hit@10": [
+        0.73,
+        0.94
+      ]
+    }
+  },
+  "unjudged_breakdown": {
+    "TF-IDF": {
+      "total_items": 1000,
+      "judged": 980,
+      "judged_pct": 98.0,
+      "insufficient_evidence": 3,
+      "insufficient_pct": 0.3,
+      "unpooled": 17,
+      "unpooled_pct": 1.7,
+      "grade_distribution": {
+        "0": 533,
+        "1": 275,
+        "2": 82,
+        "3": 90
+      }
+    },
+    "BM25": {
+      "total_items": 1000,
+      "judged": 981,
+      "judged_pct": 98.1,
+      "insufficient_evidence": 0,
+      "insufficient_pct": 0.0,
+      "unpooled": 19,
+      "unpooled_pct": 1.9,
+      "grade_distribution": {
+        "0": 512,
+        "1": 278,
+        "2": 87,
+        "3": 104
+      }
+    },
+    "SBERT MiniLM": {
+      "total_items": 1000,
+      "judged": 936,
+      "judged_pct": 93.6,
+      "insufficient_evidence": 64,
+      "insufficient_pct": 6.4,
+      "unpooled": 0,
+      "unpooled_pct": 0.0,
+      "grade_distribution": {
+        "0": 539,
+        "1": 253,
+        "2": 79,
+        "3": 65
+      }
+    },
+    "Multilingual E5 Small": {
+      "total_items": 1000,
+      "judged": 981,
+      "judged_pct": 98.1,
+      "insufficient_evidence": 16,
+      "insufficient_pct": 1.6,
+      "unpooled": 3,
+      "unpooled_pct": 0.3,
+      "grade_distribution": {
+        "0": 514,
+        "1": 293,
+        "2": 95,
+        "3": 79
+      }
+    },
+    "Multilingual E5 Base": {
+      "total_items": 1000,
+      "judged": 931,
+      "judged_pct": 93.1,
+      "insufficient_evidence": 65,
+      "insufficient_pct": 6.5,
+      "unpooled": 4,
+      "unpooled_pct": 0.4,
+      "grade_distribution": {
+        "0": 463,
+        "1": 282,
+        "2": 104,
+        "3": 82
+      }
+    }
+  },
+  "group_ndcg10_comparison": {
+    "Lexical": {
+      "TF-IDF": 0.6942,
+      "BM25": 0.7182,
+      "SBERT MiniLM": 0.5751,
+      "Multilingual E5 Small": 0.722,
+      "Multilingual E5 Base": 0.7224
+    },
+    "Semantic": {
+      "TF-IDF": 0.3771,
+      "BM25": 0.4423,
+      "SBERT MiniLM": 0.3138,
+      "Multilingual E5 Small": 0.3987,
+      "Multilingual E5 Base": 0.5
+    },
+    "Abstract": {
+      "TF-IDF": 0.2823,
+      "BM25": 0.3537,
+      "SBERT MiniLM": 0.2968,
+      "Multilingual E5 Small": 0.3851,
+      "Multilingual E5 Base": 0.3972
+    },
+    "Typo_Slang": {
+      "TF-IDF": 0.1487,
+      "BM25": 0.1959,
+      "SBERT MiniLM": 0.0596,
+      "Multilingual E5 Small": 0.0736,
+      "Multilingual E5 Base": 0.0302
+    },
+    "Short_Long": {
+      "TF-IDF": 0.7354,
+      "BM25": 0.7525,
+      "SBERT MiniLM": 0.5113,
+      "Multilingual E5 Small": 0.5931,
+      "Multilingual E5 Base": 0.6185
+    },
+    "Short": {
+      "TF-IDF": 0.6632,
+      "BM25": 0.6896,
+      "SBERT MiniLM": 0.349,
+      "Multilingual E5 Small": 0.4625,
+      "Multilingual E5 Base": 0.4501
+    },
+    "Long": {
+      "TF-IDF": 0.8075,
+      "BM25": 0.8153,
+      "SBERT MiniLM": 0.6735,
+      "Multilingual E5 Small": 0.7236,
+      "Multilingual E5 Base": 0.7869
+    }
+  },
+  "group_p10_comparison": {
+    "Lexical": {
+      "TF-IDF": 0.21,
+      "BM25": 0.21,
+      "SBERT MiniLM": 0.175,
+      "Multilingual E5 Small": 0.215,
+      "Multilingual E5 Base": 0.235
+    },
+    "Semantic": {
+      "TF-IDF": 0.16,
+      "BM25": 0.185,
+      "SBERT MiniLM": 0.115,
+      "Multilingual E5 Small": 0.18,
+      "Multilingual E5 Base": 0.21
+    },
+    "Abstract": {
+      "TF-IDF": 0.18,
+      "BM25": 0.245,
+      "SBERT MiniLM": 0.24,
+      "Multilingual E5 Small": 0.26,
+      "Multilingual E5 Base": 0.305
+    },
+    "Typo_Slang": {
+      "TF-IDF": 0.025,
+      "BM25": 0.03,
+      "SBERT MiniLM": 0.025,
+      "Multilingual E5 Small": 0.02,
+      "Multilingual E5 Base": 0.01
+    },
+    "Short_Long": {
+      "TF-IDF": 0.285,
+      "BM25": 0.285,
+      "SBERT MiniLM": 0.165,
+      "Multilingual E5 Small": 0.195,
+      "Multilingual E5 Base": 0.17
+    },
+    "Short": {
+      "TF-IDF": 0.42,
+      "BM25": 0.42,
+      "SBERT MiniLM": 0.18,
+      "Multilingual E5 Small": 0.24,
+      "Multilingual E5 Base": 0.2
+    },
+    "Long": {
+      "TF-IDF": 0.15,
+      "BM25": 0.15,
+      "SBERT MiniLM": 0.15,
+      "Multilingual E5 Small": 0.15,
+      "Multilingual E5 Base": 0.14
+    }
+  },
+  "metadata": {
+    "run_id": "Run #04.1 - Calibrated",
+    "generated_at": "2026-10-21 10:00:21",
+    "gemini_judge_model": "gemini-3.5-flash-lite",
+    "corpus_fingerprint": "f47867b05751151a612854f7ed924feb0e0faff42d5e67197ebb0fe423d40c61",
+    "scenarios": {
+      "conservative": "Gain=0 for unjudged documents",
+      "assumed_relevance": "Assumed Grade 2 for unjudged documents in Top-10"
+    }
+  }
+}
