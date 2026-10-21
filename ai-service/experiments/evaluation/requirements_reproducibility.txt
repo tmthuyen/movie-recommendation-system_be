@@ -1,0 +1,22 @@
+# Pinned environment requirements for Step 4 IR Benchmark Reproducibility
+# Platform: Windows 10 (AMD64)
+# Python: 3.11.9
+# PyTorch: 2.14.1+cpu (or CUDA compatible)
+
+chromadb==1.5.9
+joblib==1.6.0
+numpy==2.4.6
+pandas==3.0.6
+pytest==9.1.1
+rank-bm25==0.2.2
+scikit-learn==1.9.1
+scipy==1.17.1
+sentence-transformers==6.1.0
+tokenizers==0.23.2
+torch==2.14.1
+transformers==5.18.0
+underthesea==9.5.0
+underthesea_core==3.3.2
+pydantic==2.13.5
+rich==15.0.0
+tqdm==4.70.1

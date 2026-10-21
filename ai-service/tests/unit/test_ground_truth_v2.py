@@ -168,16 +168,16 @@ class TestGroundTruthV2:
                 ), f"Ứng viên {c['movie_id']} trong {q['query_id']} bị tự động đánh dấu verified_by_human=True!"
 
     def test_distinction_between_unassessed_and_grade_zero(self, gt_v2_data):
-        """Phân biệt rõ ràng: phim chưa đánh giá (grade: null, status: unassessed) với grade 0 (không liên quan)."""
-        unassessed_found = False
+        """Phân biệt rõ ràng: phim chưa đánh giá bởi người (grade: null, status: unassessed/llm_judged) với grade 0 (không liên quan)."""
+        candidate_found = False
         for q in gt_v2_data.get("queries", []):
             for c in q.get("candidates", []):
                 assert (
                     c.get("relevance_grade") is None
-                ), f"Ứng viên {c['movie_id']} chưa đánh giá phải có relevance_grade = null"
-                assert c.get("status") == "unassessed"
-                unassessed_found = True
-        assert unassessed_found, "Không tìm thấy ứng viên unassessed nào!"
+                ), f"Ứng viên {c['movie_id']} chưa đánh giá bởi người phải có relevance_grade = null"
+                assert c.get("status") in ("unassessed", "llm_judged")
+                candidate_found = True
+        assert candidate_found, "Không tìm thấy ứng viên nào!"
 
     def test_source_movies_not_preassigned_grade_3(self, gt_v2_data):
         """Yêu cầu 1: Tuyệt đối không gán sẵn relevance_grade 3 cho phim nguồn; để null cho đến khi được người đánh giá xác nhận."""
@@ -193,7 +193,7 @@ class TestGroundTruthV2:
             assert (
                 src_cand.get("relevance_grade") is None
             ), f"Phim nguồn {sid} của query {q['query_id']} bị gán sẵn grade={src_cand.get('relevance_grade')}!"
-            assert src_cand.get("status") == "unassessed"
+            assert src_cand.get("status") in ("unassessed", "llm_judged")
             assert src_cand.get("verified_by_human") is False
         assert source_count == 100, f"Kỳ vọng 100 phim nguồn nhưng tìm thấy {source_count}"
 
