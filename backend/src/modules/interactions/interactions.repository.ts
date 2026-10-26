@@ -26,6 +26,7 @@ export interface IInteractionRepository {
     movieId: number,
     type: string,
   ): Promise<Interaction | null>;
+  countByMovieAndType(movieId: number, type?: string): Promise<number>;
 }
 
 @Injectable()
@@ -127,6 +128,15 @@ export class InteractionRepository implements IInteractionRepository {
         user: { id: userId } as any,
         movie: { id: movieId } as any,
         type: type as any,
+      },
+    });
+  }
+
+  async countByMovieAndType(movieId: number, type?: string): Promise<number> {
+    return this.repo.count({
+      where: {
+        movie: { id: movieId } as any,
+        ...(type ? { type: type as any } : {}),
       },
     });
   }

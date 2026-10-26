@@ -1,14 +1,14 @@
 import { movieApi } from '@/apis/movie.api';
 import { parseAxiosError } from '@/lib/axiosClient';
 import { MovieListResult, MovieQuery } from '@/shared/types/movie.types';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 // get list (public)
 export function useGetMovies(
   params: MovieQuery = {},
   staleTime: number = 1000 * 60 * 5,
-  gcTime: number = 1000 * 60 * 10,
+  gcTime: number = 1000 * 60 * 10
 ) {
   const { page, limit, keyword } = params;
   return useQuery({
@@ -30,9 +30,9 @@ export function useGetMovies(
 
 // get one (public)
 export function useGetMovieDetail(
-  id: number | string,
+  id: number,
   staleTime: number = 1000 * 60 * 5,
-  gcTime: number = 1000 * 60 * 10,
+  gcTime: number = 1000 * 60 * 10
 ) {
   return useQuery({
     queryKey: ['movie', id],
@@ -48,10 +48,17 @@ export function useGetMovieDetail(
 
 // increment view (public, optional auth)
 export function useIncrementView() {
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: number | string) => {
+    mutationFn: async (id: number) => {
       const response = await movieApi.incrementView(id);
       return response.result;
+    },
+    onSuccess: (result, id) => {
+      // Đồng bộ viewCount vào cache chi tiết phim (không refetch).
+      queryClient.setQueryData(['movie', id], (old: any) =>
+        old ? { ...old, viewCount: result.viewCount } : old
+      );
     },
     onError: (error: any) => {
       const parsedError = parseAxiosError(error);

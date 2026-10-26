@@ -49,7 +49,7 @@ function CommentItem({ comment }: { comment: Comment }) {
             <span className="text-muted-foreground text-xs">{timeAgo(comment.createdAt)}</span>
             {isTemporary && <span className="text-muted-foreground text-xs">(đang gửi…)</span>}
           </div>
-          <p className="text-foreground mt-0.5 text-sm whitespace-pre-wrap break-words">
+          <p className="text-foreground mt-0.5 text-sm break-words whitespace-pre-wrap">
             {comment.content}
           </p>
         </div>
@@ -59,7 +59,13 @@ function CommentItem({ comment }: { comment: Comment }) {
 }
 
 /** Danh sách reply (chỉ fetch khi user bấm "Xem trả lời"). */
-function CommentReplies({ movieId, parentId }: { movieId: number | string; parentId: number | string }) {
+function CommentReplies({
+  movieId,
+  parentId,
+}: {
+  movieId: number | string;
+  parentId: number | string;
+}) {
   const { data, isLoading } = useComment.useGetComments(movieId, {
     parentId,
     limit: 20,
@@ -131,8 +137,7 @@ export function MovieComments({ movieId }: MovieCommentsProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Realtime: bình luận mới từ client khác → invalidate để refetch
-  // (React Query tự dedupe theo queryKey, optimistic item cũng bị thay thế).
+  // Realtime: bình luận mới → cập nhật cache trực tiếp
   const handleRemoteComment = (comment: Comment) => {
     if (comment.parentId) {
       // Bình luận trả lời → mở rộng reply list tương ứng
@@ -140,11 +145,23 @@ export function MovieComments({ movieId }: MovieCommentsProps) {
       queryClient.invalidateQueries({ queryKey: ['comments', String(movieId)] });
       return;
     }
+    // Thêm vào đầu danh sách root nếu đang ở trang 1
     if (page === 1) {
-      queryClient.invalidateQueries({
-        queryKey: ['comments', String(movieId), 'root', page],
-      });
+      queryClient.setQueriesData<{ comments: Comment[]; total: number; totalPages: number }>(
+        { queryKey: ['comments', String(movieId), 'root'] },
+        (old) => {
+          if (!old) return old;
+          // Tránh duplicate nếu đã có
+          if (old.comments.some((c) => c.id === comment.id)) return old;
+          return {
+            ...old,
+            comments: [comment, ...old.comments],
+            total: (old.total || 0) + 1,
+          };
+        }
+      );
     }
+    queryClient.invalidateQueries({ queryKey: ['comments', String(movieId)] });
   };
 
   const handleTyping = (payload: { isTyping: boolean; userFullName: string }) => {
@@ -170,7 +187,7 @@ export function MovieComments({ movieId }: MovieCommentsProps) {
           setPage(1);
           notifyTyping(false);
         },
-      },
+      }
     );
   };
 
@@ -189,7 +206,7 @@ export function MovieComments({ movieId }: MovieCommentsProps) {
           setReplyTo(null);
           if (replyTo !== null) setExpanded((prev) => new Set(prev).add(replyTo));
         },
-      },
+      }
     );
   };
 
@@ -284,7 +301,7 @@ export function MovieComments({ movieId }: MovieCommentsProps) {
                       }}
                       className={cn(
                         'text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs font-medium transition-colors',
-                        'cursor-pointer',
+                        'cursor-pointer'
                       )}
                       aria-expanded={replyTo === comment.id}
                     >

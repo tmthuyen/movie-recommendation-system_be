@@ -5,11 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 /** Danh sách đánh giá của một phim (public). */
-export function useGetRatings(
-  movieId: number | string,
-  page: number = 1,
-  limit: number = 5,
-) {
+export function useGetRatings(movieId: number | string, page: number = 1, limit: number = 5) {
   return useQuery({
     queryKey: ['ratings', String(movieId), page, limit],
     queryFn: async (): Promise<{ ratings: Rating[]; total: number; totalPages: number }> => {
@@ -29,19 +25,20 @@ export function useGetRatings(
  * Gửi đánh giá sao (JWT) — `POST /api/ratings` (user chỉ đánh giá 1 lần/phim;
  * submit lại sẽ lỗi unique → hiển thị message từ server).
  */
-export function useCreateRating(movieId: number | string) {
+export function useCreateRating(movieId: number) {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (rating: number): Promise<Rating> => {
-      const response = await ratingApi.create({ rating, movieId });
+      const id = Number(movieId); // Ensure movieId is a number
+      const response = await ratingApi.create({ rating, movieId: id });
       return response.result;
     },
     onSuccess: () => {
       toast.success('Cảm ơn bạn đã đánh giá!');
-      queryClient.invalidateQueries({ queryKey: ['ratings', String(movieId)] });
+      queryClient.invalidateQueries({ queryKey: ['ratings', movieId] });
       // Đồng bộ voteAverage/voteCount ở card/chi tiết
-      queryClient.invalidateQueries({ queryKey: ['movie', String(movieId)] });
+      queryClient.invalidateQueries({ queryKey: ['movie', movieId] });
       queryClient.invalidateQueries({ queryKey: ['movies'] });
     },
     onError: (error) => {

@@ -78,6 +78,11 @@ class InteractionQueue:
             exchange=interaction_exchange,
             routing_key=self._settings.rabbitmq_interaction_routing_key,
         )
+        # Batch training do backend cron publish với routing key riêng
+        await interaction_queue.bind(
+            exchange=interaction_exchange,
+            routing_key="training.batch",
+        )
 
         # ── 6. Bat dau consume ────────────────────────────────────────────
         self._consumer_tag = await interaction_queue.consume(

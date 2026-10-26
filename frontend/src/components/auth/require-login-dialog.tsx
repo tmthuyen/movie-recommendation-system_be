@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 
 /**
  * Hộp thoại thông báo **chưa đăng nhập** khi user bấm các tương tác cần JWT
- * (like/favorite/watchlist/đánh giá/bình luận trên card hoặc chi tiết phim).
+ * (yêu thích/đánh giá/bình luận trên card hoặc chi tiết phim).
  * user xác nhận → chuyển `/auth/login?return-page=<trang hiện tại>`; hủy → ở lại trang.
  * Trạng thái mở/đóng chung qua `useRequireLoginStore` (mount 1 lần trong `UserLayout`).
  */

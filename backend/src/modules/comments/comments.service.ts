@@ -14,6 +14,8 @@ import { EventsGateway } from '@/modules/events/events.gateway';
 import { User } from '../users/entities/user.entity';
 import { Movie } from '../movies/entities/movie.entity';
 import { PaginatedResult } from '@/common/dtos/api-response.dto';
+import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
+import { MovieInteractionStatsService } from '../interactions/movie-interaction-stats.service';
 
 @Injectable()
 export class CommentsService {
@@ -22,6 +24,8 @@ export class CommentsService {
     private readonly repo: ICommentRepository,
     private readonly dataSource: DataSource,
     private readonly eventsGateway: EventsGateway,
+    private readonly interactionProducer: InteractionProducer,
+    private readonly statsService: MovieInteractionStatsService,
   ) {}
 
   async create(
@@ -29,8 +33,9 @@ export class CommentsService {
     createCommentDto: CreateCommentDto,
   ): Promise<Comment> {
     const { movieId, content, parentId } = createCommentDto;
+    const score = InteractionScoreMap[InteractionType.COMMENT];
 
-    return await this.dataSource.transaction(async manager => {
+    const savedComment = await this.dataSource.transaction(async manager => {
       // Create Comment
       const newComment = manager.create(Comment, {
         content,
@@ -38,21 +43,44 @@ export class CommentsService {
         movie: { id: movieId } as Movie,
         user: { id: userId } as User,
       });
-      const savedComment = await manager.save(newComment);
+      const comment = await manager.save(newComment);
 
       // Create Interaction
       const interaction = manager.create(Interaction, {
-        score: InteractionScoreMap[InteractionType.COMMENT],
+        score,
         type: InteractionType.COMMENT,
         movie: { id: movieId } as Movie,
         user: { id: userId } as User,
       });
       await manager.save(interaction);
 
-      this.eventsGateway.broadcastComment(movieId, savedComment);
-
-      return savedComment;
+      return comment;
     });
+
+    // Chỉ broadcast/publish SAU khi transaction commit.
+    const stats = await this.statsService.getStats(movieId);
+
+    this.eventsGateway.broadcastComment(movieId, savedComment);
+    this.eventsGateway.broadcastInteraction({
+      movieId,
+      type: InteractionType.COMMENT,
+      action: 'added',
+      score,
+      likeCount: stats.likeCount,
+      commentCount: stats.commentCount,
+      viewCount: stats.viewCount,
+    });
+
+    this.interactionProducer.publishInteractionCreated({
+      userId,
+      movieId,
+      action: InteractionType.COMMENT,
+      score,
+      removed: false,
+      createdAt: savedComment.createdAt ?? new Date(),
+    });
+
+    return savedComment;
   }
 
   async findAll(

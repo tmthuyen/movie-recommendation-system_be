@@ -12,30 +12,28 @@ import {
 
 export enum InteractionType {
   LIKE = 'like',
-  DISLIKE = 'dislike',
-  FAVORITE = 'favorite',
-  WATCHLIST = 'watchlist',
   RATING = 'rating',
   COMMENT = 'comment',
   CLICK = 'click',
 }
 
+/** Thang điểm 5 — score biểu thị **độ tin cậy** của tín hiệu, không phải điểm thưởng. */
+export const MAX_INTERACTION_SCORE = 5;
+
 export const InteractionScoreMap: Record<InteractionType, number> = {
-  [InteractionType.LIKE]: 10,
-  [InteractionType.DISLIKE]: 1,
-  [InteractionType.FAVORITE]: 7,
-  [InteractionType.WATCHLIST]: 3,
-  [InteractionType.COMMENT]: 5,
-  [InteractionType.CLICK]: 2,
-  [InteractionType.RATING]: 0, // Dynamic, depends on user input
+  [InteractionType.LIKE]: 5,
+  [InteractionType.COMMENT]: 4,
+  [InteractionType.CLICK]: 1,
+  [InteractionType.RATING]: 0, // Điểm động: đúng bằng số sao người dùng nhập (1..5)
 };
 @Entity('interactions')
-@Index(['user', 'movie', 'type'], { unique: true })
+// Không unique: một user có thể comment/click/rating nhiều lần cho cùng một phim.
+@Index(['user', 'movie', 'type'])
 export class Interaction extends BaseAuditEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
+  @Column({ type: 'float', default: 0 })
   score: number;
 
   @Column()

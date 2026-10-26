@@ -3,6 +3,8 @@ import { DataSource } from 'typeorm';
 import { CommentsService } from './comments.service';
 import { ICommentRepository } from './comments.repository';
 import { EventsGateway } from '@/modules/events/events.gateway';
+import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
+import { MovieInteractionStatsService } from '@/modules/interactions/movie-interaction-stats.service';
 
 describe('CommentsService', () => {
   let service: CommentsService;
@@ -14,6 +16,8 @@ describe('CommentsService', () => {
         { provide: ICommentRepository, useValue: {} },
         { provide: DataSource, useValue: {} },
         { provide: EventsGateway, useValue: {} },
+        { provide: InteractionProducer, useValue: {} },
+        { provide: MovieInteractionStatsService, useValue: {} },
       ],
     }).compile();
 

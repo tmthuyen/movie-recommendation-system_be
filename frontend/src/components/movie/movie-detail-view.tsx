@@ -6,7 +6,6 @@ import { useEffect, useRef } from 'react';
 import { ErrorState } from '@/components/common/ErrorState';
 import { Skeleton } from '@/components/ui/skeleton';
 import useMovie from '@/hooks/tankstack/useMovie';
-import { MovieActions } from './movie-actions';
 import { MovieComments } from './movie-comments';
 import { MovieDetail } from './movie-detail';
 import { MovieRating } from './movie-rating';
@@ -15,7 +14,7 @@ import { SimilarMovies } from './similar-movies';
 function DetailSkeleton() {
   return (
     <div className="space-y-6" aria-hidden="true">
-      <div className="grid gap-6 rounded-2xl border bg-card p-6 md:grid-cols-[280px_1fr] md:p-8">
+      <div className="bg-card grid gap-6 rounded-2xl border p-6 md:grid-cols-[280px_1fr] md:p-8">
         <Skeleton className="aspect-[2/3] w-full rounded-xl" />
         <div className="space-y-4">
           <Skeleton className="h-8 w-2/3" />
@@ -47,7 +46,7 @@ function DetailSkeleton() {
  * vào cache ngay khi server trả về), render các khối thông tin / đánh giá /
  * bình luận / phim tương tự.
  */
-export function MovieDetailView({ id }: { id: string }) {
+export function MovieDetailView({ id }: { id: number }) {
   const { data: movie, isLoading, isError, refetch } = useMovie.useGetMovieDetail(id);
   const incrementView = useMovie.useIncrementView();
 
@@ -111,13 +110,10 @@ export function MovieDetailView({ id }: { id: string }) {
 
       <MovieDetail movie={movie} />
 
-      {/* Tương tác nhanh: thích / không thích / yêu thích / muốn xem (variant detail) */}
-      <div className="flex flex-wrap items-center gap-4">
-        <MovieActions movieId={movie.id} variant="detail" />
-        <p className="text-muted-foreground text-sm">
-          Thích hoặc không thích phim này, thêm vào danh sách của bạn.
-        </p>
-      </div>
+      <p className="text-muted-foreground text-sm">
+        Nhấn <span className="text-foreground font-medium">Yêu thích</span> để thêm phim vào danh
+        sách của bạn.
+      </p>
 
       <MovieRating movie={movie} />
 

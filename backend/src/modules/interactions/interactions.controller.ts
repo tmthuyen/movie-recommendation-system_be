@@ -25,7 +25,7 @@ export class InteractionsController {
   @Post()
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Thêm tương tác mới (Yêu cầu đăng nhập)' })
+  @ApiOperation({ summary: 'Toggle yêu thích phim (Yêu cầu đăng nhập)' })
   async create(
     @Req() req: Request,
     @Body() createInteractionDto: CreateInteractionDto,
@@ -38,12 +38,22 @@ export class InteractionsController {
 
     return {
       success: true,
-
-      statusCode: 201,
-
-      message: 'Success',
-
+      statusCode: 200,
+      message:
+        result.action === 'added' ? 'Đã thêm vào yêu thích' : 'Đã bỏ yêu thích',
       result,
+    };
+  }
+
+  @Get('stats/:movieId')
+  @ApiOperation({ summary: 'Lấy thống kê tương tác của phim (Public)' })
+  async getStats(@Param('movieId') movieId: string) {
+    const stats = await this.interactionsService.getMovieStats(+movieId);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Lấy thống kê tương tác thành công',
+      result: { movieId: +movieId, ...stats },
     };
   }
 
@@ -86,7 +96,7 @@ export class InteractionsController {
   @Get('my-favorites')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Lấy danh sách phim yêu thích của cá nhân' })
+  @ApiOperation({ summary: 'Lấy danh sách phim yêu thích (like) của cá nhân' })
   async getMyFavorites(
     @Req() req: Request,
     @Query() paginationDto: PaginationDto,

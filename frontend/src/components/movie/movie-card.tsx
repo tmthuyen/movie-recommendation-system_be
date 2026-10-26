@@ -19,7 +19,7 @@ interface MovieCardProps {
  * - Click toàn card → `/movies/[id]` (stretched link, `z-10`).
  * - Hover / focus (bàn phím) → overlay hiện thêm thông tin (thể loại, mô tả,
  *   năm, lượt xem). Thiết bị touch (`hover: none`) không dựa vào hover.
- * - Nút tương tác (thích/yêu thích/muốn xem) nằm trên overlay, `z-20`,
+ * - Nút Yêu thích (like) nằm trên overlay, `z-20`,
  *   chặn click xuyên xuống stretched link.
  */
 export function MovieCard({ movie, hideActions = false }: MovieCardProps) {
@@ -32,7 +32,7 @@ export function MovieCard({ movie, hideActions = false }: MovieCardProps) {
   const genres = (movie.genres ?? []).slice(0, 3);
 
   return (
-    <article className="group bg-card text-card-foreground focus-within:ring-ring relative flex flex-col overflow-hidden rounded-lg border shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg focus-within:ring-2">
+    <article className="group bg-card text-card-foreground focus-within:ring-ring relative flex flex-col overflow-hidden rounded-lg border shadow-sm transition-all duration-300 focus-within:ring-2 hover:-translate-y-1 hover:shadow-lg">
       <div className="bg-muted relative aspect-[2/3] w-full overflow-hidden">
         {poster ? (
           <Image
@@ -58,7 +58,7 @@ export function MovieCard({ movie, hideActions = false }: MovieCardProps) {
         {/* Overlay thông tin khi hover/focus — ẩn trên thiết bị không có hover */}
         <div
           aria-hidden="true"
-          className="from-background/95 via-background/75 absolute inset-0 z-10 flex flex-col justify-end gap-1.5 bg-gradient-to-t to-transparent p-3 opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:hidden"
+          className="from-background/95 via-background/75 absolute inset-0 z-10 flex flex-col justify-end gap-1.5 bg-gradient-to-t to-transparent p-3 opacity-0 transition-opacity duration-300 group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:hidden"
         >
           {genres.length > 0 && (
             <div className="flex flex-wrap gap-1">
@@ -73,9 +73,7 @@ export function MovieCard({ movie, hideActions = false }: MovieCardProps) {
             </div>
           )}
           {overview && (
-            <p className="text-muted-foreground line-clamp-3 text-xs leading-relaxed">
-              {overview}
-            </p>
+            <p className="text-muted-foreground line-clamp-3 text-xs leading-relaxed">{overview}</p>
           )}
           <div className="text-muted-foreground flex items-center gap-3 text-xs">
             {year && <span>{year}</span>}

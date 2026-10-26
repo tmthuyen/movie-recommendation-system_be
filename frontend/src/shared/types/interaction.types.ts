@@ -3,16 +3,9 @@ import { Movie } from './movie.types';
 
 /**
  * Kiểu tương tác — khớp enum `InteractionType` của backend
- * (`like`, `dislike`, `favorite`, `watchlist`, `rating`, `comment`, `click`).
+ * (`like`, `rating`, `comment`, `click`).
  */
-export type InteractionType =
-  | 'like'
-  | 'dislike'
-  | 'favorite'
-  | 'watchlist'
-  | 'rating'
-  | 'comment'
-  | 'click';
+export type InteractionType = 'like' | 'rating' | 'comment' | 'click';
 
 /**
  * Tương tác — `GET /api/interactions*`.
@@ -30,12 +23,26 @@ export interface Interaction extends BaseDto {
 }
 
 /**
- * Kết quả `POST /api/interactions` — **TOGGLE**: gọi 1 lần để bật,
+ * Kết quả `POST /api/interactions` — **TOGGLE like**: gọi 1 lần để bật,
  * gọi lại để tắt → đọc `action` (`added`/`removed`).
+ *
+ * `score` là độ tin cậy backend tự tính (band 5) — **không hiển thị** cho user.
  */
 export interface ToggleInteractionResult {
-  success: boolean;
+  success?: boolean;
   action: 'added' | 'removed';
   type: InteractionType;
+  score: number;
+  likeCount: number;
   data?: Interaction;
+}
+
+/** `GET /api/interactions/stats/:movieId` — thống kê realtime của phim. */
+export interface InteractionStats {
+  movieId: number | string;
+  likeCount: number;
+  commentCount: number;
+  viewCount: number;
+  ratingCount: number;
+  voteAverage: number;
 }

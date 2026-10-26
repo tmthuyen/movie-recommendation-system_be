@@ -16,13 +16,12 @@ import { getMovieTitle, getPosterUrl, getReleaseYear } from '@/shared/utils/movi
 
 const PAGE_LIMIT = 12;
 
-/** Nhãn + màu badge theo loại tương tác (history luôn là `click`; favorites hiển thị đúng type). Dùng lại ở trang admin Interaction. */
+/** Nhãn + màu badge theo loại tương tác (history luôn là `click`; favorites là `like`). Dùng lại ở trang admin Interaction. */
 export const TYPE_BADGES: Record<string, { label: string; className: string }> = {
   click: { label: 'Đã xem', className: 'border-border text-muted-foreground' },
-  like: { label: 'Thích', className: 'border-primary/30 bg-primary/10 text-primary' },
-  dislike: { label: 'Không thích', className: 'border-zinc-500/30 bg-zinc-500/10 text-zinc-500' },
-  favorite: { label: 'Yêu thích', className: 'border-red-500/30 bg-red-500/10 text-red-500' },
-  watchlist: { label: 'Muốn xem', className: 'border-amber-500/30 bg-amber-500/10 text-amber-500' },
+  like: { label: 'Yêu thích', className: 'border-red-500/30 bg-red-500/10 text-red-500' },
+  rating: { label: 'Đánh giá', className: 'border-amber-500/30 bg-amber-500/10 text-amber-500' },
+  comment: { label: 'Bình luận', className: 'border-primary/30 bg-primary/10 text-primary' },
 };
 
 function formatDate(value?: Date | string): string {
@@ -45,9 +44,9 @@ function InteractionRow({ interaction }: { interaction: Interaction }) {
     <li>
       <Link
         href={`/movies/${movie.id}`}
-        className="group flex items-center gap-4 rounded-xl border bg-card p-3 transition-colors hover:border-primary/40 hover:bg-accent/50"
+        className="group bg-card hover:border-primary/40 hover:bg-accent/50 flex items-center gap-4 rounded-xl border p-3 transition-colors"
       >
-        <div className="relative h-24 w-16 shrink-0 overflow-hidden rounded-lg bg-muted">
+        <div className="bg-muted relative h-24 w-16 shrink-0 overflow-hidden rounded-lg">
           {poster ? (
             <Image src={poster} alt="" fill sizes="64px" className="object-cover" />
           ) : (
@@ -82,7 +81,7 @@ function InteractionListSkeleton() {
   return (
     <ul className="space-y-3" aria-hidden="true">
       {Array.from({ length: 5 }).map((_, index) => (
-        <li key={index} className="flex items-center gap-4 rounded-xl border bg-card p-3">
+        <li key={index} className="bg-card flex items-center gap-4 rounded-xl border p-3">
           <Skeleton className="h-24 w-16 rounded-lg" />
           <div className="flex-1 space-y-2">
             <Skeleton className="h-5 w-2/3" />
@@ -103,15 +102,14 @@ const SOURCE_CONFIG = {
   favorites: {
     emptyIcon: Heart,
     emptyTitle: 'Chưa có phim yêu thích',
-    emptyDescription:
-      'Hãy thích / yêu thích / muốn xem một bộ phim để chúng xuất hiện tại đây.',
+    emptyDescription: 'Hãy yêu thích một bộ phim để chúng xuất hiện tại đây.',
   },
 } as const;
 
 interface MyInteractionListProps {
   /**
    * Nguồn dữ liệu: `history` (lịch sử xem — `type=click`) hoặc
-   * `favorites` (like/favorite/watchlist) — gọi API tương ứng.
+   * `favorites` (`type=like`) — gọi API tương ứng.
    */
   source: 'history' | 'favorites';
 }
@@ -130,7 +128,7 @@ export function MyInteractionList({ source }: MyInteractionListProps) {
   const favoritesQuery = useInteraction.useMyFavoritesPaged(
     page,
     PAGE_LIMIT,
-    source === 'favorites',
+    source === 'favorites'
   );
 
   const { data, isLoading, isError, isFetching, refetch } =
@@ -176,12 +174,7 @@ export function MyInteractionList({ source }: MyInteractionListProps) {
 
   return (
     <div className="flex w-full flex-col gap-6">
-      <ul
-        className={cn(
-          'space-y-3 transition-opacity',
-          isFetching ? 'opacity-60' : 'opacity-100',
-        )}
-      >
+      <ul className={cn('space-y-3 transition-opacity', isFetching ? 'opacity-60' : 'opacity-100')}>
         {items.map((interaction) => (
           <InteractionRow key={interaction.id} interaction={interaction} />
         ))}

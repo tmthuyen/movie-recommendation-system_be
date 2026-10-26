@@ -20,12 +20,14 @@ export class EventPublisherService {
    * @param eventType The type of the event, equal to the routing key
    * @param payload The payload of the event
    * @param correlationId The correlation ID of the event, trace id in distributed systems
+   * @param routingKey Optional routing key when it differs from the event type
    */
   publish<TPayload>(
     exchange: string,
     eventType: string,
     payload: TPayload,
     correlationId?: string,
+    routingKey?: string,
   ): void {
     const event: EventEnvelope<TPayload> = {
       eventId: randomUUID(),
@@ -39,7 +41,7 @@ export class EventPublisherService {
 
     // Sử dụng publish tới Exchange được chỉ định
     this.channelWrapper
-      .publish(exchange, eventType, event, {
+      .publish(exchange, routingKey ?? eventType, event, {
         persistent: true,
       })
       .catch((error: Error) => {

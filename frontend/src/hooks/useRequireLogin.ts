@@ -5,7 +5,7 @@ import { useRequireLoginStore } from '@/stores/require-login.store';
 import { useCallback } from 'react';
 
 /**
- * Guard đăng nhập cho các tương tác cần JWT (thích/yêu thích/đánh giá/bình luận…):
+ * Guard đăng nhập cho các tương tác cần JWT (yêu thích/đánh giá/bình luận…):
  * - Đã đăng nhập → trả `true`, component cho phép thực hiện tiếp.
  * - Chưa đăng nhập → mở **hộp thoại** yêu cầu đăng nhập (không redirect ngay), trả `false`.
  *

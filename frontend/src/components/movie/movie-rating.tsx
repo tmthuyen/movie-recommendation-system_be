@@ -1,7 +1,7 @@
 'use client';
 
 import { Star } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import useRating from '@/hooks/tankstack/useRating';
 import { useRequireLogin } from '@/hooks/useRequireLogin';
 import { useMovieSocket } from '@/hooks/useMovieSocket';
@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 interface MovieRatingProps {
   /** Phim đang hiển thị. */
   movie: {
-    id: number | string;
+    id: number;
     voteAverage?: number;
     voteCount?: number;
   };
@@ -34,7 +34,7 @@ export function MovieRating({ movie }: MovieRatingProps) {
 
   const createRating = useRating.useCreateRating(movie.id);
 
-  // Realtime: cập nhật voteAverage/voteCount khi user khác đánh giá
+  // Realtime: cập nhật voteAverage/voteCount khi user khác đánh giá (và cả chính user)
   useMovieSocket({
     movieId: movie.id,
     onRating: (payload) => {
@@ -43,6 +43,17 @@ export function MovieRating({ movie }: MovieRatingProps) {
         setStats({
           voteAverage: Number(next.voteAverage) || 0,
           voteCount: Number(next.voteCount) || 0,
+        });
+        return;
+      }
+      // Also handle direct fields if present
+      if (
+        typeof (payload as any)?.voteAverage === 'number' ||
+        typeof (payload as any)?.voteCount === 'number'
+      ) {
+        setStats({
+          voteAverage: Number((payload as any).voteAverage) || stats.voteAverage,
+          voteCount: Number((payload as any).voteCount) || stats.voteCount,
         });
       }
     },
@@ -61,7 +72,9 @@ export function MovieRating({ movie }: MovieRatingProps) {
       className="bg-card flex flex-wrap items-center justify-between gap-4 rounded-xl border p-4"
     >
       <div className="flex items-baseline gap-3">
-        <span className="text-3xl font-extrabold tabular-nums">{stats.voteAverage.toFixed(1)}</span>
+        <span className="text-3xl font-extrabold tabular-nums">
+          {Number(stats.voteAverage || 0).toFixed(1)}
+        </span>
         <div className="text-muted-foreground text-sm">
           <div className="text-foreground mb-0.5 flex items-center gap-0.5" aria-hidden="true">
             {Array.from({ length: 5 }).map((_, index) => (
@@ -69,7 +82,9 @@ export function MovieRating({ movie }: MovieRatingProps) {
                 key={index}
                 className={cn(
                   'size-4',
-                  index < displayStar ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground/40 fill-muted-foreground/20',
+                  index < displayStar
+                    ? 'fill-yellow-400 text-yellow-400'
+                    : 'text-muted-foreground/40 fill-muted-foreground/20'
                 )}
               />
             ))}
@@ -94,10 +109,10 @@ export function MovieRating({ movie }: MovieRatingProps) {
               onFocus={() => setHoverStar(value)}
               onBlur={() => setHoverStar(0)}
               className={cn(
-                'rounded p-1.5 transition-all hover:bg-accent focus-visible:ring-ring cursor-pointer focus-visible:ring-2 focus-visible:outline-none active:scale-90 disabled:cursor-not-allowed disabled:opacity-50',
+                'hover:bg-accent focus-visible:ring-ring cursor-pointer rounded p-1.5 transition-all focus-visible:ring-2 focus-visible:outline-none active:scale-90 disabled:cursor-not-allowed disabled:opacity-50',
                 value <= displayStar
                   ? 'text-yellow-500'
-                  : 'text-muted-foreground hover:text-muted-foreground/80',
+                  : 'text-muted-foreground hover:text-muted-foreground/80'
               )}
             >
               <Star className="size-6" />

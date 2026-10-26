@@ -9,7 +9,7 @@ import { EventsGateway } from '@/modules/events/events.gateway';
 import {
   Interaction,
   InteractionType,
-  InteractionScoreMap,
+  MAX_INTERACTION_SCORE,
 } from '@/modules/interactions/entities/interaction.entity';
 import { Movie } from './entities/movie.entity';
 import { Genre } from '@/modules/genres/entities/genre.entity';
@@ -20,6 +20,8 @@ import {
   MovieCreatedPayload,
   MovieUpdatedPayload,
 } from '@/infrastructure/messaging/event.types';
+import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
+import { MovieInteractionStatsService } from '@/modules/interactions/movie-interaction-stats.service';
 
 @Injectable()
 export class MoviesService {
@@ -31,6 +33,8 @@ export class MoviesService {
     private readonly movieProducer: MovieProducer,
     private readonly dataSource: DataSource,
     private readonly eventsGateway: EventsGateway,
+    private readonly interactionProducer: InteractionProducer,
+    private readonly statsService: MovieInteractionStatsService,
   ) {}
 
   private mapDtoToEntity(dto: any) {
@@ -206,39 +210,96 @@ export class MoviesService {
   async incrementViewCount(id: number, userId?: string) {
     const movie = await this.findOne(id);
 
-    await this.dataSource.transaction(async manager => {
-      // 1. Increment view count in Movie
+    const {
+      score,
+      interaction: interactionState,
+      createdInteraction,
+    } = await this.dataSource.transaction(async manager => {
+      // 1. Luôn tăng viewCount (kể cả guest)
       movie.viewCount = Number(movie.viewCount) + 1;
       await manager.update(Movie, movie.id, { viewCount: movie.viewCount });
 
-      // 2. Log interaction if user is logged in
-      if (userId) {
-        const existingInteraction = await manager.findOne(Interaction, {
-          where: {
-            user: { id: userId } as any,
-            movie: { id: movie.id } as any,
-            type: InteractionType.CLICK,
-          },
-        });
-
-        if (existingInteraction) {
-          // Anti-spam for CLICK: do not increase score, just update (e.g. if we had updatedAt)
-          // For now, we do nothing to avoid spamming the database with duplicate clicks.
-        } else {
-          const interaction = manager.create(Interaction, {
-            score: InteractionScoreMap[InteractionType.CLICK],
-            type: InteractionType.CLICK,
-            movie: { id: movie.id } as any,
-            user: { id: userId } as any,
-          });
-          await manager.save(interaction);
-        }
+      // 2. User đăng nhập: tạo mới hoặc tăng độ tin cậy của click
+      if (!userId) {
+        return {
+          score: 0,
+          interaction: 'none' as const,
+          createdInteraction: null,
+        };
       }
+
+      const existingInteraction = await manager.findOne(Interaction, {
+        where: {
+          user: { id: userId } as any,
+          movie: { id: movie.id } as any,
+          type: InteractionType.CLICK,
+        },
+      });
+
+      if (existingInteraction) {
+        // Xem lại: tăng độ tin cậy, tối đa band 5; KHÔNG publish lại (tránh spam AI)
+        const nextScore = Math.min(
+          MAX_INTERACTION_SCORE,
+          Number(existingInteraction.score) + 1,
+        );
+        await manager.update(Interaction, existingInteraction.id, {
+          score: nextScore,
+        });
+        return {
+          score: nextScore,
+          interaction: 'updated' as const,
+          createdInteraction: null,
+        };
+      }
+
+      const initialScore = 1;
+      const interaction = manager.create(Interaction, {
+        score: initialScore,
+        type: InteractionType.CLICK,
+        movie: { id: movie.id } as any,
+        user: { id: userId } as any,
+      });
+      const created = await manager.save(interaction);
+      return {
+        score: initialScore,
+        interaction: 'created' as const,
+        createdInteraction: created,
+      };
     });
 
-    // 3. Emit real-time event
-    this.eventsGateway.broadcastViewCount(movie.id, movie.viewCount);
+    // 3. Realtime sau commit
+    const numericMovieId = Number(movie.id);
+    this.eventsGateway.broadcastViewCount(numericMovieId, movie.viewCount);
 
-    return { viewCount: movie.viewCount };
+    if (userId && interactionState !== 'none') {
+      const stats = await this.statsService.getStats(numericMovieId);
+      this.eventsGateway.broadcastInteraction({
+        movieId: numericMovieId,
+        type: InteractionType.CLICK,
+        action: interactionState === 'updated' ? 'updated' : 'added',
+        score,
+        likeCount: stats.likeCount,
+        commentCount: stats.commentCount,
+        viewCount: stats.viewCount,
+      });
+    }
+
+    // 4. Chỉ publish khi TẠO MỚI click (update lấy confidence qua training.batch)
+    if (userId && interactionState === 'created' && createdInteraction) {
+      this.interactionProducer.publishInteractionCreated({
+        userId,
+        movieId: numericMovieId,
+        action: InteractionType.CLICK,
+        score,
+        removed: false,
+        createdAt: createdInteraction.createdAt ?? new Date(),
+      });
+    }
+
+    return {
+      viewCount: movie.viewCount,
+      score,
+      interaction: interactionState,
+    };
   }
 }

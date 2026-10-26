@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { RatingsService } from './ratings.service';
 import { IRatingRepository } from './ratings.repository';
 import { EventsGateway } from '@/modules/events/events.gateway';
+import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
 
 describe('RatingsService', () => {
   let service: RatingsService;
@@ -14,6 +15,7 @@ describe('RatingsService', () => {
         { provide: IRatingRepository, useValue: {} },
         { provide: DataSource, useValue: {} },
         { provide: EventsGateway, useValue: {} },
+        { provide: InteractionProducer, useValue: {} },
       ],
     }).compile();
 

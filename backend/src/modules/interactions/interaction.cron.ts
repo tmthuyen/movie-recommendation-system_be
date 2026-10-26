@@ -72,9 +72,10 @@ export class InteractionCronService {
           userId: sr.userId.toString(),
           movieId: sr.movieId,
           // For seed ratings, action could be considered 'rate' or 'like' depending on your model.
-          // Let's use 'rate' and pass the explicit score.
-          action: 'rate',
+          // Let's use 'rating' and pass the explicit score.
+          action: 'rating',
           score: sr.score,
+          removed: false,
           createdAt: sr.createdAt,
         }),
       );
@@ -116,6 +117,7 @@ export class InteractionCronService {
         movieId: i.movie?.id,
         action: i.type?.toLowerCase(),
         score: i.score,
+        removed: false,
         createdAt: i.createdAt,
       }),
     );

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
+import type { Comment } from '@/shared/types/comment.types';
 
 /**
  * URL của Socket.IO — backend chạy HTTP API + WS cùng cổng (8081).
@@ -12,7 +13,10 @@ function getSocketUrl(): string {
   return baseUrl.replace(/\/api\/?$/, '');
 }
 
-/** Socket dùng chung cho các thao tác emit (gõ bình luận…). */
+/**
+ * **Một** socket dùng chung cho toàn app (tránh mở nhiều connection cho mỗi
+ * widget ở trang chi tiết). Các hook chỉ subscribe/unsubscribe listener.
+ */
 let sharedSocket: Socket | null = null;
 function getSharedSocket(): Socket {
   if (!sharedSocket) {
@@ -36,72 +40,98 @@ export interface MovieViewCountPayload {
 
 export interface MovieRatingPayload {
   movieStats?: { voteCount: number; voteAverage: number };
-  [key: string]: any;
+  [key: string]: unknown;
+}
+
+/** Payload `movie-{id}-interaction` — broadcast sau like/comment/click. */
+export interface MovieInteractionPayload {
+  movieId: number | string;
+  type: string;
+  action: 'added' | 'removed' | 'updated';
+  score: number;
+  likeCount: number;
+  commentCount: number;
+  viewCount: number;
 }
 
 interface UseMovieSocketOptions {
   movieId: number | string;
-  onComment?: (comment: any) => void;
+  /** `false` để tạm không subscribe (ví dụ card chỉ hiển thị nút). */
+  enabled?: boolean;
+  onComment?: (comment: Comment) => void;
   onRating?: (payload: MovieRatingPayload) => void;
   onViewCount?: (payload: MovieViewCountPayload) => void;
   onTyping?: (payload: MovieTypingPayload) => void;
+  onInteraction?: (payload: MovieInteractionPayload) => void;
 }
 
 /**
- * Kết nối Socket.IO tới backend và subscribe các event realtime theo phim:
+ * Subscribe các event realtime theo phim trên **socket dùng chung**:
  * `movie-{id}-comment`, `movie-{id}-rating`, `movie-{id}-viewCount`,
- * `movie-{id}-typing`. Cleanup khi unmount.
+ * `movie-{id}-typing`, `movie-{id}-interaction`. Cleanup khi unmount.
  *
- * Handler được giữ trong ref nên callback mới không gây reconnect.
+ * Handler được giữ trong ref nên callback mới không gây subscribe lại.
  */
 export function useMovieSocket({
   movieId,
+  enabled = true,
   onComment,
   onRating,
   onViewCount,
   onTyping,
+  onInteraction,
 }: UseMovieSocketOptions) {
-  const socketRef = useRef<Socket | null>(null);
-  const handlersRef = useRef({ onComment, onRating, onViewCount, onTyping });
+  const handlersRef = useRef({
+    onComment,
+    onRating,
+    onViewCount,
+    onTyping,
+    onInteraction,
+  });
   // Cập nhật handler ref trong effect (không ghi ref trong render — react-hooks/refs)
   useEffect(() => {
-    handlersRef.current = { onComment, onRating, onViewCount, onTyping };
+    handlersRef.current = {
+      onComment,
+      onRating,
+      onViewCount,
+      onTyping,
+      onInteraction,
+    };
   });
 
   useEffect(() => {
-    if (!movieId) return;
+    if (!movieId || !enabled) return;
 
-    const socket = io(getSocketUrl(), {
-      transports: ['websocket', 'polling'],
-      reconnectionAttempts: 5,
-    });
-    socketRef.current = socket;
+    const socket = getSharedSocket();
 
     const commentEvent = `movie-${movieId}-comment`;
     const ratingEvent = `movie-${movieId}-rating`;
     const viewCountEvent = `movie-${movieId}-viewCount`;
     const typingEvent = `movie-${movieId}-typing`;
+    const interactionEvent = `movie-${movieId}-interaction`;
 
-    socket.on(commentEvent, (comment: any) => handlersRef.current.onComment?.(comment));
-    socket.on(ratingEvent, (payload: MovieRatingPayload) =>
-      handlersRef.current.onRating?.(payload),
-    );
-    socket.on(viewCountEvent, (payload: MovieViewCountPayload) =>
-      handlersRef.current.onViewCount?.(payload),
-    );
-    socket.on(typingEvent, (payload: MovieTypingPayload) =>
-      handlersRef.current.onTyping?.(payload),
-    );
+    const handleComment = (comment: Comment) => handlersRef.current.onComment?.(comment);
+    const handleRating = (payload: MovieRatingPayload) => handlersRef.current.onRating?.(payload);
+    const handleViewCount = (payload: MovieViewCountPayload) =>
+      handlersRef.current.onViewCount?.(payload);
+    const handleTyping = (payload: MovieTypingPayload) => handlersRef.current.onTyping?.(payload);
+    const handleInteraction = (payload: MovieInteractionPayload) =>
+      handlersRef.current.onInteraction?.(payload);
+
+    socket.on(commentEvent, handleComment);
+    socket.on(ratingEvent, handleRating);
+    socket.on(viewCountEvent, handleViewCount);
+    socket.on(typingEvent, handleTyping);
+    socket.on(interactionEvent, handleInteraction);
 
     return () => {
-      socket.off(commentEvent);
-      socket.off(ratingEvent);
-      socket.off(viewCountEvent);
-      socket.off(typingEvent);
-      socket.disconnect();
-      socketRef.current = null;
+      socket.off(commentEvent, handleComment);
+      socket.off(ratingEvent, handleRating);
+      socket.off(viewCountEvent, handleViewCount);
+      socket.off(typingEvent, handleTyping);
+      socket.off(interactionEvent, handleInteraction);
     };
-  }, [movieId]);
+  }, [movieId, enabled]);
 }
 
 /**
@@ -111,11 +141,28 @@ export function useMovieSocket({
 export function emitTypingComment(
   movieId: number | string,
   isTyping: boolean,
-  userFullName?: string,
+  userFullName?: string
 ) {
   getSharedSocket().emit('typingComment', {
     movieId: Number(movieId),
     isTyping,
     userFullName,
   });
+}
+
+export function emitToggleLike(movieId: number | string, token?: string | null) {
+  // Disabled: use REST mutations with WS broadcast
+}
+
+export function emitCreateRating(movieId: number | string, rating: number, token?: string | null) {
+  // Disabled: use REST mutations with WS broadcast
+}
+
+export function emitCreateComment(
+  movieId: number | string,
+  content: string,
+  token?: string | null,
+  parentId?: number | string
+) {
+  // Disabled: use REST mutations with WS broadcast
 }

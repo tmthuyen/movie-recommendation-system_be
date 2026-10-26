@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventPublisherService } from '@/infrastructure/messaging/event-publisher.service';
-import { MESSAGE_BUS_CONFIG } from '@/infrastructure/messaging/messaging.constants';
+import {
+  MESSAGE_BUS_CONFIG,
+  MESSAGE_EVENTS,
+} from '@/infrastructure/messaging/messaging.constants';
 import { InteractionCreatedPayload } from '@/infrastructure/messaging/event.types';
 
 @Injectable()
@@ -10,7 +13,8 @@ export class InteractionProducer {
   constructor(private readonly eventPublisher: EventPublisherService) {}
 
   /**
-   * Publish a real-time interaction event for EMA update
+   * Publish a real-time interaction event for EMA update.
+   * `eventType=interaction.created`; routing key giữ `interaction.event`.
    */
   publishInteractionCreated(
     payload: InteractionCreatedPayload,
@@ -21,9 +25,10 @@ export class InteractionProducer {
     );
     this.eventPublisher.publish(
       MESSAGE_BUS_CONFIG.INTERACTION_EXCHANGE,
-      MESSAGE_BUS_CONFIG.INTERACTION_EVENT_RK,
+      MESSAGE_EVENTS.INTERACTION_CREATED,
       payload,
       correlationId,
+      MESSAGE_BUS_CONFIG.INTERACTION_EVENT_RK,
     );
   }
 

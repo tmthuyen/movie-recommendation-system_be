@@ -9,7 +9,7 @@
 
 - REST API cho toàn bộ nghiệp vụ: auth, users/RBAC, movies, genres/countries/peoples, ratings, comments, interactions, files, failed-events, health.
 - Xác thực bằng **JWT (Bearer)** + **refresh token trong cookie (httpOnly)** + session lưu trên **Redis**; OAuth **Google**.
-- Real-time qua **Socket.IO** (comment/rating/viewCount/typing theo phim).
+- Real-time qua **Socket.IO** (comment/rating/viewCount/typing/interaction theo phim).
 - Đồng bộ dữ liệu với `ai-service/` **hoàn toàn qua RabbitMQ** (không HTTP-call giữa backend ↔ ai-service).
 - **Không có endpoint recommendation trong backend** — recommendation do `ai-service/` cung cấp (`/api/recommendations`).
 
@@ -91,9 +91,9 @@ backend/src/
 │   ├── permissions/    # STUB placeholder (chưa triển khai thật)
 │   ├── movies/         # CRUD + view count + RabbitMQ movie.*; entities Movie, MoviePeople
 │   ├── genres/ countries/ peoples/     # CRUD đồng nhất
-│   ├── ratings/        # CRUD rating + transaction cập nhật voteAverage/voteCount + WS; entities Rating, SeedRating
-│   ├── comments/       # CRUD comment phân cấp (parentId) + WS; entity Comment
-│   ├── interactions/   # TOGGLE tương tác + publish interaction.event; entity Interaction; interaction.cron.ts
+│   ├── ratings/        # CRUD rating + transaction cập nhật voteAverage/voteCount + WS + publish interaction.created; entities Rating, SeedRating
+│   ├── comments/       # CRUD comment phân cấp (parentId) + WS + publish interaction.created; entity Comment
+│   ├── interactions/   # TOGGLE like + stats + WS + publish interaction.created; entity Interaction; interaction.cron.ts
 │   ├── files/          # upload file chung (S3/R2)
 │   ├── failed-events/  # danh sách message rớt DLQ + retry thủ công
 │   ├── events/         # EventsGateway (Socket.IO)
@@ -230,7 +230,7 @@ JWT payload: `{sub, fullName, email, scopes, sessionId, jti}`. `JwtStrategy` ki�
 | POST | `/api/movies/test-created` | **Public** (guard bị comment) | `CreateMovieDto` | `result: undefined` (bị lược khỏi JSON) | test publish event (movieId cứng 101000) |
 | GET | `/api/movies` | Public | query `{page, limit, keyword}` — keyword ILIKE `title` OR `titleVi` | movie[] + `pagination` | join `genres`, `country`, `moviePeoples.people`; sort `createdAt DESC` |
 | GET | `/api/movies/:id` | Public | path `id` (number) | movie (kèm relations) | `404` nếu không thấy |
-| POST | `/api/movies/:id/view` | **Optional JWT** | path `id` | `{viewCount}` | transaction: +`viewCount`; nếu đã đăng nhập ghi Interaction `click` (anti-spam: tối đa 1 lần/user/movie); WS `movie-{id}-viewCount` |
+| POST | `/api/movies/:id/view` | **Optional JWT** | path `id` | `{viewCount, score, interaction: 'created'\|'updated'\|'none'}` | transaction: luôn +`viewCount`; nếu đã đăng nhập: tạo Interaction `click` (score 1, publish MQ) hoặc xem lại → `score = min(5, score+1)` (không publish lại); WS `movie-{id}-viewCount` + `movie-{id}-interaction` (chỉ khi user đăng nhập) |
 | PATCH | `/api/movies/:id` | JWT + `@Roles` **⚠** | `UpdateMovieDto` = Partial(`CreateMovieDto`) | movie | publish `movie.updated` nếu đổi title/titleVi/overview/overviewVi/genreIds/peopleIds |
 | DELETE | `/api/movies/:id` | JWT + `@Roles` **⚠** | path `id` | `{success: true}` | publish `movie.deleted` |
 
@@ -270,7 +270,7 @@ JWT payload: `{sub, fullName, email, scopes, sessionId, jti}`. `JwtStrategy` ki�
 
 | Method | Path | Auth | Request | Response `result` | Ghi chú |
 |---|---|---|---|---|---|
-| POST | `/api/ratings` | JWT | `CreateRatingDto` `{rating: 0–5, movieId}` | rating đã lưu | `201`; **transaction**: tạo Rating + Interaction (`type=rating`, `score=rating`) + cập nhật lại `voteAverage`/`voteCount` của movie; WS `movie-{id}-rating` (payload kèm `movieStats`) |
+| POST | `/api/ratings` | JWT | `CreateRatingDto` `{rating: 0–5, movieId}` | rating đã lưu | `201`; **transaction**: tạo Rating + Interaction (`type=rating`, `score=rating`) + cập nhật lại `voteAverage`/`voteCount` của movie; **sau commit**: WS `movie-{id}-rating` (payload kèm `movieStats`) + publish `interaction.created` (`score=rating`) |
 | GET | `/api/ratings` | Public | `{page, limit}` | rating[] + `pagination` | join `user`, `movie` |
 | GET | `/api/ratings/movie/:movieId` | Public | `{page, limit}` | rating[] + `pagination` | join `user` |
 | GET | `/api/ratings/:id` | Public | — | rating (user + movie) | |
@@ -283,7 +283,7 @@ Rating unique theo (user, movie).
 
 | Method | Path | Auth | Request | Response `result` | Ghi chú |
 |---|---|---|---|---|---|
-| POST | `/api/comments` | JWT | `CreateCommentDto` `{content, movieId, parentId?}` | comment đã lưu | `201`; **transaction**: Comment + Interaction (`comment`, score 5); WS `movie-{id}-comment` |
+| POST | `/api/comments` | JWT | `CreateCommentDto` `{content, movieId, parentId?}` | comment đã lưu | `201`; **transaction**: Comment + Interaction (`comment`, `score=4`); **sau commit**: WS `movie-{id}-comment` + `movie-{id}-interaction` + publish `interaction.created` (`score=4`) |
 | GET | `/api/comments` | Public | `{page, limit}` | comment[] + `pagination` | join `user`, `movie`; sort `createdAt DESC` |
 | GET | `/api/comments/movie/:movieId` | Public | `{page, limit}` + query `parentId?` | comment[] + `pagination` | không truyền `parentId` → lấy root (`parentId IS NULL`); mỗi item có thêm **`replyCount`** (số reply trực tiếp) |
 | GET | `/api/comments/:id` | Public | — | comment (user + movie) | |
@@ -294,14 +294,15 @@ Rating unique theo (user, movie).
 
 | Method | Path | Auth | Request | Response `result` | Ghi chú |
 |---|---|---|---|---|---|
-| POST | `/api/interactions` | JWT | `CreateInteractionDto` `{score, type, movieId}` — `type` ∈ `like, dislike, favorite, watchlist, rating, comment, click` | **`{success, action: 'added'\|'removed', type, data?}`** | **TOGGLE**: đã tồn tại (user+movie+type) → xóa, `action='removed'`; chưa → tạo với `score = InteractionScoreMap[type]`, publish `interaction.event` (chỉ khi thêm), `action='added'` + `data` |
+| POST | `/api/interactions` | JWT | `CreateInteractionDto` `{type: 'like', movieId}` — **chỉ like** | `{action: 'added'\|'removed', type, score, likeCount, data?}` | **TOGGLE like**: đã tồn tại (user+movie+like) → xóa, `action='removed'`, publish `interaction.created` (`score=-5`, `removed=true`); chưa → tạo với `score=5`, publish (`removed=false`), `action='added'` + `data`; cả 2 trường hợp đều WS `movie-{id}-interaction` |
+| GET | `/api/interactions/stats/:movieId` | Public | path `movieId` | `{movieId, likeCount, commentCount, viewCount, ratingCount, voteAverage}` | aggregate 1 query; `404` nếu phim không tồn tại |
 | GET | `/api/interactions` | Public | `{page, limit}` | interaction[] + `pagination` | join `user`, `movie` |
 | GET | `/api/interactions/my-history` | JWT | `{page, limit}` | interaction[] + `pagination` | chỉ `type=click` (lịch sử xem), join `movie` |
-| GET | `/api/interactions/my-favorites` | JWT | `{page, limit}` | interaction[] + `pagination` | `type ∈ like, favorite, watchlist` |
+| GET | `/api/interactions/my-favorites` | JWT | `{page, limit}` | interaction[] + `pagination` | chỉ `type=like` |
 | GET | `/api/interactions/:id` | Public | — | interaction | |
 | DELETE | `/api/interactions/:id` | JWT | — | `{success: true}` | |
 
-`InteractionScoreMap`: `like=10`, `favorite=7`, `comment=5`, `watchlist=3`, `click=2`, `dislike=1`, `rating=0` (động, lấy đúng điểm user nhập).
+`InteractionScoreMap` (band 5 = **độ tin cậy**, không hiển thị cho user): `like=5`, `comment=4`, `click=1` (tăng dần tối đa 5 khi xem lại), `rating=0` (động, lấy đúng số sao user nhập). Enum chỉ còn `like/rating/comment/click`; index `(user, movie, type)` **không unique** (cho phép nhiều comment/click/rating cùng phim).
 
 ### Module `files` — `/api/files` (class-level `JwtAuthGuard`)
 
@@ -331,6 +332,7 @@ Socket.IO server chạy **cùng cổng 8081**, CORS `origin: '*'` (`src/modules/
 | Server → Client | `movie-{movieId}-comment` | `Comment` vừa tạo (đã lưu) | sau `POST /api/comments` thành công |
 | Server → Client | `movie-{movieId}-rating` | `Rating` + `movieStats: {voteCount, voteAverage}` | sau `POST /api/ratings` thành công |
 | Server → Client | `movie-{movieId}-viewCount` | `{movieId, viewCount}` | sau `POST /api/movies/:id/view` |
+| Server → Client | `movie-{movieId}-interaction` | `{movieId, type, action: 'added'\|'removed'\|'updated', score, likeCount, commentCount, viewCount}` | sau like/unlike (`POST /api/interactions`), comment, click (user đăng nhập); rating dùng event `movie-{movieId}-rating` |
 | Server → Client | `movie-{movieId}-typing` | `{isTyping: boolean, userFullName: string}` | khi client khác gửi `typingComment` (broadcast) |
 | Client → Server | `typingComment` | `{movieId: number, isTyping: boolean, userFullName?: string}` | người dùng đang gõ bình luận |
 
@@ -350,10 +352,10 @@ Backend là **producer** cho 3 exchange topic (durable, `assertExchange` trong `
 | `user.exchange` | `user.deleted` | `UsersService.remove` | `{userId}` | ai-service |
 | `user.exchange` | `user.email_verification.requested` | register / send-verification-email (khi `ASYNC_MAIL_ENABLED=true`) | `{userId, email, verificationToken}` | (mail worker) |
 | `user.exchange` | `user.email_verified` | `POST /api/auth/verify-email` | `{userId, email?}` | ai-service |
-| `interaction.exchange` | `interaction.event` | `POST /api/interactions` (toggle ON) | `{userId, movieId, action, rating}` | ai-service (cập nhật vector real-time) |
-| `interaction.exchange` | `training.batch` | cron `InteractionCronService` | `{interactions: [{userId, movieId, action, rating, createdAt}]}` | ai-service (training ALS) |
+| `interaction.exchange` | `interaction.event` | `POST /api/interactions` (like/unlike), `POST /api/ratings`, `POST /api/comments`, `POST /api/movies/:id/view` (chỉ lần click đầu) | `{userId, movieId, action, score, removed, createdAt}` — `eventType='interaction.created'`; unlike: `score=-5`, `removed=true` | ai-service (cập nhật vector real-time) |
+| `interaction.exchange` | `training.batch` | cron `InteractionCronService` | `{interactions: [{userId, movieId, action, score, removed, createdAt}]}` — seed ratings + toàn bộ interactions app | ai-service (training ALS) |
 
-**Routing key / binding (hằng trong `messaging.constants.ts`)**: `movie.#` → `movie.queue`, `user.#` → `user.queue`, `interaction.event` / `training.batch` → `interaction.queue` (queue do ai-service/infra định nghĩa).
+**Routing key / binding (hằng trong `messaging.constants.ts`)**: `movie.#` → `movie.queue`, `user.#` → `user.queue`, `interaction.event` / `training.batch` → `interaction.queue` (queue do ai-service/infra định nghĩa). Lưu ý: `eventType` của sự kiện tương tác là `interaction.created`, routing key giữ `interaction.event`.
 
 **DLQ flow (backend là consumer DLQ, ghi vào bảng `failed_events`)**:
 
@@ -383,9 +385,9 @@ TypeORM + PostgreSQL, `synchronize: true` (**không migration**). Mọi entity k
 | `People` (`peoples`) | `id` number | `fullName`, `birthDate`, `nationality`, `gender`, `mainRole` (mặc định `actor`); 1-n `moviePeoples` |
 | `MoviePeople` (`movie_peoples`) | kép `movieId` + `peopleId` | n-1 `movie`, n-1 `people`, `role` varchar(50) |
 | `Rating` (`ratings`) | `id` number | `rating` float, `timestamp`; n-1 `user`, `movie`; **unique (user, movie)** |
-| `SeedRating` (`seed_ratings`) | `id` number | `score` (float, base 10), `userId` varchar, `movieId` bigint; unique (movieId, userId) — dữ liệu seed cho training |
+| `SeedRating` (`seed_ratings`) | `id` number | `score` (float, band 5), `userId` varchar, `movieId` bigint; unique (movieId, userId) — dữ liệu seed cho training |
 | `Comment` (`comments`) | `id` number | `content` text, `parentId` bigint (null = root); n-1 `user`, `movie` |
-| `Interaction` (`interactions`) | `id` number | `score`, `type` enum `like/dislike/favorite/watchlist/rating/comment/click`; n-1 `user`, `movie`; **unique (user, movie, type)** |
+| `Interaction` (`interactions`) | `id` number | `score` float (band 5 = độ tin cậy), `type` enum `like/rating/comment/click`; n-1 `user`, `movie`; index `(user, movie, type)` **không unique** |
 | `FailedEvent` (`failed_events`) | `id` uuid | `source`, `queueName`, `routingKey`, `eventId` unique, `eventType`, `correlationId`, `payload` json, `errorReason`, `status` `PENDING/RETRIED_SUCCESS/RETRIED_FAILED`, `retryCount` |
 | `Permission` (`permissions`) | — | entity có trong module permissions nhưng **chưa dùng** (module là stub) |
 
@@ -429,8 +431,8 @@ Vượt limit → HTTP **429 Too Many Requests** với message của decorator (
    - Quy tắc: `401` = chưa đăng nhập/token sai/hết hạn; `403` = sai quyền (chỉ xảy ra thật ở `GET /api/roles`).
    - Google OAuth: `GET /api/auth/google` → callback set cookie → redirect `${FRONTEND_URL}/auth/google-success`.
 4. **Validation strict**: `forbidNonWhitelisted` → không gửi field thừa; field body/query có thể gửi snake_case (interceptor đổi sang camelCase).
-5. **Interactions là TOGGLE**: `POST /api/interactions` gọi 1 lần để bật, gọi lại để tắt — đọc `result.action` (`added`/`removed`) thay vì giả định luôn tạo mới. `POST /api/movies/:id/view` là Optional JWT (tăng view kể cả khi chưa đăng nhập).
-6. **Real-time**: kết nối Socket.IO tới `http://localhost:8081` rồi subscribe `movie-{id}-comment`, `movie-{id}-rating`, `movie-{id}-viewCount`, `movie-{id}-typing`; gửi `typingComment` khi người dùng gõ.
+5. **Interactions là TOGGLE like**: `POST /api/interactions` gọi 1 lần để thích, gọi lại để bỏ — đọc `result.action` (`added`/`removed`); client **không gửi `score`** (backend tự tính band 5) và `result.likeCount` phục vụ cập nhật số like. `POST /api/movies/:id/view` là Optional JWT (tăng view kể cả khi chưa đăng nhập; chỉ user đăng nhập mới tạo/tăng `click`).
+6. **Real-time**: kết nối Socket.IO tới `http://localhost:8081` rồi subscribe `movie-{id}-comment`, `movie-{id}-rating`, `movie-{id}-interaction`, `movie-{id}-viewCount`, `movie-{id}-typing`; gửi `typingComment` khi người dùng gõ.
 7. **Không có endpoint recommendation trong backend**: gợi ý nằm ở ai-service — gọi qua Kong `http://localhost:8000/api/recommendations/...` hoặc trực tiếp `http://localhost:8082/api/recommendations/...`. Backend chỉ trao đổi với ai-service qua RabbitMQ.
 8. **Phân quyền thực tế**: `@Roles` chưa được enforce ở hầu hết module (RolesGuard chỉ gắn ở `/api/roles`). Đừng dựa vào `@Roles` để bảo vệ UI/API phía client — kiểm tra `roles` trong `GET /api/auth/me`.
 9. **Đổi mật khẩu** (`PATCH /api/auth/change-password`) sẽ logout toàn bộ phiên → client cần đăng nhập lại.

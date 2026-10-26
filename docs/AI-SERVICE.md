@@ -11,9 +11,9 @@
 
 Service dự kiến chạy trên **port 8082** (AI APIs: `http://localhost:8082/api`), dùng **FastAPI**, giao tiếp với backend NestJS qua **RabbitMQ**, và có OpenTelemetry cho quan sát.
 
-> ⚠️ **Trạng thái thực tế hiện tại**: Service đang ở **giai đoạn scaffold/khoi tạo dữ liệu**.
-> - ✅ **Đã xong**: thu thập dữ liệu MovieLens + TMDB metadata tiếng Việt (~7.912 phim), bộ toolkit làm sạch văn bản tiếng Việt.
-> - ❌ **Chưa có**: route API, embedding/vector DB, thuật toán collaborative filtering, RabbitMQ, và Dockerfile đang lỗi (CMD trỏ tới `src.api.web_app:app` nhưng file này **không tồn tại**, `src/api/server.py` còn là stub không import được `FastAPI`).
+> ⚠️ **Trạng thái thực tế (cập nhật 2026-10-26)**:
+> - ✅ **Đã có**: FastAPI `src/api/server.py` (port 8082, prefix `/api/recommendations`), embedding + Chroma vector DB, ALS collaborative filtering, RabbitMQ consumer (`recommendation.queue` + `interaction.queue`), Redis, OpenTelemetry, TrainingScheduler.
+> - ⚠️ **Còn tồn tại**: một số route semantic (`/search`, `/hybrid`) còn lỗi 500; CORS chưa có `http://localhost:3002`; Dockerfile đang comment toàn bộ. Xem mục 7.
 
 ## 2. Công nghệ sử dụng
 
@@ -103,26 +103,38 @@ Nền tảng cho pipeline embedding trong tương lai:
 - Dữ liệu có sẵn: `ratings.csv` (full MovieLens) — đầu vào cho ma trận user-item / SVD / similarity.
 - Chưa có thuật toán, ma trận rating, hay tính toán similarity nào trong code.
 
+### Tín hiệu tương tác realtime (band 5)
+- Backend publish **`eventType=interaction.created`** (routing key `interaction.event`) cho like/unlike, comment, rating và click lần đầu; cron 24h publish `training.batch`.
+- `score` do backend tính sẵn theo **band 5** (`like=5`, `comment=4`, `click=1` tăng dần tối đa 5, `rating=1..5`; unlike `score=-5`, `removed=true`). Client **không gửi score**.
+- `InteractionEventHandler` ưu tiên `payload.score`; fallback map band 5 nếu thiếu, rồi chuẩn hoá `score / 5.0` và clamp `[-1, 1]` cho EMA vector semantic + CF.
+- `training.batch` gồm seed ratings + interactions app (`score` band 5); ALS dùng cột `rating` nếu có, nếu không dùng `score` (clip `0.1..5.0`).
+
 ## 6. Tích hợp hạ tầng (trạng thái)
 
 | Thành phần | Trạng thái |
 |---|---|
-| RabbitMQ | ❌ Chưa có code producer/consumer. Chỉ có container `rabbitmq:3-management-alpine` trong docker-compose (port 5672/15672) |
-| Redis | ❌ Container `redis:7-alpine` sẵn có, chưa được dùng |
-| Vector DB | ❌ Chưa khai báo |
-| OpenTelemetry | ❌ Chưa có code (biến môi trường `OTEL_EXPORTER_URL` đã được lên kế hoạch trong docker-compose comment) |
-| Scheduled jobs | ❌ Không có (không có APScheduler/Celery) |
-| Dockerfile | ❌ **Lỗi**: `CMD uvicorn src.api.web_app:app` nhưng `src/api/web_app.py` không tồn tại; bản thân `server.py` cũng không import được |
+| RabbitMQ | ✅ Consumer `interaction.queue` (`interaction.event` + `training.batch`) và `recommendation.queue` (`movie.#`) qua `aio-pika`; có DLX/DLQ + retry queue |
+| Redis | ✅ `RedisStore` (`REDIS_ENABLED=true`) |
+| Vector DB | ✅ ChromaDB persist `./data/chroma_db` (`VECTOR_DB_PROVIDER=chroma`) |
+| OpenTelemetry | ✅ `configure_tracing` (`OTEL_ENABLED=true`, endpoint `:4318`) |
+| Scheduled jobs | ✅ `TrainingScheduler` (retrain ALS sau batch) |
+| Dockerfile | ⚠️ Toàn bộ nội dung đang **comment** — chưa dùng để build image; chạy local bằng `uvicorn src.api.server:app` |
 
 Env dự kiến cho service (theo docker-compose comment): `APP_PORT=8082`, `SERVICE_NAME=ai-service`, `VECTOR_DB_URL`, `RABBITMQ_URL=amqp://guest:guest@localhost:5672`, `OTEL_EXPORTER_URL=http://localhost:4317`.
 
-## 7. Việc cần làm / Kế hoạch phát triển
+## 7. Trạng thái triển khai & việc còn lại
 
-1. **Tạo `src/api/web_app.py` (hoặc sửa Dockerfile)** — sửa lỗi khởi động.
-2. **Implement endpoints FastAPI**: health check, semantic search, recommendations, sau đó mở Swagger tại `/api`.
-3. **Embedding pipeline**: load model phoBERT/sentence-transformers, làm sạch + embedding metadata tiếng Việt, upsert vào vector DB (chọn Milvus/Weaviate/Pinecone hoặc pgvector), viết hàm query semantic search.
-4. **Collaborative filtering**: xử lý `ratings.csv`, xây model (SVD/matrix factorization hoặc similarity-based), sinh gợi ý theo user.
-5. **Tích hợp RabbitMQ**: consumer nhận yêu cầu gợi ý từ backend, producer trả kết quả.
-6. **Bổ sung dependencies** đầy đủ vào `pyproject.toml` (torch, sentence-transformers, pika, vector-db client, pyyaml...).
-7. **Xóa hoặc tách** các file leftover từ project LM trước đó (`config/config.yaml`, `checkpoint_manager.py`, `docs/script.md`) để tránh nhầm lẫn.
-8. **Viết tests** trong `tests/`.
+**Đã có trong code**:
+- FastAPI app `src/api/server.py`: health + recommendations routes, prefix `/api/recommendations`.
+- Embedding + Chroma vector store (`services/embedding_service.py`, `core/integrations.py`).
+- ALS collaborative filtering (`services/model_training_service.py`, notebooks `08_collaborative_filtering_V5/V6`).
+- RabbitMQ: `recommendation.queue` (movie events) + `interaction.queue` (interaction/training), DLQ + retry.
+- Redis (`RedisStore`), OpenTelemetry, `TrainingScheduler`, bộ `tests/`.
+- Consumer cập nhật vector realtime từ `interaction.created` với score band 5.
+
+**Việc còn lại / đã biết**:
+1. `/search` và `/hybrid` còn lỗi 500 — cần kiểm tra embedding/collection khi có dữ liệu.
+2. CORS chưa khai báo `http://localhost:3002` (frontend hiện tại) — thêm vào `CORS_ORIGINS` khi gọi trực tiếp.
+3. Chưa có consumer cho preference data từ backend.
+4. Dashboard cần aggregate/filter theo `createdAt`.
+5. Dockerfile đang comment toàn bộ; hiện chạy local bằng `uvicorn src.api.server:app --host localhost --port 8082`.

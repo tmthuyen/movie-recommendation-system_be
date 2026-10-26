@@ -24,7 +24,7 @@ export function MovieDetail({ movie }: { movie: MovieDetailType }) {
   const voteCount = Number(movie.voteCount) || 0;
 
   return (
-    <section className="overflow-hidden rounded-2xl border bg-card shadow-sm">
+    <section className="bg-card overflow-hidden rounded-2xl border shadow-sm">
       <div className="grid gap-6 p-6 md:grid-cols-[280px_1fr] md:p-8">
         {/* Poster */}
         <div className="bg-muted relative aspect-[2/3] w-full self-start overflow-hidden rounded-xl shadow-lg md:max-w-[280px]">
@@ -66,9 +66,10 @@ export function MovieDetail({ movie }: { movie: MovieDetailType }) {
                 {movie.country.name}
               </span>
             )}
-            <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
+            <span className="text-foreground inline-flex items-center gap-1.5 font-medium">
               <Clapperboard className="size-4 text-yellow-500" aria-hidden="true" />
-              {rating.toFixed(1)} <span className="text-muted-foreground">/ {voteCount} đánh giá</span>
+              {rating.toFixed(1)}{' '}
+              <span className="text-muted-foreground">/ {voteCount} đánh giá</span>
             </span>
             <MovieViewCount movieId={movie.id} viewCount={movie.viewCount} />
           </div>
@@ -77,7 +78,10 @@ export function MovieDetail({ movie }: { movie: MovieDetailType }) {
             <div className="flex flex-wrap gap-2" aria-label="Thể loại">
               {genres.map((genre) => (
                 <Link key={genre.id} href={`/movies?genre=${genre.id}`}>
-                  <Badge variant="secondary" className="hover:bg-secondary/80 cursor-pointer transition-colors">
+                  <Badge
+                    variant="secondary"
+                    className="hover:bg-secondary/80 cursor-pointer transition-colors"
+                  >
                     {genre.name}
                   </Badge>
                 </Link>
@@ -85,11 +89,11 @@ export function MovieDetail({ movie }: { movie: MovieDetailType }) {
             </div>
           )}
 
-          {/* Bộ nút tương tác (thích / yêu thích / muốn xem) */}
+          {/* Nút Yêu thích (like) — kèm số like realtime ở trang chi tiết */}
           <MovieActions movieId={movie.id} variant="detail" className="mt-1" />
 
           {overview && (
-            <div className="text-muted-foreground max-w-none text-sm leading-relaxed [&_a]:text-primary [&_a]:underline [&_li]:ml-4 [&_li]:list-disc [&_ol]:list-decimal [&_ol]:ml-5 [&_p]:mb-2 [&_strong]:text-foreground">
+            <div className="text-muted-foreground [&_a]:text-primary [&_strong]:text-foreground max-w-none text-sm leading-relaxed [&_a]:underline [&_li]:ml-4 [&_li]:list-disc [&_ol]:ml-5 [&_ol]:list-decimal [&_p]:mb-2">
               <Markdown>{overview}</Markdown>
             </div>
           )}

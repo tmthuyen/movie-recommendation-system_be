@@ -11,6 +11,17 @@ import { Server, Socket } from 'socket.io';
 import { Comment } from '@/modules/comments/entities/comment.entity';
 import { Rating } from '@/modules/ratings/entities/rating.entity';
 
+/** Payload realtime khi like/comment/rating/click thay đổi ở trang chi tiết phim. */
+export interface InteractionBroadcastPayload {
+  movieId: number;
+  type: string;
+  action: 'added' | 'removed' | 'updated';
+  score: number;
+  likeCount: number;
+  commentCount: number;
+  viewCount: number;
+}
+
 @WebSocketGateway({
   cors: {
     origin: '*',
@@ -38,6 +49,11 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   broadcastViewCount(movieId: number, viewCount: number) {
     this.server.emit(`movie-${movieId}-viewCount`, { movieId, viewCount });
+  }
+
+  /** Realtime số liệu tương tác (like/comment/rating/click) của phim. */
+  broadcastInteraction(payload: InteractionBroadcastPayload) {
+    this.server.emit(`movie-${payload.movieId}-interaction`, payload);
   }
 
   @SubscribeMessage('typingComment')

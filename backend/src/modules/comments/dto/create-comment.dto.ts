@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import { IsNotEmpty, IsNumber, IsString, IsOptional } from 'class-validator';
 
 export class CreateCommentDto {
@@ -11,8 +12,9 @@ export class CreateCommentDto {
   content: string;
 
   @ApiProperty({ example: 12345, description: 'ID của phim' })
+  @Type(() => Number)
   @IsNotEmpty({ message: 'ID phim không được để trống' })
-  @IsNumber()
+  @IsNumber({}, { message: 'ID phim phải là số' })
   movieId: number;
 
   @ApiProperty({
@@ -20,7 +22,8 @@ export class CreateCommentDto {
     description: 'ID bình luận cha (nếu là reply)',
     required: false,
   })
+  @Type(() => Number)
   @IsOptional()
-  @IsNumber()
+  @IsNumber({}, { message: 'ID bình luận cha phải là số' })
   parentId?: number;
 }

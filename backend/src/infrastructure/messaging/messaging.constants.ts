@@ -7,6 +7,7 @@ export const MESSAGE_EVENTS = {
   MOVIE_CREATED: 'movie.created',
   MOVIE_UPDATED: 'movie.updated',
   MOVIE_DELETED: 'movie.deleted',
+  INTERACTION_CREATED: 'interaction.created',
   USER_INTERACTION_CREATED: 'user.interaction.created',
   USER_TRAINING_BATCH: 'training.batch',
 } as const;

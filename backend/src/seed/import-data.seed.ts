@@ -226,7 +226,7 @@ async function bootstrap() {
           const obj = seedRatingRepo.create({
             userId: row.userId,
             movieId: row.movieId,
-            score: Number(row.rating) * 2,
+            score: Number(row.rating),
             createdAt: new Date(row.timestamp * 1000),
           });
           batch.push(obj);

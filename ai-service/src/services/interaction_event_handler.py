@@ -29,7 +29,7 @@ class InteractionEventHandler:
         """
         logger.info(f"[InteractionEventHandler] Received event: {event_type}")
 
-        if event_type == "interaction.created":
+        if event_type in ("interaction.created", "interaction.event"):
             await self._handle_interaction_created(payload)
         elif event_type == "training.batch":
             await self._handle_training_batch(payload)
@@ -85,17 +85,19 @@ class InteractionEventHandler:
         movie_id = payload.get("movieId")
         action = payload.get("action", "click")
         rating = payload.get("rating")
+        removed = bool(payload.get("removed", False))
 
         if not user_uuid or not movie_id:
             raise ValueError("userId and movieId are required for interaction events.")
 
         movie_id = int(movie_id)
 
-        # 1. Determine interaction score
-        score = self._get_action_score(action, rating)
+        # 1. Determine interaction score (band 5: score = confidence)
+        score = self._get_action_score(payload, action, rating)
 
         logger.info(
-            f"Processing interaction: User {user_uuid} -> Movie {movie_id} (Action: {action}, Score: {score})"
+            f"Processing interaction: User {user_uuid} -> Movie {movie_id} "
+            f"(Action: {action}, Score: {score}, Removed: {removed})"
         )
 
         # 2. Update Semantic Profile Vector
@@ -104,18 +106,32 @@ class InteractionEventHandler:
         # 3. Update Collaborative Filtering Vector (if exists)
         await self._update_cf_profile(user_uuid, movie_id, score)
 
-    def _get_action_score(self, action: str, rating: Any) -> float:
+    def _get_action_score(
+        self, payload: dict[str, Any], action: str, rating: Any
+    ) -> float:
+        """Ưu tiên score backend tính sẵn; fallback theo band 5."""
+        raw_score = payload.get("score")
+        if raw_score is not None:
+            try:
+                return float(raw_score)
+            except (TypeError, ValueError):
+                logger.warning(f"Invalid score in payload: {raw_score!r}")
+
         if action == "rating" and rating is not None:
             return float(rating)
+
         scores = {
-            "click": 2.0,
-            "like": 8.0,
-            "favorite": 10.0,
-            "dislike": -4.0,
-            "comment": 6.0,
-            "watch": 8.0,
+            "click": 1.0,
+            "like": 5.0,
+            "comment": 4.0,
+            "rating": 0.0,
         }
-        return scores.get(action.lower(), 2.0)
+        return scores.get(action.lower(), 1.0)
+
+    @staticmethod
+    def _normalize_score(score: float) -> float:
+        """Chuẩn hoá score band 5 về khoảng [-1, 1] cho EMA."""
+        return max(-1.0, min(1.0, float(score) / 5.0))
 
     async def _update_semantic_profile(
         self, user_uuid: str, movie_id: int, score: float
@@ -155,10 +171,10 @@ class InteractionEventHandler:
         if user_data and user_data.get("vector"):
             current_user_vec = np.array(user_data["vector"])
             new_vec = (1 - alpha) * current_user_vec + alpha * (
-                score / 10.0
+                self._normalize_score(score)
             ) * movie_vec
         else:
-            new_vec = (score / 10.0) * movie_vec
+            new_vec = self._normalize_score(score) * movie_vec
 
         # Normalize to prevent explosion
         norm = np.linalg.norm(new_vec)
@@ -208,7 +224,9 @@ class InteractionEventHandler:
 
         alpha = 0.1  # Slower decay for CF to maintain global preferences
 
-        new_vec = (1 - alpha) * current_user_vec + alpha * (score / 10.0) * movie_vec
+        new_vec = (1 - alpha) * current_user_vec + alpha * (
+            self._normalize_score(score)
+        ) * movie_vec
 
         await self.vector_store.upsert(
             movie_id=user_idx,

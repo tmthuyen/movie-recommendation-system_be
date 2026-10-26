@@ -4,7 +4,7 @@ import { MyInteractionList } from '@/components/movie/interaction-movie-list';
 
 export const metadata = {
   title: 'Phim yêu thích',
-  description: 'Các bộ phim bạn đã thích, yêu thích hoặc muốn xem.',
+  description: 'Các bộ phim bạn đã yêu thích.',
 };
 
 /** Trang phim yêu thích cá nhân — cần đăng nhập (`RequireAuth` redirect kèm `return-page`). */

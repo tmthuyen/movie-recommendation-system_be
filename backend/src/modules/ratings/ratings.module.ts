@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { RatingsService } from './ratings.service';
 import { RatingsController } from './ratings.controller';
@@ -12,7 +12,10 @@ import {
 import { EventsModule } from '../events/events.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Rating, SeedRating]), EventsModule],
+  imports: [
+    TypeOrmModule.forFeature([Rating, SeedRating]),
+    forwardRef(() => EventsModule),
+  ],
   controllers: [RatingsController],
   providers: [
     {

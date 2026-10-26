@@ -7,7 +7,7 @@ export class SeedRating extends BaseAuditEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: 'float' }) // base 10
+  @Column({ type: 'float' }) // band 5
   score: number;
 
   @Column({ name: 'user_id', type: 'varchar' })

@@ -124,9 +124,16 @@ class ModelTrainingService:
         full_df["user_idx"] = full_df["userId"].astype(str).map(user_mapping)
         full_df["movie_idx"] = full_df["movieId"].astype(str).map(movie_mapping)
 
-        # Nếu có cột rating thì dùng, không thì mặc định 1.0
+        # Rating (seed) → score backend (band 5) → mặc định 1.0
         if "rating" in full_df.columns:
             ratings = full_df["rating"].astype(float).values
+        elif "score" in full_df.columns:
+            ratings = (
+                pd.to_numeric(full_df["score"], errors="coerce")
+                .fillna(1.0)
+                .clip(lower=0.1, upper=5.0)
+                .values
+            )
         else:
             ratings = np.ones(len(full_df), dtype=float)
 

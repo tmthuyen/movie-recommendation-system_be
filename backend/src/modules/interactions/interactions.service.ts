@@ -4,11 +4,26 @@ import { IInteractionRepository } from './interactions.repository';
 import { PaginationDto } from '@/common/dtos/pagination.dto';
 import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
 import {
+  Interaction,
   InteractionScoreMap,
   InteractionType,
 } from './entities/interaction.entity';
 import { Movie } from '@/modules/movies/entities/movie.entity';
 import { User } from '@/modules/users/entities/user.entity';
+import { EventsGateway } from '@/modules/events/events.gateway';
+import {
+  MovieInteractionStats,
+  MovieInteractionStatsService,
+} from './movie-interaction-stats.service';
+
+export interface ToggleInteractionResult {
+  action: 'added' | 'removed';
+  type: InteractionType;
+  /** Score của tương tác vừa tạo (0 khi huỷ). */
+  score: number;
+  likeCount: number;
+  data?: Interaction;
+}
 
 @Injectable()
 export class InteractionsService {
@@ -16,23 +31,48 @@ export class InteractionsService {
     @Inject(IInteractionRepository)
     private readonly repo: IInteractionRepository,
     private readonly interactionProducer: InteractionProducer,
+    private readonly statsService: MovieInteractionStatsService,
+    private readonly eventsGateway: EventsGateway,
   ) {}
 
-  async create(userId: string, createInteractionDto: CreateInteractionDto) {
+  /**
+   * TOGGLE like: gọi lần 1 để thích, gọi lại để bỏ thích.
+   * Backend tự tính `score` (band 5) — client không gửi score.
+   */
+  async create(
+    userId: string,
+    createInteractionDto: CreateInteractionDto,
+  ): Promise<ToggleInteractionResult> {
     const { movieId, type } = createInteractionDto;
 
-    // Check if interaction already exists
+    // Đảm bảo phim tồn tại (404 thay vì lỗi FK 500)
+    await this.statsService.getStats(movieId);
+
     const existing = await this.repo.findByUnique(userId, movieId, type);
 
     if (existing) {
-      // Toggle off (remove)
       await this.repo.remove(existing.id);
-      return { success: true, action: 'removed', type };
+      const stats = await this.statsService.getStats(movieId);
+      const removedScore = -InteractionScoreMap[type];
+
+      this.publishAndBroadcast(
+        userId,
+        movieId,
+        type,
+        'removed',
+        removedScore,
+        stats,
+      );
+
+      return {
+        action: 'removed',
+        type,
+        score: 0,
+        likeCount: stats.likeCount,
+      };
     }
 
-    // Toggle on (create)
-    const score = InteractionScoreMap[type] || 0;
-
+    const score = InteractionScoreMap[type] ?? 0;
     const newInteraction = await this.repo.create({
       score,
       type,
@@ -40,15 +80,21 @@ export class InteractionsService {
       user: { id: userId } as User,
     });
 
-    this.interactionProducer.publishInteractionCreated({
-      userId,
-      movieId,
-      action: type.toLowerCase(),
-      score: score,
-      createdAt: newInteraction.createdAt,
-    });
+    const stats = await this.statsService.getStats(movieId);
+    this.publishAndBroadcast(userId, movieId, type, 'added', score, stats);
 
-    return { success: true, action: 'added', type, data: newInteraction };
+    return {
+      action: 'added',
+      type,
+      score,
+      likeCount: stats.likeCount,
+      data: newInteraction,
+    };
+  }
+
+  /** Số liệu tương tác realtime của phim (like/comment/view/rating). */
+  async getMovieStats(movieId: number): Promise<MovieInteractionStats> {
+    return this.statsService.getStats(movieId);
   }
 
   async findAll(paginationDto: PaginationDto) {
@@ -61,18 +107,13 @@ export class InteractionsService {
   }
 
   async getFavorites(userId: string, paginationDto: PaginationDto) {
-    // Fetch LIKE, FAVORITE, WATCHLIST
-    return this.repo.findByUser(userId, paginationDto, [
-      InteractionType.LIKE,
-      InteractionType.FAVORITE,
-      InteractionType.WATCHLIST,
-    ]);
+    return this.repo.findByUser(userId, paginationDto, [InteractionType.LIKE]);
   }
 
   async findOne(id: number) {
     const item = await this.repo.findById(id);
     if (!item) {
-      throw new NotFoundException(`Interaction with ID ${id} not found`);
+      throw new NotFoundException(`Không tìm thấy tương tác với ID ${id}`);
     }
     return item;
   }
@@ -81,5 +122,48 @@ export class InteractionsService {
     const item = await this.findOne(id);
     await this.repo.remove(item.id);
     return { success: true };
+  }
+
+  async toggleLike({
+    userId,
+    movieId,
+  }: {
+    userId: string;
+    movieId: number;
+  }): Promise<ToggleInteractionResult> {
+    return this.create(userId, {
+      type: InteractionType.LIKE,
+      movieId,
+    });
+  }
+
+  private publishAndBroadcast(
+    userId: string,
+    movieId: number,
+    type: InteractionType,
+    action: 'added' | 'removed',
+    score: number,
+    stats: MovieInteractionStats,
+  ) {
+    const createdAt = new Date();
+
+    this.eventsGateway.broadcastInteraction({
+      movieId,
+      type,
+      action,
+      score,
+      likeCount: stats.likeCount,
+      commentCount: stats.commentCount,
+      viewCount: stats.viewCount,
+    });
+
+    this.interactionProducer.publishInteractionCreated({
+      userId,
+      movieId,
+      action: type,
+      score,
+      removed: action === 'removed',
+      createdAt,
+    });
   }
 }

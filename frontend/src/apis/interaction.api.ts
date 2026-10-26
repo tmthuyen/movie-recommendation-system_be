@@ -1,18 +1,23 @@
 import { ApiPaginatedResponse, ApiResponse } from '@/shared/types/api.types';
 import {
   Interaction,
-  InteractionType,
+  InteractionStats,
   ToggleInteractionResult,
 } from '@/shared/types/interaction.types';
 import axiosClient from '../lib/axiosClient';
 
 export const interactionApi = {
-  /** TOGGLE tương tác (JWT) — body `{ type, movieId }`, gọi lại để tắt. */
+  /** TOGGLE yêu thích (JWT) — body `{ type: 'like', movieId }`, gọi lại để bỏ. */
   toggle: async (input: {
-    type: InteractionType;
+    type: 'like';
     movieId: number | string;
   }): Promise<ApiResponse<ToggleInteractionResult>> => {
     const { data } = await axiosClient.post('/interactions', input);
+    return data;
+  },
+  /** Thống kê tương tác realtime của phim (public). */
+  getStats: async (movieId: number | string): Promise<ApiResponse<InteractionStats>> => {
+    const { data } = await axiosClient.get(`/interactions/stats/${movieId}`);
     return data;
   },
   /** Lịch sử xem phim của user (JWT) — chỉ `type=click`. */
@@ -23,7 +28,7 @@ export const interactionApi = {
     const { data } = await axiosClient.get('/interactions/my-history', { params });
     return data;
   },
-  /** Danh sách yêu thích của user (JWT) — `type ∈ like, favorite, watchlist`. */
+  /** Danh sách phim yêu thích của user (JWT) — chỉ `type=like`. */
   getMyFavorites: async (params: {
     page?: number;
     limit?: number;

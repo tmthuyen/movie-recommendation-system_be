@@ -1,13 +1,20 @@
 import { interactionApi } from '@/apis/interaction.api';
 import { parseAxiosError } from '@/lib/axiosClient';
 import { ApiPaginatedResponse, Pagination } from '@/shared/types/api.types';
-import { Interaction, InteractionType } from '@/shared/types/interaction.types';
+import { Interaction, InteractionStats, InteractionType } from '@/shared/types/interaction.types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/stores/auth.store';
 
 const FAVORITES_KEY = 'interactions';
+
+/** Query key thống kê tương tác của một phim. */
+export const interactionStatsQueryKey = (movieId: number | string) => [
+  FAVORITES_KEY,
+  'stats',
+  String(movieId),
+];
 
 /** Kết quả phân trang của `my-history`/`my-favorites` (items + pagination từ envelope). */
 export interface PagedInteractions {
@@ -19,7 +26,7 @@ export interface PagedInteractions {
 export const myFavoritesQueryKey = (limit: number) => [FAVORITES_KEY, 'my-favorites', limit];
 
 /**
- * Danh sách tương tác yêu thích (like/favorite/watchlist) của user hiện tại —
+ * Danh sách tương tác yêu thích (like) của user hiện tại —
  * `GET /api/interactions/my-favorites` (JWT). Chỉ fetch khi đã đăng nhập.
  */
 export function useMyFavorites(limit: number = 100) {
@@ -51,7 +58,7 @@ function usePagedInteractionsQuery(
     page: number;
     limit: number;
   }) => Promise<ApiPaginatedResponse<Interaction[]>>,
-  enabled: boolean,
+  enabled: boolean
 ) {
   return useQuery({
     queryKey: [source, page, limit],
@@ -76,14 +83,14 @@ export function useMyHistory(page: number = 1, limit: number = 12, enabled: bool
     page,
     limit,
     interactionApi.getMyHistory,
-    enabled && isAuthenticated,
+    enabled && isAuthenticated
   );
 }
 
 /**
  * Danh sách yêu thích **có phân trang** (JWT) — `GET /api/interactions/my-favorites`
- * (`type ∈ like, favorite, watchlist`, join `movie`). Khác `useMyFavorites`
- * (trả mảng page-1, limit lớn — dùng cho trạng thái nút trên card).
+ * (`type = like`, join `movie`). Khác `useMyFavorites` (trả mảng page-1, limit
+ * lớn — dùng cho trạng thái nút trên card).
  */
 export function useMyFavoritesPaged(page: number = 1, limit: number = 12, enabled: boolean = true) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -92,7 +99,7 @@ export function useMyFavoritesPaged(page: number = 1, limit: number = 12, enable
     page,
     limit,
     interactionApi.getMyFavorites,
-    enabled && isAuthenticated,
+    enabled && isAuthenticated
   );
 }
 
@@ -118,7 +125,23 @@ export function useMyFavoriteKeys(limit: number = 100) {
 }
 
 /**
- * TOGGLE tương tác (`POST /api/interactions`) — optimistic update lên cache
+ * Thống kê tương tác realtime của phim — `GET /api/interactions/stats/:movieId`.
+ * Dùng ở trang chi tiết để hiển thị số like ban đầu (sau đó cập nhật qua WS).
+ */
+export function useInteractionStats(movieId: number | string, enabled: boolean = true) {
+  return useQuery({
+    queryKey: interactionStatsQueryKey(movieId),
+    queryFn: async (): Promise<InteractionStats> => {
+      const response = await interactionApi.getStats(movieId);
+      return response.result;
+    },
+    enabled: enabled && Boolean(movieId),
+    staleTime: 1000 * 30,
+  });
+}
+
+/**
+ * TOGGLE yêu thích (`POST /api/interactions`) — optimistic update lên cache
  * `my-favorites`, rollback `onError`, đồng bộ lại với server `onSettled`.
  */
 export function useToggleInteraction() {
@@ -127,29 +150,41 @@ export function useToggleInteraction() {
   return useMutation({
     mutationFn: async (input: {
       movieId: number | string;
+      type: 'like';
+    }): Promise<{
+      action: 'added' | 'removed';
       type: InteractionType;
-    }): Promise<{ action: 'added' | 'removed'; type: InteractionType }> => {
+      score: number;
+      likeCount: number;
+    }> => {
       const response = await interactionApi.toggle(input);
-      return { action: response.result.action, type: response.result.type };
+      return {
+        action: response.result.action,
+        type: response.result.type,
+        score: response.result.score,
+        likeCount: response.result.likeCount,
+      };
     },
     onMutate: async ({ movieId, type }) => {
-      await queryClient.cancelQueries({ queryKey: [FAVORITES_KEY] });
-      const previous = queryClient.getQueriesData<{ data: Interaction[] }[]>({
-        queryKey: [FAVORITES_KEY],
+      // Chỉ optimistic trên cache danh sách yêu thích (không đụng cache stats).
+      const favoritesKey = [FAVORITES_KEY, 'my-favorites'];
+      await queryClient.cancelQueries({ queryKey: favoritesKey });
+      const previous = queryClient.getQueriesData<Interaction[]>({
+        queryKey: favoritesKey,
       });
 
       // Optimistic: đổi trạng thái local (chưa biết added/removed nên đảo trạng thái hiện có)
-      queryClient.setQueriesData<Interaction[]>({ queryKey: [FAVORITES_KEY] }, (old) => {
+      queryClient.setQueriesData<Interaction[]>({ queryKey: favoritesKey }, (old) => {
         if (!old) return old;
         const exists = old.some(
-          (item) => `${item.movie?.id ?? item.movieId}:${item.type}` === `${movieId}:${type}`,
+          (item) => `${item.movie?.id ?? item.movieId}:${item.type}` === `${movieId}:${type}`
         );
         if (exists) {
           return old.filter(
-            (item) => `${item.movie?.id ?? item.movieId}:${item.type}` !== `${movieId}:${type}`,
+            (item) => `${item.movie?.id ?? item.movieId}:${item.type}` !== `${movieId}:${type}`
           );
         }
-        return [...old, { id: -Date.now(), score: 0, type, movieId } as Interaction];
+        return [...old, { id: -Date.now(), score: 5, type, movieId } as Interaction];
       });
 
       return { previous };
@@ -163,18 +198,19 @@ export function useToggleInteraction() {
       toast.error(parsedError.message || 'Không thể cập nhật tương tác.');
     },
     onSuccess: (result) => {
-      toast.success(
-        result.action === 'added'
-          ? 'Đã thêm vào danh sách của bạn.'
-          : 'Đã xóa khỏi danh sách của bạn.',
-      );
+      toast.success(result.action === 'added' ? 'Đã thêm vào yêu thích.' : 'Đã bỏ yêu thích.');
     },
-    onSettled: () => {
+    onSettled: (_data, _error, variables) => {
       // Đồng bộ lại với server (đọc result.action bên server làm nguồn sự thật)
       queryClient.invalidateQueries({ queryKey: [FAVORITES_KEY] });
       // Danh sách trang Lịch sử xem / Yêu thích (queryKey root riêng, có phân trang)
       queryClient.invalidateQueries({ queryKey: ['my-history'] });
       queryClient.invalidateQueries({ queryKey: ['my-favorites-page'] });
+      if (variables?.movieId) {
+        queryClient.invalidateQueries({
+          queryKey: interactionStatsQueryKey(variables.movieId),
+        });
+      }
     },
   });
 }
@@ -185,6 +221,7 @@ const useInteraction = {
   useMyHistory,
   useMyFavoritesPaged,
   useToggleInteraction,
+  useInteractionStats,
 };
 
 export default useInteraction;

@@ -32,12 +32,20 @@ export const movieApi = {
     return data;
   },
   /** Chi tiết phim theo id (public). */
-  getById: async (id: number | string): Promise<ApiResponse<MovieDetail>> => {
+  getById: async (id: number): Promise<ApiResponse<MovieDetail>> => {
     const { data } = await axiosClient.get(`/movies/${id}`);
     return data;
   },
   /** Tăng lượt xem cho phim (public, optional auth). */
-  incrementView: async (id: number | string): Promise<ApiResponse<{ viewCount: number }>> => {
+  incrementView: async (
+    id: number
+  ): Promise<
+    ApiResponse<{
+      viewCount: number;
+      score: number;
+      interaction: 'created' | 'updated' | 'none';
+    }>
+  > => {
     const { data } = await axiosClient.post(`/movies/${id}/view`);
     return data;
   },
@@ -47,12 +55,12 @@ export const movieApi = {
     return data;
   },
   /** Cập nhật phim (ADMIN) — backend nhận `PATCH`. */
-  update: async (id: number | string, input: Partial<MovieAdminInput>): Promise<ApiResponse<Movie>> => {
+  update: async (id: number, input: Partial<MovieAdminInput>): Promise<ApiResponse<Movie>> => {
     const { data } = await axiosClient.patch(`/movies/${id}`, input);
     return data;
   },
   /** Xóa phim (ADMIN). */
-  remove: async (id: number | string): Promise<ApiResponse<null>> => {
+  remove: async (id: number): Promise<ApiResponse<null>> => {
     const { data } = await axiosClient.delete(`/movies/${id}`);
     return data;
   },

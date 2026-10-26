@@ -40,7 +40,7 @@ Bảng lib đọc từ `frontend/package.json` (phiên bản khai báo):
 | `react-day-picker` + `date-fns` | `^10.0.1`, `^4.4.0` | Chọn ngày + format ngày (Calendar của shadcn) |
 | `cmdk` | `^1.1.1` | Command palette (component `command` của shadcn) |
 | `recharts` | `^3.10.1` | Biểu đồ cho Dashboard admin (**đã dùng** — bar/donut trong `dashboard-client.tsx`) |
-| `socket.io-client` | `^4.8.3` | Realtime (comment/rating/viewCount/typing) — **đã dùng ở `hooks/useMovieSocket.ts` (Phase 2)** |
+| `socket.io-client` | `^4.8.3` | Realtime (comment/rating/interaction/viewCount/typing) — **1 socket dùng chung** ở `hooks/useMovieSocket.ts` |
 | `react-icons` | `^5.7.0` | **Không dùng** cho icon mới (ưu tiên lucide-react) |
 | `react-router-dom` | `^7.18.3` | **Không dùng** — project dùng Next.js App Router |
 
@@ -104,7 +104,7 @@ frontend/
     │   │   ├── admin-crud.ts   # Factory CRUD admin: createCrudHooks (list+create/update/delete), useCrudPage (state orchestration: pagination, debounce 400ms, dialog), usePagedList/useDeleteOnly
     │   │   ├── admin.ts        # Bộ hooks admin theo domain (adminGenres/Countries/Peoples/Movies/Users/Roles) + interactions/ratings/comments read-only
     │   │   ├── admin-dashboard.ts # useAdminDashboard({days}) — gom 6 list API + memo thống kê dashboard + refresh()
-    │   │   └── useInteraction.ts # useToggleInteraction (optimistic + invalidate), useMyFavorites/useMyFavoriteKeys (trạng thái nút card),
+    │   │   └── useInteraction.ts # useToggleInteraction (like, optimistic + invalidate), useMyFavorites/useMyFavoriteKeys (trạng thái nút card), useInteractionStats (like/comment/view realtime fallback),
     │   │                          # useMyHistory + useMyFavoritesPaged (phân trang, queryKey root riêng my-history/my-favorites-page)
     │   ├── useAuth.ts       # ⚠ Đang đọc mock AuthContext — sẽ dọn khi chuyển hẳn useAuthStore
     │   ├── useRequireLogin.ts # Guard guest: true nếu đã đăng nhập, ngược lại mở RequireLoginDialog
@@ -134,7 +134,7 @@ frontend/
     │   │                    # form-dialog.tsx (CrudFormDialog: RHF+zod, field text/textarea/select/multiselect + useCrudFormValues),
     │   │                    # crud-toolbar.tsx, delete-dialog.tsx (CrudDeleteDialog bọc ConfirmDialog), assign-roles-dialog.tsx
     │   ├── movie/           # Domain phim: MovieCard (hover overlay + actions), MovieRow (+MovieRowSkeleton, hàng ngang),
-    │   │                    # MovieActions (toggle like/dislike*/favorite/watchlist — *dislike chỉ variant detail), MovieGrid (+MovieGridSkeleton), MovieFilters,
+    │   │                    # MovieActions (1 nút Yêu thích = like; variant detail hiện số like realtime), MovieGrid (+MovieGridSkeleton), MovieFilters,
     │   │                    # MovieList, LatestMovies, MovieDetailView/Detail (chi tiết /movies/[id]), MovieRating (sao
     │   │                    # realtime), MovieComments (phân cấp + typing realtime), MovieViewCount (realtime), SimilarMovies (placeholder),
     │   │                    # InteractionMovieList (dùng chung /my-history + /my-favorites: hàng poster + badge type + phân trang)
@@ -169,7 +169,7 @@ frontend/
 |---|---|---|
 | `/` | `src/app/(main)/(home)/page.tsx` | ✅ Thật (hero + hàng phim MovieRow, thể loại/quốc gia) |
 | `/movies` | `src/app/(main)/movies/page.tsx` | ✅ Thật (danh sách phim, filter client-side, phân trang) |
-| `/movies/[id]` | `src/app/(main)/movies/[id]/page.tsx` | ✅ Thật (chi tiết phim, đánh giá sao, bình luận + view count realtime, hàng tương tác like/dislike/favorite/watchlist) |
+| `/movies/[id]` | `src/app/(main)/movies/[id]/page.tsx` | ✅ Thật (chi tiết phim, đánh giá sao, bình luận + view count/like realtime, 1 nút Yêu thích) |
 | `/my-history` | `src/app/(main)/my-history/page.tsx` | ✅ Thật (lịch sử xem — `GET /api/interactions/my-history`, cần đăng nhập: `RequireAuth` redirect kèm `return-page`) |
 | `/my-favorites` | `src/app/(main)/my-favorites/page.tsx` | ✅ Thật (phim yêu thích — `GET /api/interactions/my-favorites`, cần đăng nhập) |
 | `/auth/login` | `src/app/auth/login/page.tsx` (+ `login-form.tsx`, `google-button.tsx`) | ✅ Thật (API login + Google OAuth) |
@@ -303,13 +303,14 @@ NEXT_PUBLIC_TINYMCE_API_KEY=<TinyMCE key>
 | GET | `/api/ratings/movie/:movieId` | Public | `{ page, limit }` | `rating[]` (join user) + `pagination` |
 | GET | `/api/comments/movie/:movieId` | Public | `{ page, limit }`, `parentId?` | `comment[]` + `pagination`; root khi không truyền `parentId`; mỗi item có `replyCount` |
 | POST | `/api/comments` | JWT | `{ content, movieId, parentId? }` | `comment` — WS `movie-{id}-comment` |
-| POST | `/api/interactions` | JWT | `{ score?, type, movieId }` — `type` ∈ `like\|dislike\|favorite\|watchlist\|rating\|comment\|click` | `{ success, action: 'added'\|'removed', type, data? }` (**TOGGLE** — đọc `result.action`) |
+| POST | `/api/interactions` | JWT | `{ type: 'like', movieId }` — **không gửi `score`** | `{ success, action: 'added'\|'removed', type, score, likeCount, data? }` (**TOGGLE like** — đọc `result.action`/`result.likeCount`) |
+| GET | `/api/interactions/stats/:movieId` | Public | — | `{ movieId, likeCount, commentCount, viewCount, ratingCount, voteAverage }` |
 | GET | `/api/interactions/my-history` | JWT | `{ page, limit }` | `interaction[]` (`type=click`) + `pagination` |
-| GET | `/api/interactions/my-favorites` | JWT | `{ page, limit }` | `interaction[]` (`type ∈ like\|favorite\|watchlist`) + `pagination` |
+| GET | `/api/interactions/my-favorites` | JWT | `{ page, limit }` | `interaction[]` (`type=like`) + `pagination` |
 | — | `/api/auth/*`, `/api/users`, `/api/roles` | — | — | Đã có api/hook (auth, user, role, genre) |
 
 - Endpoint recommendation/tìm kiếm ngữ nghĩa **chưa có ở backend** — ai-service cung cấp qua `/api/recommendations` (gateway `:8000` → `:8082`); cần chốt cách gọi trước khi làm (xem V11 Phase 4).
-- **Socket.IO cùng `:8081`** (CORS `origin: '*'`, không bắt buộc auth): server→client `movie-{id}-comment`, `movie-{id}-rating`, `movie-{id}-viewCount`, `movie-{id}-typing`; client→server `typingComment` `{ movieId, isTyping, userFullName? }`.
+- **Socket.IO cùng `:8081`** (CORS `origin: '*'`, không bắt buộc auth): server→client `movie-{id}-comment`, `movie-{id}-rating`, `movie-{id}-interaction`, `movie-{id}-viewCount`, `movie-{id}-typing`; client→server `typingComment` `{ movieId, isTyping, userFullName? }`. Trang chi tiết chỉ dùng **1 socket dùng chung** (`hooks/useMovieSocket.ts`), mỗi widget subscribe event của mình.
 - **Rate limit**: global **100 request/phút** cho mọi request (fixed-window theo IP) + override theo endpoint (`/auth/login` 5/phút, `/auth/refresh` 10/phút, `/auth/register` 5/phút…) — tránh spam refetch (React Query `staleTime` 5 phút, debounce input tìm kiếm).
 - ⚠ **`RolesGuard` chỉ được gắn ở `RolesController`** — các module movies/genres/countries/peoples/ratings/comments/users… có `@Roles(...)` nhưng **KHÔNG được enforce** ở backend; phân quyền admin hiện chủ yếu dựa vào phía client (`RequireRole`).
 
