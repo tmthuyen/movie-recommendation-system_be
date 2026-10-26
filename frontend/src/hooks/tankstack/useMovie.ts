@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 export function useGetMovies(
   params: MovieQuery = {},
   staleTime: number = 1000 * 60 * 5,
-  gcTime: number = 1000 * 60 * 10
+  gcTime: number = 1000 * 60 * 10,
 ) {
   const { page, limit, keyword } = params;
   return useQuery({
@@ -32,7 +32,7 @@ export function useGetMovies(
 export function useGetMovieDetail(
   id: number,
   staleTime: number = 1000 * 60 * 5,
-  gcTime: number = 1000 * 60 * 10
+  gcTime: number = 1000 * 60 * 10,
 ) {
   return useQuery({
     queryKey: ['movie', id],
@@ -57,7 +57,7 @@ export function useIncrementView() {
     onSuccess: (result, id) => {
       // Đồng bộ viewCount vào cache chi tiết phim (không refetch).
       queryClient.setQueryData(['movie', id], (old: any) =>
-        old ? { ...old, viewCount: result.viewCount } : old
+        old ? { ...old, viewCount: result.viewCount } : old,
       );
     },
     onError: (error: any) => {

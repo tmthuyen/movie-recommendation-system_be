@@ -5,11 +5,7 @@ export const metadata = {
   description: 'Thông tin phim, đánh giá sao và bình luận realtime.',
 };
 
-export default async function MovieDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function MovieDetailPage({ params }: { params: Promise<{ id: number }> }) {
   // Next.js 16: `params` là Promise — phải await (không đọc đồng bộ).
   const { id } = await params;
 

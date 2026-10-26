@@ -60,7 +60,7 @@ export function MovieActions({ movieId, variant = 'card', className }: MovieActi
         onSuccess: (result) => {
           setLive({ key: movieKey, count: result.likeCount });
         },
-      }
+      },
     );
   };
 
@@ -84,7 +84,7 @@ export function MovieActions({ movieId, variant = 'card', className }: MovieActi
           isDetail ? 'h-11 px-4' : 'size-9',
           active
             ? 'border-red-500/30 bg-red-500/10 text-red-500'
-            : 'text-foreground border-border hover:text-foreground'
+            : 'text-foreground border-border hover:text-foreground',
         )}
       >
         <Heart

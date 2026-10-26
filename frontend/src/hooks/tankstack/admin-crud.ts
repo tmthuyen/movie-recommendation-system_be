@@ -1,11 +1,6 @@
 import { parseAxiosError } from '@/lib/axiosClient';
 import { ApiPaginatedResponse, Pagination } from '@/shared/types/api.types';
-import {
-  UseMutationResult,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
+import { UseMutationResult, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
@@ -27,8 +22,8 @@ export interface CrudApi<T, TInput> {
   domain: string;
   list: (params: CrudListParams) => Promise<ApiPaginatedResponse<T[]>>;
   create: (data: TInput) => Promise<unknown>;
-  update: (id: string, data: TInput) => Promise<unknown>;
-  remove: (id: string) => Promise<unknown>;
+  update: (id: string | number, data: TInput) => Promise<unknown>;
+  remove: (id: string | number) => Promise<unknown>;
 }
 
 /** Bộ hooks CRUD dùng chung — mỗi domain chỉ cần cung cấp `CrudApi`, không viết lại query/mutation. */
@@ -60,10 +55,10 @@ export function createCrudHooks<T, TInput>(api: CrudApi<T, TInput>) {
     });
   }
 
-  function useUpdate(): UseMutationResult<unknown, Error, { id: string; data: TInput }> {
+  function useUpdate(): UseMutationResult<unknown, Error, { id: string | number; data: TInput }> {
     const queryClient = useQueryClient();
     return useMutation({
-      mutationFn: ({ id, data }: { id: string; data: TInput }) => api.update(id, data),
+      mutationFn: ({ id, data }: { id: string | number; data: TInput }) => api.update(id, data),
       onSuccess: () => {
         toast.success('Đã cập nhật.');
         queryClient.invalidateQueries({ queryKey: [api.domain] });
@@ -73,10 +68,10 @@ export function createCrudHooks<T, TInput>(api: CrudApi<T, TInput>) {
     });
   }
 
-  function useDelete(): UseMutationResult<unknown, Error, string> {
+  function useDelete(): UseMutationResult<unknown, Error, string | number> {
     const queryClient = useQueryClient();
     return useMutation({
-      mutationFn: (id: string) => api.remove(id),
+      mutationFn: (id: string | number) => api.remove(id),
       onSuccess: () => {
         toast.success('Đã xóa.');
         queryClient.invalidateQueries({ queryKey: [api.domain] });
@@ -92,11 +87,11 @@ export function createCrudHooks<T, TInput>(api: CrudApi<T, TInput>) {
 /** Mutation "chỉ xóa" cho các danh sách read-only (rating/comment/interaction ở trang admin). */
 export function useDeleteOnly(
   domain: string,
-  remove: (id: string) => Promise<unknown>,
-): UseMutationResult<unknown, Error, string> {
+  remove: (id: string | number) => Promise<unknown>,
+): UseMutationResult<unknown, Error, string | number> {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => remove(id),
+    mutationFn: (id: string | number) => remove(id),
     onSuccess: () => {
       toast.success('Đã xóa.');
       queryClient.invalidateQueries({ queryKey: [domain] });

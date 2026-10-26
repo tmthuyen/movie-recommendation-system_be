@@ -51,7 +51,7 @@ export function MovieDetailView({ id }: { id: number }) {
   const incrementView = useMovie.useIncrementView();
 
   // Chỉ tăng view đúng 1 lần cho mỗi id (StrictMode dev mount 2 lần → ref guard)
-  const viewedIdRef = useRef<string | null>(null);
+  const viewedIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!id || viewedIdRef.current === id) return;

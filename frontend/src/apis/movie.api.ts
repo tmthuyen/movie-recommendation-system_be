@@ -38,7 +38,7 @@ export const movieApi = {
   },
   /** Tăng lượt xem cho phim (public, optional auth). */
   incrementView: async (
-    id: number
+    id: number,
   ): Promise<
     ApiResponse<{
       viewCount: number;

@@ -128,7 +128,7 @@ export function MyInteractionList({ source }: MyInteractionListProps) {
   const favoritesQuery = useInteraction.useMyFavoritesPaged(
     page,
     PAGE_LIMIT,
-    source === 'favorites'
+    source === 'favorites',
   );
 
   const { data, isLoading, isError, isFetching, refetch } =

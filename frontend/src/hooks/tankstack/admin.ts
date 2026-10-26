@@ -21,8 +21,8 @@ export const adminGenres = createCrudHooks<Genre, { name: string; enName?: strin
   domain: 'admin-genres',
   list: genreApi.getAll,
   create: genreApi.create,
-  update: (id, data) => genreApi.update(id, data),
-  remove: genreApi.delete,
+  update: (id, data) => genreApi.update(String(id), data),
+  remove: (id) => genreApi.delete(String(id)),
 });
 
 export const adminCountries = createCrudHooks<Country, { name: string; code: string }>({
@@ -45,8 +45,8 @@ export const adminMovies = createCrudHooks<Movie, MovieAdminInput>({
   domain: 'admin-movies',
   list: movieApi.getAll,
   create: movieApi.create,
-  update: (id, data) => movieApi.update(id, data),
-  remove: movieApi.remove,
+  update: (id: string | number, data: MovieAdminInput) => movieApi.update(Number(id), data),
+  remove: (id: string | number) => movieApi.remove(Number(id)),
 });
 
 /** Users — id là uuid (string); gán vai trò qua `PATCH /users/:id/roles` (form riêng). */
@@ -100,6 +100,8 @@ export const useAdminComments = usePagedList('admin-comments', (params) =>
 );
 /* eslint-enable react-hooks/rules-of-hooks */
 
-export const useDeleteInteraction = () => useDeleteOnly('admin-interactions', interactionApi.remove);
-export const useDeleteRating = () => useDeleteOnly('admin-ratings', ratingApi.remove);
+export const useDeleteInteraction = () =>
+  useDeleteOnly('admin-interactions', interactionApi.remove);
+export const useDeleteRating = () =>
+  useDeleteOnly('admin-ratings', (id: string | number) => ratingApi.remove(Number(id)));
 export const useDeleteComment = () => useDeleteOnly('admin-comments', commentApi.remove);

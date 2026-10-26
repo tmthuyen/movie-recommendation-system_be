@@ -141,7 +141,7 @@ export function useMovieSocket({
 export function emitTypingComment(
   movieId: number | string,
   isTyping: boolean,
-  userFullName?: string
+  userFullName?: string,
 ) {
   getSharedSocket().emit('typingComment', {
     movieId: Number(movieId),
@@ -162,7 +162,7 @@ export function emitCreateComment(
   movieId: number | string,
   content: string,
   token?: string | null,
-  parentId?: number | string
+  parentId?: number | string,
 ) {
   // Disabled: use REST mutations with WS broadcast
 }

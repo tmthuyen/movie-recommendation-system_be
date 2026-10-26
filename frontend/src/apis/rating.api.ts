@@ -11,7 +11,7 @@ export const ratingApi = {
   /** Đánh giá của một phim (public) — `page`/`limit`, join `user`. */
   getByMovie: async (
     movieId: number,
-    params: { page?: number; limit?: number } = {}
+    params: { page?: number; limit?: number } = {},
   ): Promise<ApiPaginatedResponse<Rating[]>> => {
     const { data } = await axiosClient.get(`/ratings/movie/${movieId}`, { params });
     return data;

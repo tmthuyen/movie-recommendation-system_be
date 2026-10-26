@@ -5,9 +5,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 /** Danh sách đánh giá của một phim (public). */
-export function useGetRatings(movieId: number | string, page: number = 1, limit: number = 5) {
+export function useGetRatings(movieId: number, page: number = 1, limit: number = 5) {
   return useQuery({
-    queryKey: ['ratings', String(movieId), page, limit],
+    queryKey: ['ratings', Number(movieId), page, limit],
     queryFn: async (): Promise<{ ratings: Rating[]; total: number; totalPages: number }> => {
       const response = await ratingApi.getByMovie(movieId, { page, limit });
       return {
