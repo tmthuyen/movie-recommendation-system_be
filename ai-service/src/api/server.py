@@ -1,10 +1,12 @@
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from api.middleware import setup_middleware
 from api.routes import health, recommendations
@@ -12,6 +14,7 @@ from core.config import get_settings
 from core.integrations import TrainingScheduler, VectorStore
 from core.interaction_queue import InteractionQueue
 from core.message_queue import MessageQueue
+from core.monitoring import configure_monitoring, update_metrics
 from core.redis_service import RedisStore
 from core.telemetry import configure_tracing
 from services.embedding_service import embedding_service
@@ -25,6 +28,17 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
+    # Metrics
+    stop_event = threading.Event()
+
+    metrics_thread = threading.Thread(
+        target=update_metrics,
+        args=(stop_event,),
+        name="system-metrics",
+        daemon=True,
+    )
+    metrics_thread.start()
+
     # 1. Khoi tao VectorStore (ChromaDB)
     vector_store = VectorStore(settings)
     await vector_store.start()
@@ -78,6 +92,8 @@ async def lifespan(application: FastAPI):
     yield
 
     # Shutdown nguoc lai
+    stop_event.set()
+    await metrics_thread.join(timeout=2)
     await training_scheduler.close()
     await redis_store.close()
     await interaction_mq.close()
@@ -86,6 +102,7 @@ async def lifespan(application: FastAPI):
 
 
 app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)
+api_router = APIRouter(prefix="/api/recommendations")
 
 # Setup tracing after FastAPI app is created
 configure_tracing(app, settings)
@@ -127,9 +144,18 @@ app.add_middleware(
 )
 
 
-# predix: /api/recommendations/
+@app.get("/api/metrics")
+def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+# prefix: /api/recommendations
+api_router.include_router(health.router)
+api_router.include_router(recommendations.router)
+app.include_router(api_router)
+
+# Setup middleware (logging, auth, etc.)
 setup_middleware(app)
 
-
-app.include_router(health.router, prefix=settings.api_prefix)
-app.include_router(recommendations.router, prefix=settings.api_prefix)
+# Setup Prometheus monitoring
+configure_monitoring(app=app)

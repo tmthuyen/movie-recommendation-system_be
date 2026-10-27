@@ -85,9 +85,7 @@ async function bootstrap() {
   const cfsv = app.get(ConfigService);
   const port = Number(cfsv.get<number>('APP_PORT'));
 
-  // Removed RMQ microservice setup from main.ts - handled by centralized consumer module
-
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
 }
 
 bootstrap()

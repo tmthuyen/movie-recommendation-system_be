@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ClsModule } from 'nestjs-cls';
+import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 import { WinstonModule } from 'nest-winston';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -83,8 +84,14 @@ import { InteractionsModule } from './modules/interactions/interactions.module';
       global: true,
       middleware: { mount: true },
     }),
+    // logging
     WinstonModule.forRoot(loggerConfig),
+    // schedule
     ScheduleModule.forRoot(),
+    // monitoring
+    PrometheusModule.register({
+      path: '/metrics',
+    }),
 
     // infra modules
     RedisModule,

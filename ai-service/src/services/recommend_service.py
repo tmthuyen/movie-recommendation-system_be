@@ -240,4 +240,8 @@ class RecommendService:
                 formatted["evidences"] = evidences[mid]
                 final_results.append(formatted)
 
+        logger.info(
+            f"[HybridSearch] Returning {len(final_results)} hybrid recommendations for user {user_uuid}."
+        )
+
         return final_results

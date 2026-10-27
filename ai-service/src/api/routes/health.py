@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Request
 
 from api.dependencies.auth import get_current_user
 from api.schemas import CurrentUser
+from core.monitoring import check_infra
 from utils import setup_logger
 
 from ..response import success
@@ -16,7 +17,16 @@ router = APIRouter(tags=["health"])
 @router.get("/health")
 async def health(req: Request) -> dict:
     logger.info(f"health API called")
-    return success({"status": "up"}, "AI service is healthy")
+
+    data = {
+        "status": "up",
+        "infrastructure": check_infra(),
+    }
+    return success(
+        data=data,
+        message="Health check successful",
+        status_code=200,
+    )
 
 
 @router.get("/tracing")
@@ -42,9 +52,3 @@ async def test_auth(
     return success(
         data=current_user,
     )
-
-
-@router.get("")
-async def readiness(req: Request) -> dict:
-    logger.info("readiness API called")
-    return success({"status": "ready"}, "AI service is ready")

@@ -83,9 +83,12 @@ async def get_similar_movies(
         data = await svc.similar_movies(movie_id=movie_id, top_k=top_k)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    return success(
+    return paginated(
         data=data,
-        message=f"Lay danh sach {len(data)} phim tuong tu cho movieId={movie_id} thanh cong",
+        total_items=len(data),
+        page=1,
+        page_size=top_k,
+        message=f"Goi y {len(data)} phim tuong tu voi movie_id={movie_id}",
     )
 
 
@@ -136,12 +139,20 @@ async def hybrid_search(
         )
 
     svc = await _get_recommend_service(app_request)
-    data = await svc.hybrid_recommendation(
-        user_uuid=request.userId, top_k=request.limit
-    )
+    data = await svc.hybrid_recommendation(user_uuid=request.userId, top_k=request.topK)
+
+    total_items = len(data)
+    if total_items == 0:
+        message = f"Không tìm thấy gợi ý cho userId={request.userId}"
+    else:
+        message = f"Gợi ý {total_items} phim cho userId={request.userId} thành công"
 
     return paginated(
-        data, len(data), request.page, request.limit, "Hybrid Recommendations generated"
+        data,
+        total_items=total_items,
+        page=request.page,
+        page_size=request.pageSize,
+        message=message,
     )
 
 
@@ -150,34 +161,28 @@ async def hybrid_search(
 # ===================
 
 
-@router.get("/hybrid/debug")
+@router.get("/hybrid/no-auth")
 async def hybrid_search_debug(
     userId: str,
     app_request: Request,
-    top_k: int = 10,
+    topK: int = 10,
 ) -> dict:
     """Debug API: Lấy Hybrid Recommendation cho bất kỳ User ID nào (không cần token JWT)"""
     logger.info(f"hybrid debug search API called for user: {userId}")
 
     svc = await _get_recommend_service(app_request)
-    for i in range(950, 1001):
-        logger.info(f"hybrid debug search API called for user: {str(i)}")
-        data = await svc.hybrid_recommendation(user_uuid=str(i), top_k=top_k)
-        logger.info(f"Data: {data}")
 
-    data = await svc.hybrid_recommendation(user_uuid=userId, top_k=top_k)
-    return paginated(
-        data, len(data), 1, top_k, "Debug Hybrid Recommendations generated"
+    data = await svc.hybrid_recommendation(user_uuid=userId, top_k=topK)
+
+    res = paginated(
+        data,
+        len(data),
+        1,
+        topK,
+        f"Debug Hybrid Recommendations generated for userId={userId}",
+    )
+    logger.info(
+        f"hybrid debug search API response: {len(data)} recommendations for user: {userId}"
     )
 
-
-@router.get("/tracing")
-async def tracing(req: Request) -> dict:
-    """test API"""
-    # Không cần truyền headers nữa, OTel tự động kẹp traceparent vào requests.get
-    response = requests.get("http://localhost:8081/api/health")
-
-    logger.info("tracing API called")
-    return success(
-        data=response.json(),
-    )
+    return res

@@ -22,7 +22,7 @@ export class InteractionCronService {
 
   // Run every 2 minutes for testing, you can change to a longer interval in production
   @Cron('0 */1440 * * * *')
-  async handleBatchTrainingUpload() {
+  handleBatchTrainingUpload() {
     if (this.isProcessing) {
       this.logger.warn(
         'Previous batch processing is still running. Skipping this cron tick.',
@@ -33,11 +33,11 @@ export class InteractionCronService {
     this.isProcessing = true;
     this.logger.log('Starting batch interaction fetch for AI training...');
     try {
-      // 1. Process Seed Data First
-      await this.processSeedRatings();
+      // // 1. Process Seed Data First
+      // await this.processSeedRatings();
 
-      // 2. Process Actual App Interactions
-      await this.processAppInteractions();
+      // // 2. Process Actual App Interactions
+      // await this.processAppInteractions();
 
       this.logger.log(
         `Finished sending all interactions (Seed + App) for AI training.`,
