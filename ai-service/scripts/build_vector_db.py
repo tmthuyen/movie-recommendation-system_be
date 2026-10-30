@@ -68,6 +68,22 @@ from data.data_loader import (
 )
 
 
+def format_query_text_for_model(query: str, model_name: str) -> str:
+    """Định dạng chuỗi truy vấn theo chuẩn của từng mô hình (e.g. e5 yêu cầu 'query: ')."""
+    if "e5" in model_name.lower():
+        if not query.startswith("query: "):
+            return f"query: {query}"
+    return query
+
+
+def format_document_text_for_model(document: str, model_name: str) -> str:
+    """Định dạng chuỗi văn bản tài liệu theo chuẩn của từng mô hình (e.g. e5 yêu cầu 'passage: ')."""
+    if "e5" in model_name.lower():
+        if not document.startswith("passage: "):
+            return f"passage: {document}"
+    return document
+
+
 def get_manifest_path(chroma_dir: Path, collection_name: str) -> Path:
     """Trả về đường dẫn tới file manifest JSON của collection."""
     return chroma_dir / f"{collection_name}_manifest.json"
@@ -110,19 +126,36 @@ def verify_vector_db(
 ) -> tuple[bool, str]:
     """
     Xác minh ChromaDB có toàn vẹn và đồng bộ với corpus, search_text và model hay không:
-    1. Kiểm tra số lượng vector trong collection so với số movie_ids.
-    2. Kiểm tra manifest file: model_name, corpus_fingerprint, num_records.
-    3. Nếu manifest chưa có, hoặc để kiểm chứng sâu:
-       - Lấy mẫu các movie_id (đầu, giữa, cuối) kiểm tra sự hiện diện trong DB.
-       - Kiểm tra chiều vector embedding.
-       - Nếu có embedding_model: kiểm tra cosine similarity giữa vector trong DB và vector sinh mới từ search_text.
-       - Nếu vector mẫu khớp hoàn toàn (cosine similarity >= 0.999), tự động lập manifest để các lần sau nạp tức thì.
+    1. Kiểm tra collection name và hnsw:space (cosine).
+    2. Kiểm tra số lượng vector trong collection so với số movie_ids.
+    3. Kiểm tra manifest file: collection_name, model_name, corpus_fingerprint, num_records, embedding_dim.
+    4. Kiểm tra mẫu đại diện:
+       - Ánh xạ theo movieId (không phụ thuộc thứ tự trả về).
+       - Kiểm tra metadata và search_text document.
+       - Kiểm tra vector embedding tồn tại, đúng chiều (dimension) và đã chuẩn hóa L2.
+       - Kiểm tra khoảng cách cosine (cosine similarity >= 0.999) với embedding_model khi được cung cấp.
     Trả về: (True, message) nếu hợp lệ, hoặc (False, reason) nếu phát hiện sai lệch cần rebuild.
     """
     if collection is None:
         return False, "Collection không tồn tại"
 
-    current_count = collection.count()
+    col_name = getattr(collection, "name", "")
+    col_meta = getattr(collection, "metadata", None)
+    if not isinstance(col_meta, dict):
+        return False, "ChromaDB collection metadata không tồn tại hoặc không hợp lệ"
+
+    space = col_meta.get("hnsw:space")
+    if space is None or str(space).strip().lower() != "cosine":
+        return (
+            False,
+            f"ChromaDB distance metric không hợp lệ hoặc thiếu (kỳ vọng 'hnsw:space'='cosine', hiện tại: '{space}')",
+        )
+
+    try:
+        current_count = int(collection.count())
+    except Exception as e:
+        return False, f"Lỗi truy vấn số lượng vector từ collection: {e}"
+
     expected_count = len(movie_ids)
     if current_count != expected_count:
         return (
@@ -132,11 +165,21 @@ def verify_vector_db(
 
     expected_fp = compute_corpus_fingerprint(corpus, movie_ids)
 
-    # 1. Kiểm tra qua file Manifest nếu đã có
-    if manifest_path.exists():
+    # Nếu manifest chưa có VÀ không có embedding_model: thiếu bằng chứng quan trọng để xác minh
+    if not manifest_path.exists():
+        if embedding_model is None:
+            return False, "Thiếu manifest file và không có embedding_model để kiểm chứng ChromaDB"
+        m_data = {}
+    else:
         try:
             with open(manifest_path, "r", encoding="utf-8") as f:
                 m_data = json.load(f)
+
+            if m_data.get("collection_name") and col_name and m_data.get("collection_name") != col_name:
+                return (
+                    False,
+                    f"Tên collection không khớp (DB là '{col_name}' vs manifest '{m_data.get('collection_name')}')",
+                )
             if m_data.get("model_name") != model_name:
                 return (
                     False,
@@ -155,7 +198,37 @@ def verify_vector_db(
         except Exception as e:
             return False, f"Không thể đọc manifest: {e}"
 
-    # 2. Kiểm tra thực tế nội dung trong DB qua mẫu đại diện
+    # Xác định chiều vector kỳ vọng
+    expected_dim: int | None = None
+    if embedding_model is not None:
+        dim_fn = getattr(
+            embedding_model,
+            "get_sentence_embedding_dimension",
+            getattr(embedding_model, "get_embedding_dimension", None),
+        )
+        if callable(dim_fn):
+            expected_dim = int(dim_fn())
+        elif hasattr(embedding_model, "dimension"):
+            expected_dim = int(embedding_model.dimension)
+
+    if expected_dim is None and m_data.get("embedding_dim"):
+        expected_dim = int(m_data["embedding_dim"])
+
+    if expected_dim is None:
+        if "e5-base" in model_name.lower():
+            expected_dim = 768
+        elif "e5-small" in model_name.lower() or "minilm" in model_name.lower():
+            expected_dim = 384
+        else:
+            return False, "Không xác định được chiều vector kỳ vọng (thiếu embedding_model và embedding_dim trong manifest)"
+
+    if m_data.get("embedding_dim") and int(m_data["embedding_dim"]) != expected_dim:
+        return (
+            False,
+            f"Chiều embedding trong manifest ({m_data.get('embedding_dim')}) không khớp với model ({expected_dim})",
+        )
+
+    # Kiểm tra thực tế nội dung trong DB qua mẫu đại diện
     if sample_indices is None:
         sample_indices = (
             [0, len(corpus) // 2, len(corpus) - 1]
@@ -165,6 +238,7 @@ def verify_vector_db(
 
     sample_mids = [movie_ids[i] for i in sample_indices]
     sample_str_ids = [str(mid) for mid in sample_mids]
+    sample_idx_map = {str(movie_ids[i]): i for i in sample_indices}
 
     try:
         sample_res = collection.get(
@@ -173,14 +247,45 @@ def verify_vector_db(
     except Exception as e:
         return False, f"Lỗi truy vấn sample từ ChromaDB: {e}"
 
-    retrieved_ids = set(sample_res.get("ids", []))
+    raw_ids = sample_res.get("ids")
+    ret_ids = [str(sid) for sid in raw_ids] if raw_ids is not None else []
+
+    raw_metas = sample_res.get("metadatas")
+    ret_metas = list(raw_metas) if raw_metas is not None else []
+
+    raw_docs = sample_res.get("documents")
+    ret_docs = list(raw_docs) if raw_docs is not None else []
+
+    raw_embeddings = sample_res.get("embeddings")
+    if raw_embeddings is None:
+        ret_embeddings = []
+    elif isinstance(raw_embeddings, np.ndarray):
+        ret_embeddings = raw_embeddings
+    else:
+        ret_embeddings = list(raw_embeddings)
+
+    # Ánh xạ theo movieId thay vì phụ thuộc thứ tự trả về của ChromaDB
+    db_map = {}
+    for i, sid in enumerate(ret_ids):
+        meta_val = ret_metas[i] if i < len(ret_metas) else {}
+        doc_val = ret_docs[i] if i < len(ret_docs) else None
+        emb_val = ret_embeddings[i] if i < len(ret_embeddings) else None
+        db_map[sid] = {
+            "metadata": meta_val,
+            "document": doc_val,
+            "embedding": emb_val,
+        }
+
     for sid in sample_str_ids:
-        if sid not in retrieved_ids:
+        if sid not in db_map:
             return False, f"Sample movieId '{sid}' không tồn tại trong ChromaDB"
 
-    # Kiểm tra metadata movie_id
-    metas = sample_res.get("metadatas", [])
-    for meta, expected_mid in zip(metas, sample_mids):
+        expected_mid = safe_int(sid)
+        orig_idx = sample_idx_map[sid]
+        rec = db_map[sid]
+
+        # 1. Kiểm tra metadata movie_id
+        meta = rec.get("metadata") or {}
         stored_mid = meta.get("movie_id") or meta.get("movieId")
         if safe_int(stored_mid) != expected_mid:
             return (
@@ -188,73 +293,101 @@ def verify_vector_db(
                 f"Metadata movie_id ({stored_mid}) không khớp với ID kỳ vọng ({expected_mid})",
             )
 
-    # Kiểm tra nội dung document thực tế lưu trong ChromaDB với search_text của corpus
-    docs = sample_res.get("documents", [])
-    if docs and any(d is not None for d in docs) and len(docs) == len(sample_indices):
-        for idx_in_sample, original_idx in enumerate(sample_indices):
-            doc_in_db = docs[idx_in_sample]
-            expected_doc = corpus[original_idx]
-            if doc_in_db is not None and doc_in_db != expected_doc:
-                return False, (
-                    f"Nội dung document lưu trong ChromaDB không khớp với search_text của corpus hiện tại "
-                    f"tại movieId {sample_mids[idx_in_sample]}"
-                )
-
-    # Kiểm tra vector embedding và cosine similarity với model trên tập mẫu đại diện
-    num_samples = len(sample_indices)
-    db_embeddings = sample_res.get("embeddings")
-    sample_vectors_checked = False
-
-    if embedding_model is not None:
-        dim_fn = getattr(
-            embedding_model,
-            "get_embedding_dimension",
-            getattr(embedding_model, "get_sentence_embedding_dimension", None),
-        )
-        expected_dim = int(dim_fn()) if dim_fn else 384
-
-        if db_embeddings is not None and len(db_embeddings) > 0:
-            for idx_in_sample, original_idx in enumerate(sample_indices):
-                vec_db = np.array(db_embeddings[idx_in_sample])
-                if vec_db.shape[0] != expected_dim:
-                    return (
-                        False,
-                        f"Chiều vector không khớp (DB có {vec_db.shape[0]} vs model kỳ vọng {expected_dim})",
-                    )
-
-                # Tính vector mới từ search_text hiện tại và kiểm tra cosine similarity
-                sample_text = corpus[original_idx]
-                vec_model = embedding_model.encode(
-                    sample_text, normalize_embeddings=True
-                )
-                cosine_sim = float(np.dot(vec_db, vec_model))
-                if cosine_sim < 0.999:
-                    return False, (
-                        f"Vector trong DB không khớp với model '{model_name}' và search_text "
-                        f"(cosine similarity = {cosine_sim:.4f} < 0.999 tại movieId {sample_mids[idx_in_sample]})"
-                    )
-            sample_vectors_checked = True
-
-        # Nếu manifest chưa tồn tại nhưng DB đã kiểm tra khớp mẫu hoàn toàn -> Lưu manifest tự động
-        if not manifest_path.exists():
-            save_collection_manifest(
-                manifest_path=manifest_path,
-                collection_name=collection.name,
-                model_name=model_name,
-                embedding_dim=expected_dim,
-                num_records=expected_count,
-                corpus_fingerprint=expected_fp,
+        # 2. Kiểm tra nội dung document nếu có
+        doc_in_db = rec.get("document")
+        expected_doc = corpus[orig_idx]
+        if doc_in_db is not None and doc_in_db != expected_doc:
+            return (
+                False,
+                f"Nội dung document lưu trong ChromaDB không khớp với search_text của corpus hiện tại tại movieId {expected_mid}",
             )
 
-    if sample_vectors_checked:
+        # 3. Kiểm tra embedding và chiều vector thực tế từ DB (hỗ trợ cả np.ndarray, list)
+        emb_in_db = rec.get("embedding")
+        if emb_in_db is None:
+            return False, f"Embedding cho movieId {expected_mid} rỗng trong ChromaDB"
+
+        if isinstance(emb_in_db, np.ndarray):
+            if emb_in_db.size == 0:
+                return False, f"Embedding cho movieId {expected_mid} rỗng trong ChromaDB"
+            vec_db = emb_in_db.astype(np.float32).flatten()
+        else:
+            if len(emb_in_db) == 0:
+                return False, f"Embedding cho movieId {expected_mid} rỗng trong ChromaDB"
+            vec_db = np.array(emb_in_db, dtype=np.float32).flatten()
+
+        if vec_db.shape[0] != expected_dim:
+            return (
+                False,
+                f"Chiều vector không khớp (DB có {vec_db.shape[0]} vs kỳ vọng {expected_dim} tại movieId {expected_mid})",
+            )
+
+        # Từ chối NaN/Inf trước các phép so sánh (NaN làm điều kiện >/< luôn False).
+        if not np.isfinite(vec_db).all():
+            return False, f"Embedding trong DB chứa NaN/Inf tại movieId {expected_mid}"
+
+        # 4. Kiểm tra chuẩn hóa L2 của vector trong DB.
+        norm = float(np.linalg.norm(vec_db))
+        if not np.isfinite(norm):
+            return False, f"Norm embedding trong DB không hữu hạn tại movieId {expected_mid}"
+        if abs(norm - 1.0) > 1e-3:
+            return (
+                False,
+                f"Vector trong DB chưa được chuẩn hóa L2 (norm = {norm:.4f} != 1.0 tại movieId {expected_mid})",
+            )
+
+        # 5. Nếu có embedding_model, kiểm tra cosine similarity thực tế với text hiện tại
+        if embedding_model is not None:
+            sample_text = format_document_text_for_model(expected_doc, model_name)
+            vec_model = embedding_model.encode(
+                sample_text, normalize_embeddings=True
+            )
+            vec_model = np.asarray(vec_model, dtype=np.float32).flatten()
+            if vec_model.shape != vec_db.shape:
+                return False, (
+                    f"Vector model sai chiều (model có {vec_model.size} vs DB có "
+                    f"{vec_db.size} tại movieId {expected_mid})"
+                )
+            if not np.isfinite(vec_model).all():
+                return False, f"Embedding từ model chứa NaN/Inf tại movieId {expected_mid}"
+            model_norm = float(np.linalg.norm(vec_model))
+            if not np.isfinite(model_norm):
+                return False, f"Norm embedding từ model không hữu hạn tại movieId {expected_mid}"
+            if abs(model_norm - 1.0) > 1e-3:
+                return False, f"Embedding từ model chưa được chuẩn hóa L2 tại movieId {expected_mid}"
+            cosine_sim = float(np.dot(vec_db, vec_model))
+            if not np.isfinite(cosine_sim):
+                return False, f"Cosine similarity không hữu hạn tại movieId {expected_mid}"
+            if cosine_sim < 0.999:
+                return False, (
+                    f"Vector trong DB không khớp với model '{model_name}' và search_text "
+                    f"(cosine similarity = {cosine_sim:.4f} < 0.999 tại movieId {expected_mid})"
+                )
+
+    # Nếu manifest chưa tồn tại nhưng DB đã kiểm tra khớp mẫu hoàn toàn -> Lưu manifest tự động
+    if not manifest_path.exists() and embedding_model is not None:
+        save_collection_manifest(
+            manifest_path=manifest_path,
+            collection_name=col_name or getattr(collection, 'name', ''),
+            model_name=model_name,
+            embedding_dim=expected_dim,
+            num_records=expected_count,
+            corpus_fingerprint=expected_fp,
+        )
+
+    num_samples = len(sample_indices)
+    if embedding_model is not None:
         return True, (
-            f"ChromaDB hợp lệ: manifest khớp corpus fingerprint ({expected_fp[:8]}...), "
+            f"ChromaDB hợp lệ: collection '{col_name}', dimension {expected_dim}, "
+            f"manifest khớp corpus fingerprint ({expected_fp[:8]}...), "
             f"tổng {expected_count:,} bản ghi và đã kiểm chứng {num_samples} mẫu đại diện "
-            f"(document khớp, cosine similarity >= 0.999 với model '{model_name}')"
+            f"(ánh xạ movieId chính xác, document khớp, cosine similarity >= 0.999 với model '{model_name}')"
         )
     return True, (
-        f"ChromaDB hợp lệ: manifest khớp corpus fingerprint ({expected_fp[:8]}...), "
-        f"tổng {expected_count:,} bản ghi và đã kiểm tra tính hiện diện của {num_samples} mẫu đại diện trong DB"
+        f"ChromaDB hợp lệ: collection '{col_name}', dimension {expected_dim}, "
+        f"manifest khớp corpus fingerprint ({expected_fp[:8]}...), "
+        f"tổng {expected_count:,} bản ghi và đã kiểm tra tính hiện diện, metadata, chiều vector {expected_dim}d "
+        f"của {num_samples} mẫu đại diện trong DB"
     )
 
 

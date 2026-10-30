@@ -71,7 +71,7 @@ class RecommendService:
     async def semantic_search(
         self, query: str, top_k: int = 10
     ) -> list[dict[str, Any]]:
-        vector = await self._emb.encode_async(query)
+        vector = await self._emb.encode_async(query, is_query=True)
         raw_results = await self._vs.query(vector, top_k=top_k)
         return [_format_item(item) for item in raw_results]
 
@@ -96,7 +96,7 @@ class RecommendService:
                 "upsert_movie_vector: movieId=%s khong du metadata, bo qua.", movie_id
             )
             return
-        vector: list[float] = await self._emb.encode_async(search_text)
+        vector: list[float] = await self._emb.encode_async(search_text, is_query=False)
         payload: dict[str, Any] = {
             k: (v if isinstance(v, (str, int, float, bool)) else str(v))
             for k, v in movie_data.items()
