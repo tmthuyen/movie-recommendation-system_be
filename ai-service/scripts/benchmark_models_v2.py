@@ -358,43 +358,52 @@ class BenchmarkRunner:
 
         # SBERT
         t0 = time.time()
+        self.model_sbert = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
         self.col_sbert = self.chroma_client.get_collection("movies")
-        verify_vector_db(
+        is_valid_sbert, reason_sbert = verify_vector_db(
             collection=self.col_sbert,
             corpus=self.df["search_text"].tolist(),
             movie_ids=self.df["movieId"].tolist(),
             model_name="paraphrase-multilingual-MiniLM-L12-v2",
             manifest_path=get_manifest_path(CHROMA_DIR, "movies"),
+            embedding_model=self.model_sbert,
         )
-        self.model_sbert = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+        if not is_valid_sbert:
+            raise RuntimeError(f"Xác minh ChromaDB 'movies' (SBERT) thất bại: {reason_sbert}")
         self.init_times["SBERT MiniLM"] = round(time.time() - t0, 3)
         print(f"✅ SBERT MiniLM sẵn sàng ({self.init_times['SBERT MiniLM']}s).")
 
         # E5 Small
         t0 = time.time()
+        self.model_e5_small = SentenceTransformer("intfloat/multilingual-e5-small")
         self.col_e5_small = self.chroma_client.get_collection("movies_e5_small")
-        verify_vector_db(
+        is_valid_e5_small, reason_e5_small = verify_vector_db(
             collection=self.col_e5_small,
             corpus=self.df["search_text"].tolist(),
             movie_ids=self.df["movieId"].tolist(),
             model_name="intfloat/multilingual-e5-small",
             manifest_path=get_manifest_path(CHROMA_DIR, "movies_e5_small"),
+            embedding_model=self.model_e5_small,
         )
-        self.model_e5_small = SentenceTransformer("intfloat/multilingual-e5-small")
+        if not is_valid_e5_small:
+            raise RuntimeError(f"Xác minh ChromaDB 'movies_e5_small' thất bại: {reason_e5_small}")
         self.init_times["Multilingual E5 Small"] = round(time.time() - t0, 3)
         print(f"✅ Multilingual E5 Small sẵn sàng ({self.init_times['Multilingual E5 Small']}s).")
 
         # E5 Base
         t0 = time.time()
+        self.model_e5_base = SentenceTransformer("intfloat/multilingual-e5-base")
         self.col_e5_base = self.chroma_client.get_collection("movies_e5_base")
-        verify_vector_db(
+        is_valid_e5_base, reason_e5_base = verify_vector_db(
             collection=self.col_e5_base,
             corpus=self.df["search_text"].tolist(),
             movie_ids=self.df["movieId"].tolist(),
             model_name="intfloat/multilingual-e5-base",
             manifest_path=get_manifest_path(CHROMA_DIR, "movies_e5_base"),
+            embedding_model=self.model_e5_base,
         )
-        self.model_e5_base = SentenceTransformer("intfloat/multilingual-e5-base")
+        if not is_valid_e5_base:
+            raise RuntimeError(f"Xác minh ChromaDB 'movies_e5_base' thất bại: {reason_e5_base}")
         self.init_times["Multilingual E5 Base"] = round(time.time() - t0, 3)
         print(f"✅ Multilingual E5 Base sẵn sàng ({self.init_times['Multilingual E5 Base']}s).")
         print("-" * 80 + "\n")
@@ -426,7 +435,7 @@ class BenchmarkRunner:
         return ids[:top_k], scores[:top_k]
 
     def search_e5_small(self, query: str, top_k: int = TOP_K) -> Tuple[List[int], List[float]]:
-        formatted_q = "query: " + query
+        formatted_q = format_query_text_for_model(query, "intfloat/multilingual-e5-small")
         emb = self.model_e5_small.encode(formatted_q, normalize_embeddings=True).tolist()
         res = self.col_e5_small.query(query_embeddings=[emb], n_results=top_k, include=["distances"])
         ids = [int(sid) for sid in res["ids"][0] if str(sid).isdigit()]
@@ -435,7 +444,7 @@ class BenchmarkRunner:
         return ids[:top_k], scores[:top_k]
 
     def search_e5_base(self, query: str, top_k: int = TOP_K) -> Tuple[List[int], List[float]]:
-        formatted_q = "query: " + query
+        formatted_q = format_query_text_for_model(query, "intfloat/multilingual-e5-base")
         emb = self.model_e5_base.encode(formatted_q, normalize_embeddings=True).tolist()
         res = self.col_e5_base.query(query_embeddings=[emb], n_results=top_k, include=["distances"])
         ids = [int(sid) for sid in res["ids"][0] if str(sid).isdigit()]
