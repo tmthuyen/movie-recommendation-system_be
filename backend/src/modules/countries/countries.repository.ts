@@ -13,6 +13,11 @@ export interface ICountryRepository {
   create(country: Partial<Country>): Promise<Country>;
   update(id: number, country: Partial<Country>): Promise<Country | null>;
   remove(id: number): Promise<boolean>;
+  findByNameOrCode(
+    viName: string,
+    enName: string,
+    code: string,
+  ): Promise<Country | null>;
 }
 
 @Injectable()
@@ -31,12 +36,15 @@ export class CountryRepository implements ICountryRepository {
     const queryBuilder = this.repo.createQueryBuilder('country');
 
     if (keyword) {
-      queryBuilder.where('country.name ILIKE :keyword', {
-        keyword: `%${keyword}%`,
-      });
+      queryBuilder.where(
+        'country.viName ILIKE :keyword OR country.enName ILIKE :keyword',
+        {
+          keyword: `%${keyword}%`,
+        },
+      );
     }
 
-    queryBuilder.skip(skip).take(limit).orderBy('country.createdAt', 'DESC');
+    queryBuilder.skip(skip).take(limit).orderBy('country.viName', 'ASC');
 
     const [data, total] = await queryBuilder.getManyAndCount();
 
@@ -66,5 +74,20 @@ export class CountryRepository implements ICountryRepository {
   async remove(id: number): Promise<boolean> {
     const result = await this.repo.delete(id);
     return Boolean(result.affected && result.affected > 0);
+  }
+
+  async findByNameOrCode(
+    viName: string,
+    enName: string,
+    code: string,
+  ): Promise<Country | null> {
+    const queryBuilder = this.repo.createQueryBuilder('country');
+
+    queryBuilder.where(
+      'country.viName = :viName OR country.enName = :enName OR country.code = :code',
+      { viName, enName, code },
+    );
+
+    return queryBuilder.getOne();
   }
 }

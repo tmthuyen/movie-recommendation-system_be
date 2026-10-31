@@ -10,7 +10,7 @@ export function useGetCountries(
     queryKey: ['countries'],
     queryFn: async () => {
       // Lấy tối đa để đủ cho dropdown lọc (backend mặc định limit = 10).
-      const response = await countryApi.getAll({ page: 1, limit: 100 });
+      const response = await countryApi.getAll({ page: 1, limit: 500 });
       return response.result;
     },
     staleTime: staleTime, // 5 minutes

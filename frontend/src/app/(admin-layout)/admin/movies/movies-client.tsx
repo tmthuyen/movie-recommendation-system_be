@@ -40,7 +40,12 @@ const STATIC_FIELDS: CrudFormField[] = [
   { name: 'posterPath', label: 'Poster (path TMDB)', placeholder: '/abc.jpg' },
   { name: 'backdropPath', label: 'Backdrop (path TMDB)', placeholder: '/xyz.jpg' },
   { name: 'overview', label: 'Nội dung (tiếng Anh)', type: 'textarea', placeholder: 'Overview…' },
-  { name: 'overviewVi', label: 'Nội dung (tiếng Việt)', type: 'textarea', placeholder: 'Nội dung…' },
+  {
+    name: 'overviewVi',
+    label: 'Nội dung (tiếng Việt)',
+    type: 'textarea',
+    placeholder: 'Nội dung…',
+  },
 ];
 
 const COLUMNS: DataTableColumn<Movie>[] = [
@@ -85,7 +90,8 @@ const COLUMNS: DataTableColumn<Movie>[] = [
   {
     key: 'releaseDate',
     header: 'Năm phát hành',
-    render: (movie) => getReleaseYear(movie.releaseDate) || <span className="text-muted-foreground">—</span>,
+    render: (movie) =>
+      getReleaseYear(movie.releaseDate) || <span className="text-muted-foreground">—</span>,
   },
   {
     key: 'viewCount',
@@ -121,7 +127,7 @@ export function MoviesClient() {
           { value: '', label: '— Chọn quốc gia —' },
           ...(countries.data?.items ?? []).map((country) => ({
             value: String(country.id),
-            label: country.name,
+            label: country.viName,
           })),
         ],
       },
@@ -197,7 +203,10 @@ export function MoviesClient() {
             onEdit={state.openEdit}
             onDelete={(movie) => state.setDeleteTarget(movie)}
             empty={
-              <EmptyState title="Không có phim nào" description="Thêm phim đầu tiên vào hệ thống." />
+              <EmptyState
+                title="Không có phim nào"
+                description="Thêm phim đầu tiên vào hệ thống."
+              />
             }
           />
           {list.data ? (

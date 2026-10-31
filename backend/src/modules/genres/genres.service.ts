@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, Logger } from '@nestjs/common';
 import { CreateGenreDto } from './dto/create-genre.dto';
 import { UpdateGenreDto } from './dto/update-genre.dto';
 import { IGenreRepository } from './genres.repository';
@@ -6,6 +6,7 @@ import { PaginationDto } from '@/common/dtos/pagination.dto';
 
 @Injectable()
 export class GenresService {
+  private readonly logger = new Logger(GenresService.name);
   constructor(
     @Inject(IGenreRepository)
     private readonly repo: IGenreRepository,
@@ -16,7 +17,11 @@ export class GenresService {
   }
 
   async findAll(paginationDto: PaginationDto) {
-    return await this.repo.findAll(paginationDto);
+    const result = await this.repo.findAll(paginationDto);
+    this.logger.log(
+      `Fetched ${result.data.length} genres (page ${result.page}/${result.totalPages})`,
+    );
+    return result;
   }
 
   async findOne(id: number) {

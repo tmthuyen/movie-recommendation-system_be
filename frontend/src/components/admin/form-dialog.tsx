@@ -41,7 +41,7 @@ interface CrudFormDialogProps<T extends Record<string, unknown>> {
   schema: z.ZodType<T>;
   fields: CrudFormField[];
   defaultValues: T;
-  onSubmit: (values: T) => void | Promise<void>;
+  onSubmit: (values: T, onSuccess?: () => void) => void | Promise<void>;
   submitting?: boolean;
 }
 
@@ -66,11 +66,13 @@ export function CrudFormDialog<T extends Record<string, unknown>>({
     handleSubmit,
     setValue,
     watch,
+    reset,
     formState: { errors },
   } = useForm<T>({
     // @hookform/resolvers khai input = FieldValues, schema của ta khai input unknown → cast 2 lớp.
-    resolver: zodResolver(schema as unknown as z.ZodType<unknown, FieldValues>) as unknown as
-      Resolver<T>,
+    resolver: zodResolver(
+      schema as unknown as z.ZodType<unknown, FieldValues>,
+    ) as unknown as Resolver<T>,
     values: defaultValues, // đồng bộ lại khi đổi item đang sửa
   });
 
@@ -78,7 +80,7 @@ export function CrudFormDialog<T extends Record<string, unknown>>({
   const setFormValue = setValue as unknown as (
     name: string,
     value: unknown,
-    options?: { shouldValidate: boolean }
+    options?: { shouldValidate: boolean },
   ) => void;
   const watchFormValue = watch as unknown as (name: string) => unknown;
 
@@ -87,7 +89,10 @@ export function CrudFormDialog<T extends Record<string, unknown>>({
     const error = errors[field.name]?.message as string | undefined;
     const fieldId = `crud-field-${field.name}`;
 
-    const inputClassName = cn('w-full', error && 'border-destructive focus-visible:border-destructive');
+    const inputClassName = cn(
+      'w-full',
+      error && 'border-destructive focus-visible:border-destructive',
+    );
 
     return (
       <div key={field.name} className="space-y-1.5">
@@ -131,9 +136,9 @@ export function CrudFormDialog<T extends Record<string, unknown>>({
               <p className="text-muted-foreground text-sm">Không có lựa chọn.</p>
             ) : (
               (field.options ?? []).map((option) => {
-                const selected = ((watchFormValue(field.name) as string[] | undefined) ?? []).includes(
-                  option.value,
-                );
+                const selected = (
+                  (watchFormValue(field.name) as string[] | undefined) ?? []
+                ).includes(option.value);
                 return (
                   <label
                     key={option.value}
@@ -143,8 +148,8 @@ export function CrudFormDialog<T extends Record<string, unknown>>({
                       type="checkbox"
                       checked={selected}
                       onChange={() => {
-                        const current = ((watchFormValue(field.name) as string[] | undefined) ??
-                          []
+                        const current = (
+                          (watchFormValue(field.name) as string[] | undefined) ?? []
                         ).slice();
                         const next = selected
                           ? current.filter((value) => value !== option.value)
@@ -177,6 +182,13 @@ export function CrudFormDialog<T extends Record<string, unknown>>({
     );
   };
 
+  const handleFormSubmit = async (values: T) => {
+    await onSubmit(values, () => {
+      // reset state
+      reset();
+    });
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
@@ -185,7 +197,7 @@ export function CrudFormDialog<T extends Record<string, unknown>>({
           {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4" noValidate>
           {fields.map(renderField)}
 
           <DialogFooter className="gap-2 pt-2">
@@ -235,6 +247,5 @@ export function useCrudFormValues<T extends Record<string, unknown>>(
   fields: CrudFormField[],
   editing: object | null,
 ): T {
-
   return useMemo(() => buildDefaults<T>(fields, editing), [editing, fields]);
 }

@@ -130,8 +130,8 @@ export function usePagedList<T>(
 
 interface CrudPageMutations<TInput> {
   create: UseMutationResult<unknown, Error, TInput>;
-  update: UseMutationResult<unknown, Error, { id: string; data: TInput }>;
-  remove: UseMutationResult<unknown, Error, string>;
+  update: UseMutationResult<unknown, Error, { id: string | number; data: TInput }>;
+  remove: UseMutationResult<unknown, Error, string | number>;
 }
 
 /**
@@ -169,7 +169,7 @@ export function useCrudPage<T extends { id: number | string }, TInput>(
   };
 
   /** Submit form thêm/sửa — lỗi đã được hook mutation toast sẵn, chỉ nuốt rejection. */
-  const submit = async (values: TInput) => {
+  const submit = async (values: TInput, onSuccess?: () => void) => {
     try {
       if (editing) {
         await mutations.update.mutateAsync({ id: String(editing.id), data: values });
@@ -177,6 +177,9 @@ export function useCrudPage<T extends { id: number | string }, TInput>(
         await mutations.create.mutateAsync(values);
       }
       setDialogOpen(false);
+
+      // reset state
+      onSuccess?.();
     } catch {
       // Đã toast trong mutation onError — giữ dialog mở để user sửa.
     }

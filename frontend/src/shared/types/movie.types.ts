@@ -3,8 +3,11 @@ import { BaseDto, Genre } from './api.types';
 /** Quốc gia — `GET /api/countries` */
 export interface Country extends BaseDto {
   id: number;
-  name: string;
+  viName: string;
+  enName: string;
   code: string;
+  region: string;
+  subregion?: string;
 }
 
 /** Người tham gia phim (diễn viên/đạo diễn) */

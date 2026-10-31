@@ -25,7 +25,10 @@ export const adminGenres = createCrudHooks<Genre, { name: string; enName?: strin
   remove: (id) => genreApi.delete(String(id)),
 });
 
-export const adminCountries = createCrudHooks<Country, { name: string; code: string }>({
+export const adminCountries = createCrudHooks<
+  Country,
+  { viName: string; enName: string; code: string; region: string }
+>({
   domain: 'admin-countries',
   list: countryApi.getAll,
   create: countryApi.create,

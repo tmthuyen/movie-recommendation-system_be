@@ -13,28 +13,55 @@ import { Country } from '@/shared/types/movie.types';
 import { z } from 'zod';
 
 const FIELDS: CrudFormField[] = [
-  { name: 'name', label: 'Tên quốc gia', placeholder: 'vd. Hàn Quốc' },
+  { name: 'viName', label: 'Tên quốc gia', placeholder: 'vd. Hàn Quốc' },
+  { name: 'enName', label: 'Tên quốc gia (tiếng Anh)', placeholder: 'vd. South Korea' },
   { name: 'code', label: 'Mã quốc gia (ISO)', placeholder: 'vd. KR' },
+  { name: 'region', label: 'Khu vực', placeholder: 'vd. Asia' },
 ];
 
-type CountryForm = Record<string, unknown>;
+type CountryForm = {
+  viName: string;
+  enName: string;
+  code: string;
+  region: string;
+};
 
 const schema = z.object({
-  name: z.string().min(1, 'Tên quốc gia là bắt buộc'),
-  code: z.string().min(1, 'Mã quốc gia là bắt buộc'),
+  viName: z.string().min(1, 'Tên quốc gia là bắt buộc'),
+  enName: z.string().min(1, 'Tên quốc gia (tiếng Anh) là bắt buộc'),
+  code: z
+    .string()
+    .nonempty('Mã quốc gia là bắt buộc')
+    .max(2, 'Mã quốc gia không được vượt quá 2 ký tự'),
+  region: z.string().min(1, 'Khu vực là bắt buộc'),
 }) as unknown as z.ZodType<CountryForm>;
 
 const COLUMNS: DataTableColumn<Country>[] = [
-  { key: 'id', header: 'ID', className: 'w-20 text-muted-foreground', render: (country) => country.id },
   {
-    key: 'name',
+    key: 'id',
+    header: 'ID',
+    className: 'w-20 text-muted-foreground',
+    render: (country) => country.id,
+  },
+  {
+    key: 'viName',
     header: 'Tên quốc gia',
-    render: (country) => <span className="font-medium">{country.name}</span>,
+    render: (country) => <span className="font-medium">{country.viName}</span>,
+  },
+  {
+    key: 'enName',
+    header: 'Tên tiếng Anh',
+    render: (country) => <span className="font-medium">{country.enName}</span>,
   },
   {
     key: 'code',
     header: 'Mã',
     render: (country) => <span className="font-mono text-xs">{country.code}</span>,
+  },
+  {
+    key: 'region',
+    header: 'Khu vực',
+    render: (country) => <span className="font-mono text-xs">{country.region}</span>,
   },
 ];
 
@@ -45,7 +72,10 @@ export function CountriesClient() {
     update: adminCountries.useUpdate(),
     remove: adminCountries.useDelete(),
   };
-  const state = useCrudPage<Country, { name: string; code: string }>(mutations);
+  const state = useCrudPage<
+    Country,
+    { viName: string; enName: string; code: string; region: string }
+  >(mutations);
   const list = adminCountries.useList({ page: state.page, limit: 10, keyword: state.keyword });
   const defaultValues = useCrudFormValues<CountryForm>(FIELDS, state.editing);
 
@@ -102,18 +132,25 @@ export function CountriesClient() {
         schema={schema}
         fields={FIELDS}
         defaultValues={defaultValues}
-        onSubmit={(values) =>
-          state.submit({
-            name: String(values.name ?? ''),
-            code: String(values.code ?? ''),
-          })
-        }
+        onSubmit={(values, onSuccess) => {
+          state.submit(
+            {
+              viName: String(values.viName ?? ''),
+              enName: String(values.enName ?? ''),
+              code: String(values.code ?? ''),
+              region: String(values.region ?? ''),
+            },
+            onSuccess,
+          );
+        }}
         submitting={state.saving}
       />
 
       <CrudDeleteDialog
         target={
-          state.deleteTarget ? { id: state.deleteTarget.id, label: state.deleteTarget.name } : null
+          state.deleteTarget
+            ? { id: state.deleteTarget.id, label: state.deleteTarget.viName }
+            : null
         }
         onCancel={() => state.setDeleteTarget(null)}
         onConfirm={state.confirmDelete}

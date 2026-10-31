@@ -20,15 +20,17 @@ export const countryApi = {
     return data;
   },
   /** Tạo mới (ADMIN). */
-  create: async (input: { name: string; code: string }): Promise<ApiResponse<Country>> => {
+  create: async (input: {
+    viName: string;
+    enName: string;
+    code: string;
+    region: string;
+  }): Promise<ApiResponse<Country>> => {
     const { data } = await axiosClient.post('/countries', input);
     return data;
   },
   /** Cập nhật (ADMIN) — backend nhận `PATCH`. */
-  update: async (
-    id: number | string,
-    input: Partial<{ name: string; code: string }>,
-  ): Promise<ApiResponse<Country>> => {
+  update: async (id: number | string, input: Partial<Country>): Promise<ApiResponse<Country>> => {
     const { data } = await axiosClient.patch(`/countries/${id}`, input);
     return data;
   },

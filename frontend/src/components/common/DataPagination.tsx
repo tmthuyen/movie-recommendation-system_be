@@ -56,7 +56,7 @@ export function DataPagination({
     <nav
       aria-label={ariaLabel}
       className={cn(
-        'mt-8 flex flex-col items-center justify-between gap-4 border-t pt-4 sm:flex-row',
+        'mt-8 flex flex-col items-center justify-between gap-4 border-t py-4 sm:flex-row',
         className,
       )}
     >

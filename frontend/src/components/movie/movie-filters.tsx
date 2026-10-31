@@ -111,13 +111,16 @@ export function MovieFilters() {
             )}
             {countries?.map((country) => (
               <SelectItem key={country.id} value={String(country.id)}>
-                {country.name}
+                {country.viName}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
 
-        <Select value={sort} onValueChange={(value) => setFilter({ sort: value as MovieSortOption })}>
+        <Select
+          value={sort}
+          onValueChange={(value) => setFilter({ sort: value as MovieSortOption })}
+        >
           <SelectTrigger className="h-11 w-full md:w-40" aria-label="Sắp xếp">
             <SelectValue placeholder="Sắp xếp" />
           </SelectTrigger>
