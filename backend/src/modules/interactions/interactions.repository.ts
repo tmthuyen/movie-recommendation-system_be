@@ -4,6 +4,8 @@ import { Repository } from 'typeorm';
 import { Interaction } from './entities/interaction.entity';
 import { PaginationDto } from '@/common/dtos/pagination.dto';
 import { PaginatedResult } from '@/common/dtos/paginated-result.interface';
+import { User } from '@/modules/users/entities/user.entity';
+import { Movie } from '@/modules/movies/entities/movie.entity';
 
 export const IInteractionRepository = Symbol('IInteractionRepository');
 
@@ -27,6 +29,10 @@ export interface IInteractionRepository {
     type: string,
   ): Promise<Interaction | null>;
   countByMovieAndType(movieId: number, type?: string): Promise<number>;
+  findAllByUserAndMovie(
+    userId: string,
+    movieId: number,
+  ): Promise<Interaction[]>;
 }
 
 @Injectable()
@@ -137,6 +143,21 @@ export class InteractionRepository implements IInteractionRepository {
       where: {
         movie: { id: movieId } as any,
         ...(type ? { type: type as any } : {}),
+      },
+    });
+  }
+
+  async findAllByUserAndMovie(
+    userId: string,
+    movieId: number,
+  ): Promise<Interaction[]> {
+    return this.repo.find({
+      where: {
+        user: { id: userId } as User,
+        movie: { id: movieId } as Movie,
+      },
+      order: {
+        id: 'DESC',
       },
     });
   }

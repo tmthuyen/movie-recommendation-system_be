@@ -19,6 +19,9 @@ export class Rating extends BaseAuditEntity {
   @Column({ type: 'float' })
   rating: number;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  content?: string;
+
   @Column({ type: 'timestamp', nullable: true })
   timestamp: Date;
 

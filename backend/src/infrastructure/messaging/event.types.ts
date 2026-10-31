@@ -59,8 +59,8 @@ export interface InteractionCreatedPayload {
   userId: string;
   movieId: number;
   action: string;
-  score: number;
-  /** `true` khi huỷ tương tác (unlike) — score mang giá trị âm. */
+  score: number | null;
+
   removed: boolean;
   createdAt: Date;
 }

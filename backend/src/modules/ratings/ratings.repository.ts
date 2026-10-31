@@ -17,6 +17,7 @@ export interface IRatingRepository {
   create(rating: Partial<Rating>): Promise<Rating>;
   update(id: number, rating: Partial<Rating>): Promise<Rating | null>;
   remove(id: number): Promise<boolean>;
+  findByUserAndMovie(userId: string, movieId: number): Promise<Rating | null>;
 }
 
 @Injectable()
@@ -99,5 +100,19 @@ export class RatingRepository implements IRatingRepository {
   async remove(id: number): Promise<boolean> {
     const result = await this.repo.delete(id);
     return Boolean(result.affected && result.affected > 0);
+  }
+
+  async findByUserAndMovie(
+    userId: string,
+    movieId: number,
+  ): Promise<Rating | null> {
+    return this.repo
+      .createQueryBuilder('rating')
+      .leftJoin('rating.user', 'user')
+      .leftJoin('rating.movie', 'movie')
+      .addSelect(['user.id', 'movie.id'])
+      .where('rating.user_id = :userId', { userId })
+      .andWhere('rating.movie_id = :movieId', { movieId })
+      .getOne();
   }
 }

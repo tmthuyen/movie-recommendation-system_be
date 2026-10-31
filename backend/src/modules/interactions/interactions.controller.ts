@@ -148,4 +148,29 @@ export class InteractionsController {
       result,
     };
   }
+
+  // GET: /interactions/movie/:movieId/me
+  @Get('movie/:movieId/me')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Lấy danh sách tương tác của user với movie cụ thể (Yêu cầu đăng nhập)',
+  })
+  async getMyInteractionsWithMovie(
+    @Req() req: Request,
+    @Param('movieId') movieId: number,
+  ) {
+    const { sub: userId } = req.user as JwtPayload;
+    const data = await this.interactionsService.getInteractionsByUserAndMovie(
+      userId,
+      Number(movieId),
+    );
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Lấy danh sách tương tác với movie thành công',
+      result: data,
+    };
+  }
 }

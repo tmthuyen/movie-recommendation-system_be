@@ -11,6 +11,7 @@ import {
 import { RatingsModule } from '../ratings/ratings.module';
 import { EventsModule } from '../events/events.module';
 import { InteractionStatsModule } from './interaction-stats.module';
+import { MoviesModule } from '@/modules/movies/movies.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { InteractionStatsModule } from './interaction-stats.module';
     forwardRef(() => RatingsModule),
     forwardRef(() => EventsModule),
     InteractionStatsModule,
+    MoviesModule,
   ],
   controllers: [InteractionsController],
   providers: [

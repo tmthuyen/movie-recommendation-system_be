@@ -3,7 +3,7 @@ import {
   NestInterceptor,
   ExecutionContext,
   CallHandler,
-  type LoggerService,
+  Logger,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
@@ -13,7 +13,7 @@ import { AppException } from '../custom-exception/app-exception';
 
 @Injectable()
 export class LoggingInterceptor implements NestInterceptor {
-  constructor(private readonly logger: LoggerService) {}
+  private readonly logger = new Logger(LoggingInterceptor.name);
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const req = context.switchToHttp().getRequest<Request>();
@@ -25,16 +25,13 @@ export class LoggingInterceptor implements NestInterceptor {
     const headers = req.headers;
     const activeSpan = trace.getActiveSpan();
     const traceID = activeSpan ? activeSpan.spanContext().traceId : 'None';
-    const reqID = (headers['x-request-id'] as string) || '';
     const kongID = (headers['x-kong-request-id'] as string) || '';
 
-    if (!reqID || !kongID) {
-      this.logger.error('Missing request ID or kong ID');
+    if (!kongID) {
+      this.logger.warn('Missing request ID or kong ID');
     }
 
-    this.logger.log(
-      `[Trace ID]: ${traceID} - [Request ID]: ${reqID} - [Kong ID]: ${kongID}`,
-    );
+    this.logger.log(`[Trace ID]: ${traceID} - [Kong ID]: ${kongID}`);
     this.logger.log(`→ ${method} ${originalUrl} - ${ip} - ${userAgent}`);
 
     return next.handle().pipe(

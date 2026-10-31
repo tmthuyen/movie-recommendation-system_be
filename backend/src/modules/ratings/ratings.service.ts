@@ -142,4 +142,12 @@ export class RatingsService {
     await this.repo.remove(rating.id);
     return { success: true };
   }
+
+  async findByUserAndMovie(
+    userId: string,
+    movieId: number,
+  ): Promise<Rating | null> {
+    const rating = await this.repo.findByUserAndMovie(userId, movieId);
+    return rating;
+  }
 }

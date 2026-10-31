@@ -1,13 +1,9 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, Logger } from '@nestjs/common';
 import { CreateInteractionDto } from './dto/create-interaction.dto';
 import { IInteractionRepository } from './interactions.repository';
 import { PaginationDto } from '@/common/dtos/pagination.dto';
 import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
-import {
-  Interaction,
-  InteractionScoreMap,
-  InteractionType,
-} from './entities/interaction.entity';
+import { Interaction, InteractionType } from './entities/interaction.entity';
 import { Movie } from '@/modules/movies/entities/movie.entity';
 import { User } from '@/modules/users/entities/user.entity';
 import { EventsGateway } from '@/modules/events/events.gateway';
@@ -15,29 +11,34 @@ import {
   MovieInteractionStats,
   MovieInteractionStatsService,
 } from './movie-interaction-stats.service';
+import { MoviesService } from '@/modules/movies/movies.service';
+import { PaginatedResult } from '@/common/dtos/paginated-result.interface';
+import { RatingsService } from '@/modules/ratings/ratings.service';
+import { Rating } from '@/modules/ratings/entities/rating.entity';
+import { MyInteractionsWithMovie } from '@/modules/interactions/dto/my-interaction-with-movie.dto';
 
 export interface ToggleInteractionResult {
   action: 'added' | 'removed';
   type: InteractionType;
-  /** Score của tương tác vừa tạo (0 khi huỷ). */
-  score: number;
   likeCount: number;
   data?: Interaction;
 }
 
 @Injectable()
 export class InteractionsService {
+  private readonly logger = new Logger(InteractionsService.name);
   constructor(
     @Inject(IInteractionRepository)
     private readonly repo: IInteractionRepository,
     private readonly interactionProducer: InteractionProducer,
     private readonly statsService: MovieInteractionStatsService,
     private readonly eventsGateway: EventsGateway,
+    private readonly movieService: MoviesService,
+    private readonly ratingService: RatingsService,
   ) {}
 
   /**
    * TOGGLE like: gọi lần 1 để thích, gọi lại để bỏ thích.
-   * Backend tự tính `score` (band 5) — client không gửi score.
    */
   async create(
     userId: string,
@@ -45,48 +46,43 @@ export class InteractionsService {
   ): Promise<ToggleInteractionResult> {
     const { movieId, type } = createInteractionDto;
 
-    // Đảm bảo phim tồn tại (404 thay vì lỗi FK 500)
-    await this.statsService.getStats(movieId);
+    // check if the movie exists
+    await this.movieService.findOne(movieId);
 
     const existing = await this.repo.findByUnique(userId, movieId, type);
 
     if (existing) {
       await this.repo.remove(existing.id);
-      const stats = await this.statsService.getStats(movieId);
-      const removedScore = -InteractionScoreMap[type];
-
-      this.publishAndBroadcast(
-        userId,
-        movieId,
-        type,
-        'removed',
-        removedScore,
-        stats,
+      this.logger.log(
+        `Xóa tương tác userId=${userId}, movieId=${movieId}, type=${type}`,
       );
+
+      const stats = await this.statsService.getStats(movieId);
+
+      this.publishAndBroadcast(userId, movieId, type, 'removed', stats);
 
       return {
         action: 'removed',
         type,
-        score: 0,
         likeCount: stats.likeCount,
       };
     }
 
-    const score = InteractionScoreMap[type] ?? 0;
     const newInteraction = await this.repo.create({
-      score,
       type,
       movie: { id: movieId } as Movie,
       user: { id: userId } as User,
     });
+    this.logger.log(
+      `Tạo tương tác mới userId=${userId}, movieId=${movieId}, type=${type}`,
+    );
 
     const stats = await this.statsService.getStats(movieId);
-    this.publishAndBroadcast(userId, movieId, type, 'added', score, stats);
+    this.publishAndBroadcast(userId, movieId, type, 'added', stats);
 
     return {
       action: 'added',
       type,
-      score,
       likeCount: stats.likeCount,
       data: newInteraction,
     };
@@ -97,17 +93,37 @@ export class InteractionsService {
     return this.statsService.getStats(movieId);
   }
 
-  async findAll(paginationDto: PaginationDto) {
-    return this.repo.findAll(paginationDto);
+  async findAll(
+    paginationDto: PaginationDto,
+  ): Promise<PaginatedResult<Interaction>> {
+    const data = await this.repo.findAll(paginationDto);
+
+    this.logger.log(
+      `Lấy danh sách tương tác: page=${paginationDto.page}, limit=${paginationDto.limit}, keyword=${paginationDto.keyword || 'N/A'}`,
+    );
+    return data;
   }
 
   async getHistory(userId: string, paginationDto: PaginationDto) {
     // Only fetch CLICK (view history)
-    return this.repo.findByUser(userId, paginationDto, [InteractionType.CLICK]);
+    const data = await this.repo.findByUser(userId, paginationDto, [
+      InteractionType.CLICK,
+    ]);
+
+    this.logger.log(
+      `Lấy lịch sử xem phim của userId=${userId}: page=${paginationDto.page}, limit=${paginationDto.limit}`,
+    );
+    return data;
   }
 
   async getFavorites(userId: string, paginationDto: PaginationDto) {
-    return this.repo.findByUser(userId, paginationDto, [InteractionType.LIKE]);
+    const data = await this.repo.findByUser(userId, paginationDto, [
+      InteractionType.LIKE,
+    ]);
+    this.logger.log(
+      `Lấy danh sách yêu thích của userId=${userId}: page=${paginationDto.page}, limit=${paginationDto.limit}`,
+    );
+    return data;
   }
 
   async findOne(id: number) {
@@ -115,26 +131,15 @@ export class InteractionsService {
     if (!item) {
       throw new NotFoundException(`Không tìm thấy tương tác với ID ${id}`);
     }
+    this.logger.log(`Lấy tương tác với ID ${id} thành công`);
     return item;
   }
 
   async remove(id: number) {
     const item = await this.findOne(id);
     await this.repo.remove(item.id);
+    this.logger.log(`Xóa tương tác với ID ${id} thành công`);
     return { success: true };
-  }
-
-  async toggleLike({
-    userId,
-    movieId,
-  }: {
-    userId: string;
-    movieId: number;
-  }): Promise<ToggleInteractionResult> {
-    return this.create(userId, {
-      type: InteractionType.LIKE,
-      movieId,
-    });
   }
 
   private publishAndBroadcast(
@@ -142,7 +147,6 @@ export class InteractionsService {
     movieId: number,
     type: InteractionType,
     action: 'added' | 'removed',
-    score: number,
     stats: MovieInteractionStats,
   ) {
     const createdAt = new Date();
@@ -151,19 +155,52 @@ export class InteractionsService {
       movieId,
       type,
       action,
-      score,
+      score: null,
       likeCount: stats.likeCount,
       commentCount: stats.commentCount,
       viewCount: stats.viewCount,
     });
+    this.logger.log(
+      `Đã broadcast sự kiện tương tác: userId=${userId}, movieId=${movieId}, type=${type}, action=${action}`,
+    );
 
-    this.interactionProducer.publishInteractionCreated({
-      userId,
-      movieId,
-      action: type,
-      score,
-      removed: action === 'removed',
-      createdAt,
-    });
+    // Nếu remove khả publish queue
+    if (action !== 'removed') {
+      this.interactionProducer.publishInteractionCreated({
+        userId,
+        movieId,
+        action: type,
+        score: null,
+        removed: false,
+        createdAt,
+      });
+      this.logger.log(
+        `Đã publish queue sự kiện tương tác: userId=${userId}, movieId=${movieId}, type=${type}, action=${action}`,
+      );
+    }
+  }
+
+  async getInteractionsByUserAndMovie(
+    userId: string,
+    movieId: number,
+  ): Promise<MyInteractionsWithMovie> {
+    const [interactions, rating] = await Promise.all([
+      this.repo.findAllByUserAndMovie(userId, movieId),
+      this.ratingService.findByUserAndMovie(userId, movieId),
+    ]);
+    // get comment
+
+    const isLiked = interactions.some(i => i.type === InteractionType.LIKE);
+    const click = interactions.some(i => i.type === InteractionType.CLICK);
+    const commentCount = interactions.filter(
+      i => i.type === InteractionType.COMMENT,
+    ).length;
+
+    return {
+      isLiked,
+      click,
+      commentCount,
+      rating,
+    };
   }
 }

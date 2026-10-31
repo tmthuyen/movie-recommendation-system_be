@@ -16,7 +16,7 @@ export interface InteractionBroadcastPayload {
   movieId: number;
   type: string;
   action: 'added' | 'removed' | 'updated';
-  score: number;
+  score: number | null;
   likeCount: number;
   commentCount: number;
   viewCount: number;

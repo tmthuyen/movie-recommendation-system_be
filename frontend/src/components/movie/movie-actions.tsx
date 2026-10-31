@@ -8,7 +8,7 @@ import { useRequireLogin } from '@/hooks/useRequireLogin';
 import { cn } from '@/lib/utils';
 
 interface MovieActionsProps {
-  movieId: number | string;
+  movieId: number;
   /** Kiểu hiển thị: `card` (compact cho card phim) hoặc `detail` (trang chi tiết). */
   variant?: 'card' | 'detail';
   className?: string;
@@ -24,11 +24,10 @@ interface MovieActionsProps {
  */
 export function MovieActions({ movieId, variant = 'card', className }: MovieActionsProps) {
   const requireLogin = useRequireLogin();
-  const { keys } = useInteraction.useMyFavoriteKeys();
+
+  const { data: myInteractionsWithMovie } = useInteraction.useMyInteractionsWithMovie(movieId);
   const toggleInteraction = useInteraction.useToggleInteraction();
   const isDetail = variant === 'detail';
-
-  const statsQuery = useInteraction.useInteractionStats(movieId, isDetail);
 
   // Số like "live" theo từng phim — tránh giữ số cũ khi đổi phim mà không cần effect.
   const movieKey = String(movieId);
@@ -36,8 +35,9 @@ export function MovieActions({ movieId, variant = 'card', className }: MovieActi
     key: movieKey,
     count: null,
   });
-  const likeCount = (live.key === movieKey ? live.count : null) ?? statsQuery.data?.likeCount ?? 0;
+  const likeCount = (live.key === movieKey ? live.count : null) ?? 0;
 
+  // Cập nhật realtime với socket khi có toggle like
   useMovieSocket({
     movieId,
     enabled: isDetail,
@@ -48,7 +48,7 @@ export function MovieActions({ movieId, variant = 'card', className }: MovieActi
     },
   });
 
-  const active = keys.has(`${movieId}:like`);
+  const active = myInteractionsWithMovie?.isLiked ?? false;
   const pending =
     toggleInteraction.isPending && String(toggleInteraction.variables?.movieId) === movieKey;
 
@@ -58,6 +58,7 @@ export function MovieActions({ movieId, variant = 'card', className }: MovieActi
       { movieId, type: 'like' },
       {
         onSuccess: (result) => {
+          // Cập nhật
           setLive({ key: movieKey, count: result.likeCount });
         },
       },

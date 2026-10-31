@@ -150,9 +150,9 @@ export class Movie extends BaseAuditEntity {
   @OneToMany(() => MoviePeople, moviePeople => moviePeople.movie)
   moviePeoples: MoviePeople[];
 
-  @ManyToOne(() => Country, country => country.movies)
-  @JoinColumn({ name: 'country_id' })
-  country: Country;
+  // @ManyToOne(() => Country, country => country.movies)
+  // @JoinColumn({ name: 'country_id' })
+  // country: Country;
 
   @OneToMany(() => Rating, rating => rating.movie)
   ratings: Rating[];

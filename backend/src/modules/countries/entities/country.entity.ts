@@ -8,11 +8,20 @@ export class Country extends BaseAuditEntity {
   id: number;
 
   @Column({ type: 'varchar', length: 50 })
-  name: string;
+  vi_name: string;
 
   @Column({ type: 'varchar', length: 50 })
+  en_name: string;
+
+  @Column({ type: 'varchar', length: 2, unique: true, nullable: true })
   code: string;
 
-  @OneToMany(() => Movie, movie => movie.country)
-  movies: Movie[];
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  region: string;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  subregion: string;
+
+  // @OneToMany(() => Movie, movie => movie.country)
+  // movies: Movie[];
 }

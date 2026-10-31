@@ -35,9 +35,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
       );
     }
 
-    this.logger.log(
-      `[User ID] ${user.sub} [${user.email}] authenticated successfully`,
-    );
+    this.logger.log(`[User ID] ${user.sub} authenticated successfully`);
 
     return user;
   }

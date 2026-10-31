@@ -1,7 +1,12 @@
 import { interactionApi } from '@/apis/interaction.api';
 import { parseAxiosError } from '@/lib/axiosClient';
 import { ApiPaginatedResponse, Pagination } from '@/shared/types/api.types';
-import { Interaction, InteractionStats, InteractionType } from '@/shared/types/interaction.types';
+import {
+  Interaction,
+  InteractionStats,
+  InteractionType,
+  MyInteractionsWithMovie,
+} from '@/shared/types/interaction.types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { toast } from 'sonner';
@@ -14,6 +19,14 @@ export const interactionStatsQueryKey = (movieId: number | string) => [
   FAVORITES_KEY,
   'stats',
   String(movieId),
+];
+
+// tương tác với movie key
+export const interactionWithMovieQueryKey = (movieId: number) => [
+  FAVORITES_KEY,
+  'movie',
+  String(movieId),
+  'me',
 ];
 
 /** Kết quả phân trang của `my-history`/`my-favorites` (items + pagination từ envelope). */
@@ -68,7 +81,7 @@ function usePagedInteractionsQuery(
     },
     enabled,
     staleTime: 1000 * 60 * 2, // 2 phút
-    gcTime: 1000 * 60 * 10, // 10 phút
+    gcTime: 1000 * 60 * 5, // 5 phút
   });
 }
 
@@ -147,45 +160,53 @@ export function useInteractionStats(movieId: number | string, enabled: boolean =
 export function useToggleInteraction() {
   const queryClient = useQueryClient();
 
+  const userAuth = useAuthStore((state) => state.user);
+
   return useMutation({
     mutationFn: async (input: {
-      movieId: number | string;
+      movieId: number;
       type: 'like';
     }): Promise<{
       action: 'added' | 'removed';
       type: InteractionType;
-      score: number;
+      isLiked: boolean;
       likeCount: number;
     }> => {
-      const response = await interactionApi.toggle(input);
+      const response = await interactionApi.toggleLike(input);
+
+      const result = response.result;
+      const interaction = result.data;
+
+      let isLiked = false;
+      if (interaction) {
+        isLiked = interaction.type === 'like' && interaction.user?.id === userAuth?.id;
+      }
       return {
-        action: response.result.action,
-        type: response.result.type,
-        score: response.result.score,
-        likeCount: response.result.likeCount,
+        action: result.action,
+        type: result.type,
+        isLiked: isLiked,
+        likeCount: result.likeCount,
       };
     },
     onMutate: async ({ movieId, type }) => {
-      // Chỉ optimistic trên cache danh sách yêu thích (không đụng cache stats).
-      const favoritesKey = [FAVORITES_KEY, 'my-favorites'];
-      await queryClient.cancelQueries({ queryKey: favoritesKey });
-      const previous = queryClient.getQueriesData<Interaction[]>({
-        queryKey: favoritesKey,
+      // Optimistic update: đảo trạng thái isLiked trong cache `my-interactions-with-movie`
+      const myInteractionsWithMovieKey = interactionWithMovieQueryKey(movieId);
+      await queryClient.cancelQueries({ queryKey: myInteractionsWithMovieKey });
+      const previous = queryClient.getQueriesData<MyInteractionsWithMovie>({
+        queryKey: myInteractionsWithMovieKey,
       });
 
-      // Optimistic: đổi trạng thái local (chưa biết added/removed nên đảo trạng thái hiện có)
-      queryClient.setQueriesData<Interaction[]>({ queryKey: favoritesKey }, (old) => {
-        if (!old) return old;
-        const exists = old.some(
-          (item) => `${item.movie?.id ?? item.movieId}:${item.type}` === `${movieId}:${type}`,
-        );
-        if (exists) {
-          return old.filter(
-            (item) => `${item.movie?.id ?? item.movieId}:${item.type}` !== `${movieId}:${type}`,
-          );
-        }
-        return [...old, { id: -Date.now(), score: 5, type, movieId } as Interaction];
-      });
+      // Optimistic: đảo trạng thái isLiked (chưa biết added/removed nên đảo trạng thái hiện có)
+      queryClient.setQueriesData<MyInteractionsWithMovie>(
+        { queryKey: myInteractionsWithMovieKey },
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            isLiked: !old.isLiked,
+          };
+        },
+      );
 
       return { previous };
     },
@@ -202,16 +223,40 @@ export function useToggleInteraction() {
     },
     onSettled: (_data, _error, variables) => {
       // Đồng bộ lại với server (đọc result.action bên server làm nguồn sự thật)
-      queryClient.invalidateQueries({ queryKey: [FAVORITES_KEY] });
+      // queryClient.invalidateQueries({ queryKey: [FAVORITES_KEY] });
       // Danh sách trang Lịch sử xem / Yêu thích (queryKey root riêng, có phân trang)
       queryClient.invalidateQueries({ queryKey: ['my-history'] });
       queryClient.invalidateQueries({ queryKey: ['my-favorites-page'] });
-      if (variables?.movieId) {
-        queryClient.invalidateQueries({
-          queryKey: interactionStatsQueryKey(variables.movieId),
-        });
-      }
+      // if (variables?.movieId) {
+      //   queryClient.invalidateQueries({
+      //     queryKey: interactionStatsQueryKey(variables.movieId),
+      //   });
+      // }
     },
+  });
+}
+
+/**
+ * Lấy tất cả tương tác của user với movie hiện tại
+ * Chỉ gọi 1 lân khi vào movie detail
+ * Các thay đổi sau đó tự cập nhật realtime hoặc HTTP response
+ * returns: { isLiked: true/false, click: true/false, commentCount: number, rating: { score, content(nếu có)} }
+ */
+export function useMyInteractionsWithMovie(movieId: number) {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+
+  return useQuery({
+    queryKey: interactionWithMovieQueryKey(movieId),
+    queryFn: async (): Promise<MyInteractionsWithMovie> => {
+      const response = await interactionApi.getInteractionsWithMovie(Number(movieId));
+
+      return response.result;
+    },
+    enabled: isAuthenticated,
+    staleTime: Infinity,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 }
 
@@ -222,6 +267,7 @@ const useInteraction = {
   useMyFavoritesPaged,
   useToggleInteraction,
   useInteractionStats,
+  useMyInteractionsWithMovie,
 };
 
 export default useInteraction;

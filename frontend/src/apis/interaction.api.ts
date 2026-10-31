@@ -2,15 +2,16 @@ import { ApiPaginatedResponse, ApiResponse } from '@/shared/types/api.types';
 import {
   Interaction,
   InteractionStats,
+  MyInteractionsWithMovie,
   ToggleInteractionResult,
 } from '@/shared/types/interaction.types';
 import axiosClient from '../lib/axiosClient';
 
 export const interactionApi = {
   /** TOGGLE yêu thích (JWT) — body `{ type: 'like', movieId }`, gọi lại để bỏ. */
-  toggle: async (input: {
+  toggleLike: async (input: {
     type: 'like';
-    movieId: number | string;
+    movieId: number;
   }): Promise<ApiResponse<ToggleInteractionResult>> => {
     const { data } = await axiosClient.post('/interactions', input);
     return data;
@@ -34,6 +35,15 @@ export const interactionApi = {
     limit?: number;
   }): Promise<ApiPaginatedResponse<Interaction[]>> => {
     const { data } = await axiosClient.get('/interactions/my-favorites', { params });
+    return data;
+  },
+  /** Danh sách tương tác của user với movie cụ thể
+   * @param movieId - ID của movie
+   */
+  getInteractionsWithMovie: async (
+    movieId: number,
+  ): Promise<ApiPaginatedResponse<MyInteractionsWithMovie>> => {
+    const { data } = await axiosClient.get(`/interactions/movie/${movieId}/me`);
     return data;
   },
   /** Toàn bộ tương tác (public, admin) — `{page, limit}`, join `user` + `movie`. */

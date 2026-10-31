@@ -1,3 +1,4 @@
+import { Rating } from '@/shared/types/rating.types';
 import { BaseDto } from './api.types';
 import { Movie } from './movie.types';
 
@@ -16,10 +17,21 @@ export type InteractionType = 'like' | 'rating' | 'comment' | 'click';
 export interface Interaction extends BaseDto {
   id: number;
   score: number;
+  content?: string;
   type: InteractionType;
   user?: { id: string; fullName?: string; email?: string; avatarUrl?: string };
   movie?: Movie;
   movieId?: number | string;
+}
+
+/**
+ * /api/interactions/movie/:movieId/me — tất cả tương tác của user với movie hiện tại
+ */
+export interface MyInteractionsWithMovie {
+  isLiked: boolean;
+  click: boolean;
+  commentCount: number;
+  rating?: Rating | null;
 }
 
 /**
@@ -32,7 +44,7 @@ export interface ToggleInteractionResult {
   success?: boolean;
   action: 'added' | 'removed';
   type: InteractionType;
-  score: number;
+  score?: number;
   likeCount: number;
   data?: Interaction;
 }

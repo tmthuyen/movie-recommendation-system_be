@@ -51,7 +51,7 @@ async function bootstrap() {
 
   // interceptors
   app.useGlobalInterceptors(new CamelCaseInterceptor());
-  app.useGlobalInterceptors(new LoggingInterceptor(winstonLogger));
+  app.useGlobalInterceptors(new LoggingInterceptor());
 
   // filters
   app.useGlobalFilters(new HttpExceptionFilter(winstonLogger));

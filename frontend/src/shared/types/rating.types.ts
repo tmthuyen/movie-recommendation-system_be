@@ -9,6 +9,7 @@ export interface Rating {
   id: number;
   /** Điểm 0–5. */
   rating: number;
+  content?: string;
   user?: { id: string; fullName?: string; email?: string; avatarUrl?: string };
   movie?: Movie;
   createdAt?: string;
