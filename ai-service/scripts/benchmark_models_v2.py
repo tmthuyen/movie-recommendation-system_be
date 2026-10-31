@@ -151,6 +151,8 @@ JUDGE_MODEL_EXACT_NAME = "gemini-3.5-flash-lite"
 
 def compute_dcg_at_k(grades: List[int], k: int) -> float:
     """Tính Discounted Cumulative Gain theo chuẩn TREC (2^rel - 1) / log2(i + 1)."""
+    if k <= 0:
+        return 0.0
     dcg = 0.0
     for i, g in enumerate(grades[:k], start=1):
         if g > 0:
@@ -160,12 +162,16 @@ def compute_dcg_at_k(grades: List[int], k: int) -> float:
 
 def compute_idcg_at_k(pool_grades: List[int], k: int) -> float:
     """Tính Ideal DCG từ danh sách điểm của tất cả ứng viên liên quan trong pool."""
+    if k <= 0:
+        return 0.0
     sorted_grades = sorted(pool_grades, reverse=True)[:k]
     return compute_dcg_at_k(sorted_grades, k)
 
 
 def compute_ndcg_at_k(retrieved_grades: List[int], pool_grades: List[int], k: int) -> float:
     """Normalized Discounted Cumulative Gain."""
+    if k <= 0:
+        return 0.0
     idcg = compute_idcg_at_k(pool_grades, k)
     if idcg <= 0.0:
         return 0.0
@@ -184,7 +190,7 @@ def compute_pooled_relative_recall_at_k(
     is_relevant_flags: List[bool], total_relevant_in_pool: int, k: int
 ) -> float:
     """Pooled Relative Recall = Số kết quả liên quan tìm thấy / Tổng số phim liên quan trong pool."""
-    if total_relevant_in_pool <= 0:
+    if total_relevant_in_pool <= 0 or k <= 0:
         return 0.0
     hits = sum(1 for flag in is_relevant_flags[:k] if flag)
     return min(1.0, hits / float(total_relevant_in_pool))
@@ -192,11 +198,15 @@ def compute_pooled_relative_recall_at_k(
 
 def compute_hit_at_k(is_relevant_flags: List[bool], k: int) -> float:
     """Hit@K = 1 nếu có ít nhất 1 kết quả liên quan trong Top-K, ngược lại 0."""
+    if k <= 0:
+        return 0.0
     return 1.0 if any(is_relevant_flags[:k]) else 0.0
 
 
 def compute_reciprocal_rank(is_relevant_flags: List[bool], max_k: int = 10) -> float:
     """Reciprocal Rank = 1 / rank của kết quả liên quan đầu tiên."""
+    if max_k <= 0:
+        return 0.0
     for rank, flag in enumerate(is_relevant_flags[:max_k], start=1):
         if flag:
             return 1.0 / float(rank)
@@ -205,7 +215,7 @@ def compute_reciprocal_rank(is_relevant_flags: List[bool], max_k: int = 10) -> f
 
 def compute_average_precision(is_relevant_flags: List[bool], total_relevant_in_pool: int, max_k: int = 10) -> float:
     """Average Precision @ max_k với mẫu số min(R_pool, max_k)."""
-    if total_relevant_in_pool <= 0:
+    if total_relevant_in_pool <= 0 or max_k <= 0:
         return 0.0
     denom = min(total_relevant_in_pool, max_k)
     running_hits = 0
@@ -271,6 +281,15 @@ def load_ground_truth_and_queries() -> Tuple[List[Dict[str, Any]], Dict[str, Dic
     with open(GROUND_TRUTH_V2_FILE, "r", encoding="utf-8") as f:
         gt_data = json.load(f).get("queries", [])
 
+    def get_cand_grade(c_item: Dict[str, Any]) -> Optional[int]:
+        if c_item.get("verified_by_human") and c_item.get("relevance_grade") is not None:
+            g = c_item.get("relevance_grade")
+        else:
+            g = c_item.get("llm_grade")
+        if g is not None and g in (0, 1, 2, 3):
+            return int(g)
+        return None
+
     gt_map: Dict[str, Dict[str, Any]] = {}
     for q in gt_data:
         qid = q["query_id"]
@@ -278,28 +297,20 @@ def load_ground_truth_and_queries() -> Tuple[List[Dict[str, Any]], Dict[str, Dic
         for c in q.get("candidates", []):
             mid = int(c["movie_id"])
             cands_by_id[mid] = c
+
+        all_grades = [
+            get_cand_grade(c)
+            for c in q.get("candidates", [])
+            if get_cand_grade(c) is not None
+        ]
+        rel_count = sum(1 for g in all_grades if g >= BINARY_RELEVANCE_THRESHOLD)
+
         gt_map[qid] = {
             "source_movie_id": int(q.get("source_movie_id", 0)),
             "candidates": cands_by_id,
-            "all_pool_grades": [
-                int(c["llm_grade"])
-                for c in q.get("candidates", [])
-                if c.get("llm_grade") is not None and c["llm_grade"] in (0, 1, 2, 3)
-            ],
-            "total_relevant_in_pool": sum(
-                1
-                for c in q.get("candidates", [])
-                if c.get("llm_grade") is not None
-                and c["llm_grade"] in (0, 1, 2, 3)
-                and int(c["llm_grade"]) >= BINARY_RELEVANCE_THRESHOLD
-            ),
-            "total_rel_in_pool": sum(
-                1
-                for c in q.get("candidates", [])
-                if c.get("llm_grade") is not None
-                and c["llm_grade"] in (0, 1, 2, 3)
-                and int(c["llm_grade"]) >= BINARY_RELEVANCE_THRESHOLD
-            ),
+            "all_pool_grades": all_grades,
+            "total_relevant_in_pool": rel_count,
+            "total_rel_in_pool": rel_count,
         }
 
     assert len(queries_data) == 100
