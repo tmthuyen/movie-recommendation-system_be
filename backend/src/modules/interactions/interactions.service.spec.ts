@@ -4,6 +4,8 @@ import { IInteractionRepository } from './interactions.repository';
 import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
 import { EventsGateway } from '@/modules/events/events.gateway';
 import { MovieInteractionStatsService } from './movie-interaction-stats.service';
+import { DataSource } from 'typeorm';
+import { RatingsService } from '@/modules/ratings/ratings.service';
 
 describe('InteractionsService', () => {
   let service: InteractionsService;
@@ -16,6 +18,8 @@ describe('InteractionsService', () => {
         { provide: InteractionProducer, useValue: {} },
         { provide: EventsGateway, useValue: {} },
         { provide: MovieInteractionStatsService, useValue: {} },
+        { provide: DataSource, useValue: {} },
+        { provide: RatingsService, useValue: {} },
       ],
     }).compile();
 

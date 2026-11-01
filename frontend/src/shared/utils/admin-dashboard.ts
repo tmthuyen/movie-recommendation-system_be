@@ -79,7 +79,7 @@ export function buildGenreDistribution(movies: Movie[], limit = 10) {
 
 /** Phân bố phim theo quốc gia. */
 export function buildCountryDistribution(movies: Movie[], limit = 10) {
-  const counts = countValues(movies, (movie) => movie.country?.name ?? UNKNOWN_LABEL);
+  const counts = countValues(movies, (movie) => movie.country?.viName ?? UNKNOWN_LABEL);
   return toTopWithOther(counts, limit);
 }
 
@@ -132,8 +132,9 @@ export function buildTopActiveUsers(
   records: Array<{ user?: { id?: string; fullName?: string; email?: string } }>,
   limit = 10,
 ) {
-  const counts = countValues(records, (record) =>
-    record.user?.fullName || record.user?.email || undefined,
+  const counts = countValues(
+    records,
+    (record) => record.user?.fullName || record.user?.email || undefined,
   );
   return toTopWithOther(counts, limit);
 }

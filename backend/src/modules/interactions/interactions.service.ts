@@ -31,11 +31,10 @@ export class InteractionsService {
   constructor(
     @Inject(IInteractionRepository)
     private readonly repo: IInteractionRepository,
-    private readonly dataSource: DataSource,
     private readonly interactionProducer: InteractionProducer,
     private readonly statsService: MovieInteractionStatsService,
     private readonly eventsGateway: EventsGateway,
-    private readonly movieService: MoviesService,
+    private readonly dataSource: DataSource,
     private readonly ratingService: RatingsService,
   ) {}
 
