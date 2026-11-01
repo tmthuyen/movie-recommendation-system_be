@@ -52,6 +52,7 @@ export interface Movie extends BaseDto {
   voteAverage?: number;
   voteCount?: number;
   viewCount?: number;
+  likeCount?: number;
   genres?: Genre[];
   country?: Country;
 }

@@ -21,6 +21,7 @@ import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
 import type { Request } from 'express';
 import { ApiResponseWithPagination } from '@/common/dtos/api-response.dto';
 import { Comment } from '@/modules/comments/entities/comment.entity';
+import { QueryCommentDto } from '@/modules/comments/dto/query-comment.dto';
 
 @ApiTags('Comments')
 @Controller('comments')
@@ -69,13 +70,12 @@ export class CommentsController {
   @ApiOperation({ summary: 'Lấy bình luận của một bộ phim (có phân cấp)' })
   async findByMovie(
     @Param('movieId') movieId: string,
-    @Query() paginationDto: PaginationDto,
-    @Query('parentId') parentId?: string,
+    @Query() query: QueryCommentDto,
   ) {
     const result = await this.commentsService.findByMovie(
       +movieId,
-      paginationDto,
-      parentId ? +parentId : undefined,
+      query,
+      query.parentId,
     );
 
     return {

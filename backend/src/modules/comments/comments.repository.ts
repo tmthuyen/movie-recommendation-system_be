@@ -35,8 +35,17 @@ export class CommentRepository implements ICommentRepository {
 
     const queryBuilder = this.repo
       .createQueryBuilder('comment')
-      .leftJoinAndSelect('comment.user', 'user')
-      .leftJoinAndSelect('comment.movie', 'movie')
+      .leftJoin('comment.user', 'user')
+      .leftJoin('comment.movie', 'movie')
+      .select([
+        'comment',
+        'user.id',
+        'user.fullName',
+        'user.email',
+        'user.avatarUrl',
+        'movie.id',
+        'movie.title',
+      ])
       .skip(skip)
       .take(limit)
       .orderBy('comment.createdAt', 'DESC');
@@ -62,8 +71,15 @@ export class CommentRepository implements ICommentRepository {
 
     const queryBuilder = this.repo
       .createQueryBuilder('comment')
-      .leftJoinAndSelect('comment.user', 'user')
-      .where('comment.movie_id = :movieId', { movieId })
+      .leftJoin('comment.user', 'user')
+      .select([
+        'comment',
+        'user.id',
+        'user.fullName',
+        'user.email',
+        'user.avatarUrl',
+      ])
+      .where('comment.movie.id = :movieId', { movieId })
       .skip(skip)
       .take(limit)
       .orderBy('comment.createdAt', 'DESC');
@@ -103,15 +119,24 @@ export class CommentRepository implements ICommentRepository {
   async findById(id: number): Promise<Comment | null> {
     return this.repo
       .createQueryBuilder('comment')
-      .leftJoinAndSelect('comment.user', 'user')
-      .leftJoinAndSelect('comment.movie', 'movie')
+      .leftJoin('comment.user', 'user')
+      .leftJoin('comment.movie', 'movie')
+      .select([
+        'comment',
+        'user.id',
+        'user.fullName',
+        'user.email',
+        'user.avatarUrl',
+        'movie.id',
+        'movie.title',
+      ])
       .where('comment.id = :id', { id })
       .getOne();
   }
 
   async create(comment: Partial<Comment>): Promise<Comment> {
     const newComment = this.repo.create(comment);
-    return this.repo.save(newComment);
+    return await this.repo.save(newComment);
   }
 
   async update(id: number, comment: Partial<Comment>): Promise<Comment | null> {

@@ -28,6 +28,7 @@ export function MovieCard({ movie, hideActions = false }: MovieCardProps) {
   const year = getReleaseYear(movie.releaseDate);
   const rating = typeof movie.voteAverage === 'number' ? movie.voteAverage : 0;
   const views = Number(movie.viewCount) || 0;
+  const likes = Number(movie.likeCount) || 0;
   const overview = movie.overviewVi || movie.overview || '';
   const genres = (movie.genres ?? []).slice(0, 3);
 
@@ -90,7 +91,9 @@ export function MovieCard({ movie, hideActions = false }: MovieCardProps) {
         <h3 className="line-clamp-2 min-h-[2.5rem] text-sm leading-snug font-semibold">{title}</h3>
         <div className="mt-auto flex items-center justify-between gap-2">
           <p className="text-muted-foreground text-xs">{year || 'Đang cập nhật'}</p>
-          {!hideActions && <MovieActions movieId={movie.id} variant="card" />}
+          {!hideActions && (
+            <MovieActions originalLikeCount={likes} movieId={movie.id} variant="card" />
+          )}
         </div>
       </div>
 

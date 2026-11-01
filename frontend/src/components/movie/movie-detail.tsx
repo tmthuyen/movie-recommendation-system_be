@@ -22,6 +22,7 @@ export function MovieDetail({ movie }: { movie: MovieDetailType }) {
   const year = getReleaseYear(movie.releaseDate);
   const rating = typeof movie.voteAverage === 'number' ? movie.voteAverage : 0;
   const voteCount = Number(movie.voteCount) || 0;
+  const likeCount = Number(movie.likeCount) || 0;
 
   return (
     <section className="bg-card overflow-hidden rounded-2xl border shadow-sm">
@@ -63,7 +64,7 @@ export function MovieDetail({ movie }: { movie: MovieDetailType }) {
             {movie.country && (
               <span className="inline-flex items-center gap-1.5">
                 <Globe className="size-4" aria-hidden="true" />
-                {movie.country.name}
+                {movie.country.viName || movie.country.enName}
               </span>
             )}
             <span className="text-foreground inline-flex items-center gap-1.5 font-medium">
@@ -90,7 +91,12 @@ export function MovieDetail({ movie }: { movie: MovieDetailType }) {
           )}
 
           {/* Nút Yêu thích (like) — kèm số like realtime ở trang chi tiết */}
-          <MovieActions movieId={movie.id} variant="detail" className="mt-1" />
+          <MovieActions
+            originalLikeCount={likeCount}
+            movieId={movie.id}
+            variant="detail"
+            className="mt-1"
+          />
 
           {overview && (
             <div className="text-muted-foreground [&_a]:text-primary [&_strong]:text-foreground max-w-none text-sm leading-relaxed [&_a]:underline [&_li]:ml-4 [&_li]:list-disc [&_ol]:ml-5 [&_ol]:list-decimal [&_p]:mb-2">

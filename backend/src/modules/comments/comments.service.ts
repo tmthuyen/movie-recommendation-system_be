@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, Logger } from '@nestjs/common';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 import { ICommentRepository } from './comments.repository';
@@ -19,6 +19,7 @@ import { MovieInteractionStatsService } from '../interactions/movie-interaction-
 
 @Injectable()
 export class CommentsService {
+  private readonly logger = new Logger(CommentsService.name);
   constructor(
     @Inject(ICommentRepository)
     private readonly repo: ICommentRepository,
@@ -86,7 +87,11 @@ export class CommentsService {
   async findAll(
     paginationDto: PaginationDto,
   ): Promise<PaginatedResult<Comment>> {
-    return this.repo.findAll(paginationDto);
+    const result = await this.repo.findAll(paginationDto);
+
+    this.logger.log('Số lượng bình luận được tìm thấy:', result.data.length);
+
+    return result;
   }
 
   async findByMovie(
@@ -94,7 +99,16 @@ export class CommentsService {
     paginationDto: PaginationDto,
     parentId?: number,
   ) {
-    return this.repo.findByMovie(movieId, paginationDto, parentId);
+    const result = await this.repo.findByMovie(
+      movieId,
+      paginationDto,
+      parentId,
+    );
+
+    this.logger.log(
+      `Số lượng bình luận được tìm thấy cho movieId=${movieId}: ${result.data.length}`,
+    );
+    return result;
   }
 
   async findOne(id: number) {

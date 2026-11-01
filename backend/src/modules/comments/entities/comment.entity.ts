@@ -18,7 +18,7 @@ export class Comment extends BaseAuditEntity {
   @Column({ type: 'text' })
   content: string;
 
-  @Column({ type: 'bigint', default: 0, nullable: true })
+  @Column({ name: 'parent_id', type: 'bigint', nullable: true })
   parentId: number;
 
   @ManyToOne(() => User, user => user.comments, { onDelete: 'CASCADE' })

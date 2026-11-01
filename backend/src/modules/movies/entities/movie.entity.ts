@@ -129,6 +129,10 @@ export class Movie extends BaseAuditEntity {
   @Column({ name: 'view_count', type: 'bigint', default: 0 })
   viewCount: number;
 
+  @Index('IDX_MOVIES_LIKE_COUNT')
+  @Column({ name: 'like_count', type: 'bigint', default: 0 })
+  likeCount: number;
+
   @ManyToMany(() => Genre, genre => genre.movies, {
     cascade: ['remove'],
   })

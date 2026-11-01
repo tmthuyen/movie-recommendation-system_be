@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils';
 
 interface MovieActionsProps {
   movieId: number;
+  /** Số like ban đầu (dùng cho fallback khi chưa có socket). */
+  originalLikeCount: number;
   /** Kiểu hiển thị: `card` (compact cho card phim) hoặc `detail` (trang chi tiết). */
   variant?: 'card' | 'detail';
   className?: string;
@@ -22,7 +24,12 @@ interface MovieActionsProps {
  * - Chưa đăng nhập → mở hộp thoại yêu cầu đăng nhập (`useRequireLogin`).
  * - Không hiển thị `score` (score là độ tin cậy tín hiệu cho AI, không phải điểm thưởng).
  */
-export function MovieActions({ movieId, variant = 'card', className }: MovieActionsProps) {
+export function MovieActions({
+  movieId,
+  originalLikeCount,
+  variant = 'card',
+  className,
+}: MovieActionsProps) {
   const requireLogin = useRequireLogin();
 
   const { data: myInteractionsWithMovie } = useInteraction.useMyInteractionsWithMovie(movieId);
@@ -33,7 +40,7 @@ export function MovieActions({ movieId, variant = 'card', className }: MovieActi
   const movieKey = String(movieId);
   const [live, setLive] = useState<{ key: string; count: number | null }>({
     key: movieKey,
-    count: null,
+    count: originalLikeCount,
   });
   const likeCount = (live.key === movieKey ? live.count : null) ?? 0;
 

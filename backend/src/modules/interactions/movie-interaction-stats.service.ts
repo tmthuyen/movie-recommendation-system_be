@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 
 /** Thống kê tương tác hiển thị ở trang chi tiết phim. */
 export interface MovieInteractionStats {
@@ -26,19 +26,19 @@ interface MovieInteractionStatsRow {
 export class MovieInteractionStatsService {
   constructor(private readonly dataSource: DataSource) {}
 
-  async getStats(movieId: number): Promise<MovieInteractionStats> {
-    const rows = await this.dataSource.query<MovieInteractionStatsRow[]>(
+  async getStats(
+    movieId: number,
+    manager?: EntityManager,
+  ): Promise<MovieInteractionStats> {
+    const ds = manager || this.dataSource;
+    const rows = await ds.query<MovieInteractionStatsRow[]>(
       `SELECT
-         COALESCE((
-           SELECT COUNT(*)::int
-           FROM interactions i
-           WHERE i.movie_id = $1 AND i.type = 'like'
-         ), 0) AS "likeCount",
          COALESCE((
            SELECT COUNT(*)::int
            FROM comments c
            WHERE c.movie_id = $1
          ), 0) AS "commentCount",
+         COALESCE((m.like_count)::int, 0) AS "likeCount",
          COALESCE(m.view_count, 0)::int AS "viewCount",
          COALESCE(m.vote_count, 0)::int AS "ratingCount",
          COALESCE(m.vote_average, 0)::float AS "voteAverage"

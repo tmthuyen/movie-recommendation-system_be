@@ -32,37 +32,164 @@ function timeAgo(iso?: string): string {
   return new Date(iso).toLocaleDateString('vi-VN');
 }
 
-function CommentItem({ comment }: { comment: Comment }) {
+function GetUserNameToReply(comment: Comment): string {
+  const userName = comment.user?.fullName || comment.user?.email || 'Người dùng';
+  return `@${userName}`;
+}
+
+function CommentItem({
+  comment,
+  movieId,
+  level,
+}: {
+  comment: Comment;
+  movieId: number | string;
+  level: number;
+}) {
   const name = comment.user?.fullName || comment.user?.email || 'Người dùng';
   const isTemporary = comment.id < 0;
 
+  const requireLogin = useRequireLogin();
+
+  const [replyTo, setReplyTo] = useState<number | string | null>(null);
+  const [replyContent, setReplyContent] = useState('');
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const createComment = useComment.useCreateComment(movieId);
+
+  const handleSubmitReply = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!requireLogin()) return;
+    // Đã đăng nhập nhưng không có comment đang trả lời → bỏ qua (không redirect).
+    if (replyTo === null) return;
+    const value = replyContent.trim();
+    if (!value || createComment.isPending) return;
+    createComment.mutate(
+      { content: value, parentId: replyTo },
+      {
+        onSuccess: () => {
+          setReplyContent('');
+          setReplyTo(null);
+        },
+      },
+    );
+  };
+
+  const replyCount = Number(comment.replyCount) || 0;
+
   return (
-    <li className="flex gap-3">
-      <Avatar className="size-9 shrink-0">
-        {comment.user?.avatarUrl && <AvatarImage src={comment.user.avatarUrl} alt={name} />}
-        <AvatarFallback>{name.charAt(0).toUpperCase()}</AvatarFallback>
-      </Avatar>
-      <div className="min-w-0 flex-1">
-        <div className="bg-muted/60 rounded-2xl rounded-tl-sm px-3.5 py-2.5">
-          <div className="flex items-baseline gap-2">
-            <span className="text-sm font-semibold">{name}</span>
-            <span className="text-muted-foreground text-xs">{timeAgo(comment.createdAt)}</span>
-            {isTemporary && <span className="text-muted-foreground text-xs">(đang gửi…)</span>}
+    <div className={`relative space-y-1`} aria-label={`Bình luận ${comment.id}`}>
+      Level {level} - Comment ID: {comment.id} - Parent ID: {comment.parentId}
+      {/* {level > 1 && (
+        <div
+          className={`border-muted-foreground absolute -top-7 -left-7 h-15 w-5 rounded-bl-xl border-b-2 border-l-2`}
+          aria-hidden="true"
+        ></div>
+      )} */}
+      <div className="flex gap-3">
+        <Avatar className="size-9 shrink-0">
+          {comment.user?.avatarUrl && <AvatarImage src={comment.user.avatarUrl} alt={name} />}
+          <AvatarFallback>{name.charAt(0).toUpperCase()}</AvatarFallback>
+        </Avatar>
+        <div className="min-w-0 flex-1">
+          <div className="bg-muted/60 rounded-2xl rounded-tl-sm px-3.5 py-2.5">
+            <div className="flex items-baseline gap-2">
+              <span className="text-sm font-semibold">{name}</span>
+              <span className="text-muted-foreground text-xs">{timeAgo(comment.createdAt)}</span>
+              {isTemporary && <span className="text-muted-foreground text-xs">(đang gửi…)</span>}
+            </div>
+            <p className="text-foreground mt-0.5 text-sm break-words whitespace-pre-wrap">
+              {comment.content}
+            </p>
           </div>
-          <p className="text-foreground mt-0.5 text-sm break-words whitespace-pre-wrap">
-            {comment.content}
-          </p>
         </div>
       </div>
-    </li>
+      <div className="flex items-center gap-3 pl-12">
+        <button
+          type="button"
+          onClick={() => {
+            if (replyTo === comment.id) {
+              setReplyTo(null);
+              setReplyContent('');
+            } else {
+              setReplyTo(comment.id);
+              setReplyContent(GetUserNameToReply(comment) + ' ');
+            }
+          }}
+          className={cn(
+            'text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs font-medium transition-colors',
+            'cursor-pointer',
+          )}
+          aria-expanded={replyTo === comment.id}
+        >
+          <CornerDownRight className="size-3.5" aria-hidden="true" />
+          Trả lời
+        </button>
+        {replyCount > 0 && !isExpanded && (
+          <button
+            type="button"
+            onClick={() => setIsExpanded((prev) => !prev)}
+            className="text-primary hover:text-primary/80 cursor-pointer text-xs font-medium transition-colors"
+          >
+            Xem {replyCount} trả lời
+          </button>
+        )}
+        {replyCount > 0 && isExpanded && (
+          <button
+            type="button"
+            onClick={() => setIsExpanded((prev) => !prev)}
+            className="text-primary hover:text-primary/80 cursor-pointer text-xs font-medium transition-colors"
+          >
+            Ẩn {replyCount} trả lời
+          </button>
+        )}
+      </div>
+      {replyTo === comment.id && (
+        <div className="flex flex-col gap-2 pl-12">
+          <form onSubmit={handleSubmitReply} className="mt-2 flex">
+            <Input
+              value={replyContent}
+              onChange={(event) => setReplyContent(event.target.value)}
+              placeholder="Viết trả lời…"
+              aria-label="Nội dung trả lời"
+              maxLength={2000}
+              className="min-h-9 flex-1"
+            />
+            <Button
+              type="submit"
+              size="sm"
+              disabled={!replyContent.trim() || createComment.isPending}
+              className="cursor-pointer"
+            >
+              Trả lời
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setReplyTo(null);
+                setReplyContent('');
+              }}
+              className="cursor-pointer"
+            >
+              Hủy
+            </Button>
+          </form>
+        </div>
+      )}
+      {isExpanded && <CommentReplies level={level} movieId={movieId} parentId={comment.id} />}
+    </div>
   );
 }
 
 /** Danh sách reply (chỉ fetch khi user bấm "Xem trả lời"). */
 function CommentReplies({
+  level,
   movieId,
   parentId,
 }: {
+  level: number;
   movieId: number | string;
   parentId: number | string;
 }) {
@@ -83,10 +210,15 @@ function CommentReplies({
   const replies = data?.comments ?? [];
   if (replies.length === 0) return null;
 
+  let paddingLeft = 'pl-10';
+  if (level > 2) paddingLeft = 'pl-0';
+
   return (
-    <ul className="mt-2 space-y-2 pl-10" aria-label="Trả lời">
+    <ul className={`${paddingLeft} mt-2 space-y-2`} aria-label="Trả lời">
       {replies.map((reply) => (
-        <CommentItem key={reply.id} comment={reply} />
+        <li key={reply.id}>
+          <CommentItem level={level + 1} key={reply.id} comment={reply} movieId={movieId} />
+        </li>
       ))}
     </ul>
   );
@@ -165,7 +297,7 @@ export function MovieComments({ movieId }: MovieCommentsProps) {
   };
 
   const handleTyping = (payload: { isTyping: boolean; userFullName: string }) => {
-    setRemoteTyping(payload.isTyping ? payload.userFullName : null);
+    setRemoteTyping(payload.isTyping ? 'Ai đó  đang gõ' : null);
   };
 
   useMovieSocket({
@@ -257,21 +389,14 @@ export function MovieComments({ movieId }: MovieCommentsProps) {
 
       {remoteTyping && (
         <p className="text-muted-foreground animate-pulse text-sm" role="status">
-          {remoteTyping} đang gõ…
+          {remoteTyping}
         </p>
       )}
 
       {/* Danh sách root comments */}
       {isLoading ? (
         <div className="space-y-3" aria-hidden="true">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <div key={index} className="flex gap-3">
-              <Skeleton className="size-9 rounded-full" />
-              <div className="flex-1 space-y-1.5">
-                <Skeleton className="h-14 w-full rounded-2xl" />
-              </div>
-            </div>
-          ))}
+          <CommentSkeleton length={5} />
         </div>
       ) : comments.length === 0 ? (
         <EmptyState
@@ -280,79 +405,12 @@ export function MovieComments({ movieId }: MovieCommentsProps) {
           description="Hãy là người đầu tiên bình luận về bộ phim này."
         />
       ) : (
-        <>
+        <div>
           <ul className="space-y-4">
             {comments.map((comment) => {
-              const replyCount = Number(comment.replyCount) || 0;
-              const isExpanded = expanded.has(comment.id);
               return (
                 <li key={comment.id} className="space-y-1">
-                  <CommentItem comment={comment} />
-                  <div className="flex items-center gap-3 pl-12">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (replyTo === comment.id) {
-                          setReplyTo(null);
-                          setReplyContent('');
-                        } else {
-                          setReplyTo(comment.id);
-                        }
-                      }}
-                      className={cn(
-                        'text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs font-medium transition-colors',
-                        'cursor-pointer',
-                      )}
-                      aria-expanded={replyTo === comment.id}
-                    >
-                      <CornerDownRight className="size-3.5" aria-hidden="true" />
-                      Trả lời
-                    </button>
-                    {replyCount > 0 && !isExpanded && (
-                      <button
-                        type="button"
-                        onClick={() => setExpanded((prev) => new Set(prev).add(comment.id))}
-                        className="text-primary hover:text-primary/80 cursor-pointer text-xs font-medium transition-colors"
-                      >
-                        Xem {replyCount} trả lời
-                      </button>
-                    )}
-                  </div>
-
-                  {replyTo === comment.id && (
-                    <form onSubmit={handleSubmitReply} className="mt-2 flex gap-2 pl-12">
-                      <Input
-                        value={replyContent}
-                        onChange={(event) => setReplyContent(event.target.value)}
-                        placeholder="Viết trả lời…"
-                        aria-label="Nội dung trả lời"
-                        maxLength={2000}
-                        className="min-h-9 flex-1"
-                      />
-                      <Button
-                        type="submit"
-                        size="sm"
-                        disabled={!replyContent.trim() || createComment.isPending}
-                        className="cursor-pointer"
-                      >
-                        Trả lời
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setReplyTo(null);
-                          setReplyContent('');
-                        }}
-                        className="cursor-pointer"
-                      >
-                        Hủy
-                      </Button>
-                    </form>
-                  )}
-
-                  {isExpanded && <CommentReplies movieId={movieId} parentId={comment.id} />}
+                  <CommentItem level={1} comment={comment} movieId={movieId} />
                 </li>
               );
             })}
@@ -367,8 +425,19 @@ export function MovieComments({ movieId }: MovieCommentsProps) {
               ariaLabel="Phân trang bình luận"
             />
           )}
-        </>
+        </div>
       )}
     </section>
   );
+}
+
+function CommentSkeleton({ length }: { length: number }) {
+  return Array.from({ length: length }).map((_, index) => (
+    <div key={index} className="flex gap-3">
+      <Skeleton className="size-9 rounded-full" />
+      <div className="flex-1 space-y-1.5">
+        <Skeleton className="h-14 w-full rounded-2xl" />
+      </div>
+    </div>
+  ));
 }

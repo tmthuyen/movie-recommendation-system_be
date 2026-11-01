@@ -6,6 +6,7 @@ import useRating from '@/hooks/tankstack/useRating';
 import { useRequireLogin } from '@/hooks/useRequireLogin';
 import { useMovieSocket } from '@/hooks/useMovieSocket';
 import { cn } from '@/lib/utils';
+import useInteraction from '@/hooks/tankstack/useInteraction';
 
 interface MovieRatingProps {
   /** Phim đang hiển thị. */
@@ -25,6 +26,11 @@ interface MovieRatingProps {
  */
 export function MovieRating({ movie }: MovieRatingProps) {
   const requireLogin = useRequireLogin();
+
+  const [myRating, setMyRating] = useState<number | null>(null);
+
+  // Lây chỉ 1 lần khi vào trang
+  const { data: myInteractionsWithMovie } = useInteraction.useMyInteractionsWithMovie(movie.id);
 
   const [stats, setStats] = useState({
     voteAverage: typeof movie.voteAverage === 'number' ? movie.voteAverage : 0,
@@ -46,25 +52,31 @@ export function MovieRating({ movie }: MovieRatingProps) {
         });
         return;
       }
-      // Also handle direct fields if present
-      if (
-        typeof (payload as any)?.voteAverage === 'number' ||
-        typeof (payload as any)?.voteCount === 'number'
-      ) {
-        setStats({
-          voteAverage: Number((payload as any).voteAverage) || stats.voteAverage,
-          voteCount: Number((payload as any).voteCount) || stats.voteCount,
-        });
-      }
+      // // Also handle direct fields if present
+      // if (
+      //   typeof (payload as any)?.voteAverage === 'number' ||
+      //   typeof (payload as any)?.voteCount === 'number'
+      // ) {
+      //   setStats({
+      //     voteAverage: Number((payload as any).voteAverage) || stats.voteAverage,
+      //     voteCount: Number((payload as any).voteCount) || stats.voteCount,
+      //   });
+      // }
     },
   });
 
   const handleRate = (value: number) => {
     if (!requireLogin()) return;
-    createRating.mutate(value);
+    createRating.mutate(value, {
+      onSuccess: (data) => {
+        console.log('Rating created successfully:', data);
+
+        setMyRating(data.rating);
+      },
+    });
   };
 
-  const displayStar = hoverStar || Math.round(stats.voteAverage);
+  const displayStar = hoverStar || myRating || myInteractionsWithMovie?.rating?.rating || 0;
 
   return (
     <section
