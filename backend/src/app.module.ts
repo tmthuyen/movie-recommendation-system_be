@@ -39,6 +39,7 @@ import { FilesModule } from './modules/files/files.module';
 import { FailedEvent } from './modules/failed-events/entities/failed-event.entity';
 import { FailedEventsModule } from './modules/failed-events/failed-events.module';
 import { InteractionsModule } from './modules/interactions/interactions.module';
+import { RecommendationsModule } from './modules/recommendations/recommendations.module';
 @Module({
   imports: [
     // Configuration
@@ -114,6 +115,7 @@ import { InteractionsModule } from './modules/interactions/interactions.module';
     FilesModule,
     FailedEventsModule,
     InteractionsModule,
+    RecommendationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -35,6 +35,23 @@ class ApiResponse(BaseModel, Generic[DataT]):
     pagination: Pagination | None = None
 
 
+# Similar & Semantic Search Movies Response
+class SimilarMoviesResponse(BaseModel):
+    id: int
+    similarityScore: float
+    rank: int | None = None
+    title: str
+    titleVi: str | None = None
+    overview: str
+    overviewVi: str | None = None
+
+
+# Hybrid movie recommendation response
+class HybridRecommendationResponse(SimilarMoviesResponse):
+    hybridScore: float
+    evidences: str | None = None
+
+
 # ===================
 # Request schema
 # ===================

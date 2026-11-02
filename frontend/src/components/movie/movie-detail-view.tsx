@@ -11,6 +11,10 @@ import { MovieDetail } from './movie-detail';
 import { MovieRating } from './movie-rating';
 import { SimilarMovies } from './similar-movies';
 
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Movie } from '@/shared/types/movie.types';
+
 function DetailSkeleton() {
   return (
     <div className="space-y-6" aria-hidden="true">
@@ -115,11 +119,17 @@ export function MovieDetailView({ id }: { id: number }) {
         sách của bạn.
       </p>
 
-      <MovieRating movie={movie} />
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="flex w-full flex-col gap-6 sm:w-2/3">
+          <MovieRating movie={movie} />
 
-      <SimilarMovies genres={movie.genres} />
+          <MovieComments movieId={movie.id} />
+        </div>
 
-      <MovieComments movieId={movie.id} />
+        <div className="flex w-full flex-col gap-6 sm:w-1/3">
+          <SimilarMovies movieId={movie.id} genres={movie.genres} />
+        </div>
+      </div>
     </div>
   );
 }

@@ -21,7 +21,9 @@ export const interactionStatsQueryKey = (movieId: number | string) => [
   String(movieId),
 ];
 
-// tương tác với movie key
+/**  tương tác với movie key
+ * [FAVORITES_KEY, 'movie', movieId, 'me']
+ */
 export const interactionWithMovieQueryKey = (movieId: number) => [
   FAVORITES_KEY,
   'movie',
@@ -253,8 +255,8 @@ export function useMyInteractionsWithMovie(movieId: number) {
       return response.result;
     },
     enabled: isAuthenticated,
-    staleTime: Infinity,
-    refetchOnMount: false,
+    staleTime: 0,
+    refetchOnMount: true,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });

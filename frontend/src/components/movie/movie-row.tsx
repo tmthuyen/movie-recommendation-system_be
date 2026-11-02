@@ -60,7 +60,7 @@ export function MovieRow({ movies, max = 12, className }: MovieRowProps) {
       <div
         ref={scrollRef}
         className={cn(
-          // 1 hàng ngang: 2 → 3 → 4 → 6 card, không wrap, ẩn scrollbar
+          // 1 hàng ngang: 1, 2, 3, 4 card, không wrap, ẩn scrollbar
           'no-scrollbar flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1 md:gap-4',
           className,
         )}
@@ -71,7 +71,7 @@ export function MovieRow({ movies, max = 12, className }: MovieRowProps) {
             key={movie.id}
             data-card
             role="listitem"
-            className="w-[calc(50%-6px)] shrink-0 snap-start sm:w-[calc(33.333%-8px)] md:w-[calc(25%-12px)] lg:w-[calc(16.666%-14px)]"
+            className="w-[calc(100%-6px)] shrink-0 snap-start sm:w-[calc(50%-8px)] md:w-[calc(33.333%-12px)] 2xl:w-[calc(25%-14px)]"
           >
             <MovieCard movie={movie} />
           </div>
@@ -114,9 +114,9 @@ export function MovieRowSkeleton({ items = 6 }: { items?: number }) {
       {Array.from({ length: items }).map((_, index) => (
         <div
           key={index}
-          className="w-[calc(50%-6px)] shrink-0 sm:w-[calc(33.333%-8px)] md:w-[calc(25%-12px)] lg:w-[calc(16.666%-14px)]"
+          className="w-[calc(100%-6px)] shrink-0 sm:w-[calc(50%-8px)] md:w-[calc(33.333%-12px)] lg:w-[calc(25%-14px)]"
         >
-          <Skeleton className="aspect-[2/3] w-full rounded-lg" />
+          <Skeleton className="aspect-[6/3] w-full rounded-lg" />
           <Skeleton className="mt-2 h-4 w-3/4" />
           <Skeleton className="mt-1 h-3 w-1/2" />
         </div>

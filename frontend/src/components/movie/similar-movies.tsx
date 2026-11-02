@@ -3,10 +3,34 @@
 import { Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
+import { MovieRow } from '@/components/movie/movie-row';
+import { SectionHeader } from '@/components/common/SectionHeader';
+import useRecommendation from '@/hooks/tankstack/useRecommendation';
+import { MovieGrid } from '@/components/movie/movie-grid';
+import { Movie } from '@/shared/types/movie.types';
+import { MovieCard } from '@/components/movie/movie-card';
 
 interface SimilarMoviesProps {
+  movieId: number;
   /** Thể loại của phim hiện tại — dùng để gợi ý link khám phá cùng thể loại. */
   genres?: { id: number | string; name: string }[];
+}
+
+/**
+ * Movie Column infinite scroll
+ */
+interface MovieGridProps {
+  movies: Movie[];
+}
+
+export function MovieColumn({ movies }: MovieGridProps) {
+  return (
+    <div className="flex flex-col gap-3">
+      {movies.map((movie) => (
+        <MovieCard key={movie.id} movie={movie} />
+      ))}
+    </div>
+  );
 }
 
 /**
@@ -15,32 +39,16 @@ interface SimilarMoviesProps {
  * Hiện tại hiển thị link khám phá theo thể loại của phim; khi backend có
  * endpoint sẽ thay thế bằng danh sách `MovieRow`.
  */
-export function SimilarMovies({ genres = [] }: SimilarMoviesProps) {
+export function SimilarMovies({ movieId, genres = [] }: SimilarMoviesProps) {
+  const { data: similarMovies } = useRecommendation.useGetSimilarMovies(movieId, {
+    topK: 12,
+  });
+
   return (
     <section aria-label="Phim tương tự" className="space-y-3">
-      <h2 className="flex items-center gap-2 text-xl font-bold">
-        <Sparkles className="size-5" aria-hidden="true" />
-        Phim tương tự
-        <span className="text-muted-foreground text-sm font-normal">(chưa hoàn thiện)</span>
-      </h2>
-      <div className="bg-muted/40 flex flex-col items-start gap-3 rounded-xl border border-dashed p-5">
-        <p className="text-muted-foreground text-sm">
-          Tính năng gợi ý phim tương tự đang chờ backend bổ sung endpoint — tạm thời khám phá theo
-          thể loại của phim này:
-        </p>
-        {genres.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
-            {genres.map((genre) => (
-              <Link key={genre.id} href={`/movies?genre=${genre.id}`}>
-                <Badge variant="secondary" className="hover:bg-secondary/80 cursor-pointer transition-colors">
-                  {genre.name}
-                </Badge>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <p className="text-muted-foreground text-sm">Phim chưa gắn thể loại.</p>
-        )}
+      <div className="bg-muted/40 flex flex-col gap-3 rounded-xl border border-dashed p-5">
+        {/* <MovieRow movies={similarMovies || []} max={12} /> */}
+        <MovieColumn movies={similarMovies || []} />
       </div>
     </section>
   );

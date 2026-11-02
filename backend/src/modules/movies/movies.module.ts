@@ -24,6 +24,6 @@ import { InteractionStatsModule } from '../interactions/interaction-stats.module
     MoviesService,
     MovieProducer,
   ],
-  exports: [MoviesService],
+  exports: [MoviesService, IMovieRepository],
 })
 export class MoviesModule {}

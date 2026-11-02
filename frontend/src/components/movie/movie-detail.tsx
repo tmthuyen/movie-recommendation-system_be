@@ -15,7 +15,8 @@ import { getMovieTitle, getPosterUrl, getReleaseYear } from '@/shared/utils/movi
  * poster, tiêu đề (EN + VI), metadata, mô tả (markdown), thể loại, quốc gia.
  */
 export function MovieDetail({ movie }: { movie: MovieDetailType }) {
-  const poster = getPosterUrl(movie.posterPath || movie.backdropPath);
+  const poster = getPosterUrl(movie.posterPath);
+  const backdrop = getPosterUrl(movie.backdropPath);
   const title = getMovieTitle(movie);
   const overview = movie.overviewVi || movie.overview || '';
   const genres = movie.genres ?? [];
@@ -26,6 +27,23 @@ export function MovieDetail({ movie }: { movie: MovieDetailType }) {
 
   return (
     <section className="bg-card overflow-hidden rounded-2xl border shadow-sm">
+      {/* Backdrop */}
+      {/* Cinematic backdrop */}
+      <div className="bg-muted relative isolate h-[240px] w-full overflow-hidden sm:h-[360px] lg:h-[460px]">
+        {/* Layer 0: Ảnh */}
+        <Image
+          src={backdrop || '/backdrop-default.jpg'}
+          alt={`${title} backdrop`}
+          fill
+          priority
+          sizes="100vw"
+          className="absolute inset-0 z-0 object-cover"
+        />
+
+        {/* Layer 1: Gradient */}
+        <div className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+      </div>
+
       <div className="grid gap-6 p-6 md:grid-cols-[280px_1fr] md:p-8">
         {/* Poster */}
         <div className="bg-muted relative aspect-[2/3] w-full self-start overflow-hidden rounded-xl shadow-lg md:max-w-[280px]">

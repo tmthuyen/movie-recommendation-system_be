@@ -1,0 +1,113 @@
+import { AppException } from '@/common/custom-exception/app-exception';
+import { Pagination } from '@/common/dtos/api-response.dto';
+import { ResultWithPagination } from '@/common/dtos/paginated-result.interface';
+import { Movie } from '@/modules/movies/entities/movie.entity';
+import { IMovieRepository } from '@/modules/movies/movies.repository';
+import { MoviesService } from '@/modules/movies/movies.service';
+import { HybridSearchQuery } from '@/modules/recommendations/dtos/hybrid-search-query.dto';
+import { SimilarMovieResponseDto } from '@/modules/recommendations/dtos/movie-response-with-score.dto';
+import {
+  SimilarFromAiServiceResponse,
+  SimilarFromAiServiceResponseSchema,
+} from '@/modules/recommendations/interfaces/ai-service-response.interfaces';
+import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
+const AI_SERVICE_URL =
+  process.env.AI_SERVICE_URL || 'http://localhost:8082/api/recommendations';
+
+export const IRecommendationsService = Symbol('IRecommendationsService');
+export interface IRecommendationsService {
+  getSimilarMovies(
+    movieId: number,
+    topK?: number,
+  ): Promise<ResultWithPagination<SimilarMovieResponseDto>>;
+  semanticSearch(keyword: string, topK?: number): Promise<any>;
+  hybridSearch(hybridSearchQuery: HybridSearchQuery): Promise<any>;
+}
+@Injectable()
+export class RecommendationsService implements IRecommendationsService {
+  constructor(
+    @Inject(IMovieRepository)
+    private readonly movieRepository: IMovieRepository,
+    private readonly movieService: MoviesService,
+  ) {}
+  private readonly logger = new Logger(RecommendationsService.name);
+
+  async getSimilarMovies(
+    movieId: number,
+    topK?: number,
+  ): Promise<ResultWithPagination<SimilarMovieResponseDto>> {
+    // request to AI service
+    const res = await fetch(
+      `${AI_SERVICE_URL}/similar/${movieId}?topK=${topK || 10}`,
+    );
+
+    const parsedResponse = SimilarFromAiServiceResponseSchema.parse(
+      await res.json(),
+    );
+
+    this.logger.log(`AI service response: ${JSON.stringify(parsedResponse)}`);
+
+    if (!parsedResponse || !parsedResponse.result) {
+      this.logger.error(
+        `Invalid response from AI service: ${JSON.stringify(parsedResponse)}`,
+      );
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'Invalid response from AI service',
+        'The AI service did not return a valid response for similar movies.',
+        'AI_SERVICE_ERROR',
+      );
+    }
+
+    // map with db
+    const mappedData: (Partial<Movie> & {
+      similarityScore: number;
+      rank?: number;
+    })[] = [];
+
+    for (const item of parsedResponse.result) {
+      const movie = await this.movieRepository.findById(item.id);
+      if (!movie) {
+        this.logger.warn(
+          `Movie with id ${item.id} not found in database, skipping.`,
+        );
+        continue;
+      }
+
+      const rank =
+        item.rank ||
+        (parsedResponse.pagination.currentPage - 1) *
+          parsedResponse.pagination.pageSize +
+          parsedResponse.result.indexOf(item) +
+          1;
+
+      mappedData.push({
+        ...movie,
+        similarityScore: item.similarityScore,
+        rank,
+      });
+    }
+
+    const result = plainToInstance(SimilarMovieResponseDto, mappedData, {
+      excludeExtraneousValues: true,
+    });
+    // return result
+
+    const resultWithPagi: ResultWithPagination<SimilarMovieResponseDto> = {
+      result,
+      pagination: {
+        page: parsedResponse.pagination.currentPage,
+        limit: parsedResponse.pagination.pageSize,
+        total: parsedResponse.pagination.totalItems,
+        totalPages: parsedResponse.pagination.totalPages,
+      },
+    };
+
+    return resultWithPagi;
+  }
+
+  async semanticSearch(keyword: string, topK?: number): Promise<any> {}
+
+  async hybridSearch(hybridSearchQuery: HybridSearchQuery): Promise<any> {}
+}

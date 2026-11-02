@@ -23,7 +23,7 @@ interface MovieCardProps {
  *   chặn click xuyên xuống stretched link.
  */
 export function MovieCard({ movie, hideActions = false }: MovieCardProps) {
-  const poster = getPosterUrl(movie.posterPath || movie.backdropPath);
+  const poster = getPosterUrl(movie.backdropPath || movie.posterPath);
   const title = getMovieTitle(movie);
   const year = getReleaseYear(movie.releaseDate);
   const rating = typeof movie.voteAverage === 'number' ? movie.voteAverage : 0;
@@ -33,16 +33,25 @@ export function MovieCard({ movie, hideActions = false }: MovieCardProps) {
   const genres = (movie.genres ?? []).slice(0, 3);
 
   return (
-    <article className="group bg-card text-card-foreground focus-within:ring-ring relative flex flex-col overflow-hidden rounded-lg border shadow-sm transition-all duration-300 focus-within:ring-2 hover:-translate-y-1 hover:shadow-lg">
-      <div className="bg-muted relative aspect-[2/3] w-full overflow-hidden">
+    <article className="group bg-card text-card-foreground focus-within:ring-ring relative flex flex-col overflow-hidden rounded-lg border shadow-sm transition-all duration-300 focus-within:ring-2 hover:-translate-y-1 hover:scale-105 hover:shadow-lg">
+      <div className="bg-muted relative aspect-[6/3] w-full overflow-hidden">
         {poster ? (
-          <Image
-            src={poster}
-            alt={title}
-            fill
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 16vw"
-            className="object-cover transition-transform duration-500 group-hover:scale-105"
-          />
+          <>
+            {/* <img
+              src={getPosterUrl(movie.posterPath || movie.backdropPath)}
+              alt={title}
+              className="absolute inset-0 h-full w-full object-cover object-center"
+            />
+            dưedwdsdcc êcwdcewc */}
+            <Image
+              src={poster}
+              alt={title}
+              width={500}
+              height={500}
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 16vw"
+              className="h-full w-full object-cover object-center"
+            />
+          </>
         ) : (
           <div className="text-muted-foreground flex h-full w-full items-center justify-center">
             <Film className="size-10" />
@@ -86,15 +95,15 @@ export function MovieCard({ movie, hideActions = false }: MovieCardProps) {
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col gap-2 p-3">
-        {/* Title max 2 dòng, reserved min-h 2 dòng → card không nhảy size khi tên phim ngắn/dài */}
-        <h3 className="line-clamp-2 min-h-[2.5rem] text-sm leading-snug font-semibold">{title}</h3>
-        <div className="mt-auto flex items-center justify-between gap-2">
+      <div className="flex flex-1 flex-col gap-2 px-2 py-4">
+        <h3 className="line-clamp-1 text-sm leading-snug font-bold">{movie.titleVi}</h3>
+        <h3 className="text-muted-foreground line-clamp-1 text-sm leading-snug">{movie.title}</h3>
+        {/* <div className="mt-auto flex items-center justify-between gap-2">
           <p className="text-muted-foreground text-xs">{year || 'Đang cập nhật'}</p>
           {!hideActions && (
             <MovieActions originalLikeCount={likes} movieId={movie.id} variant="card" />
           )}
-        </div>
+        </div> */}
       </div>
 
       {/* Stretched link: click toàn card → chi tiết phim */}

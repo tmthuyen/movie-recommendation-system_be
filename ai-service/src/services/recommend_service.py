@@ -9,6 +9,7 @@ import asyncio
 import logging
 from typing import Any
 
+from api.schemas import SimilarMoviesResponse
 from core.integrations import VectorStore
 from services.embedding_service import EmbeddingService
 from services.mapping_service import mapping_service
@@ -45,17 +46,14 @@ def _format_item(item: dict[str, Any]) -> dict[str, Any]:
         if (title_vi and str(title_vi).strip() not in ("nan", "None", ""))
         else title_en
     )
+
     return {
-        "movieId": item.get("id"),
+        "id": item.get("id"),
         "similarityScore": round(float(item.get("score", 0.0)), 4),
         "title": display_title,
         "titleVi": title_vi if str(title_vi) not in ("nan", "None") else None,
-        "titleEn": title_en if str(title_en) not in ("nan", "None") else None,
-        "genres": meta.get("genres"),
-        "releaseDate": str(meta.get("release_date", ""))[:10],
-        "voteAverage": meta.get("vote_average"),
-        "tmdbId": meta.get("tmdb_id"),
-        "popularity": meta.get("popularity"),
+        "overview": meta.get("overview"),
+        "overviewVi": meta.get("overview_vi"),
     }
 
 
@@ -77,7 +75,7 @@ class RecommendService:
 
     async def similar_movies(
         self, movie_id: int, top_k: int = 10
-    ) -> list[dict[str, Any]]:
+    ) -> list[dict[str, SimilarMoviesResponse]]:
         target = await self._vs.get_by_id(movie_id)
         if not target or not target.get("vector"):
             raise ValueError(f"Khong tim thay vector cho movieId={movie_id}")

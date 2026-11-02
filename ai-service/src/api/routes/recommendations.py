@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, requests, status
 
 from api.dependencies.auth import get_current_user
-from api.schemas import CurrentUser, HybridRequest, SearchRequest
+from api.schemas import CurrentUser, HybridRequest, SearchRequest, SimilarMoviesResponse
 from core.config import get_settings
 from core.integrations import VectorStore
 from services.embedding_service import embedding_service
@@ -46,22 +46,22 @@ async def _get_recommend_service(request: Request) -> RecommendService:
 @router.get("/semantic-search")
 async def semantic_search(
     app_request: Request,
-    query: str = Query(
+    keyword: str = Query(
         ..., min_length=1, max_length=500, description="Tu khoa / mo ta y dinh tu nhien"
     ),
-    top_k: int = Query(
+    topK: int = Query(
         default=10, ge=1, le=100, description="So luong phim goi y can tra ve"
     ),
 ) -> dict:
     """Tim kiem phim theo y dinh tu nhien (Semantic Search) su dung Sentence-BERT va ChromaDB."""
     svc = await _get_recommend_service(app_request)
-    data = await svc.semantic_search(query=query, top_k=top_k)
+    data = await svc.semantic_search(query=keyword, top_k=topK)
     return paginated(
         data=data,
         total_items=len(data),
         page=1,
-        page_size=top_k,
-        message=f"Tim kiem ngu nghia thanh cong cho tu khoa '{query}'",
+        page_size=topK,
+        message=f"Tim kiem ngu nghia thanh cong cho tu khoa '{keyword}'",
     )
 
 
@@ -75,24 +75,26 @@ async def semantic_search(
 async def get_similar_movies(
     movie_id: int,
     app_request: Request,
-    top_k: int = Query(default=10, ge=1, le=50, description="So phim tuong tu can tim"),
+    topK: int = Query(default=10, ge=1, le=50, description="So phim tuong tu can tim"),
 ) -> dict:
     """Goi y danh sach phim co noi dung/ngu nghia tuong dong nhat voi movie_id (Item-to-Item)."""
     svc = await _get_recommend_service(app_request)
     try:
-        data = await svc.similar_movies(movie_id=movie_id, top_k=top_k)
+        data: list[SimilarMoviesResponse] = await svc.similar_movies(
+            movie_id=movie_id, top_k=topK
+        )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     return paginated(
         data=data,
         total_items=len(data),
         page=1,
-        page_size=top_k,
+        page_size=topK,
         message=f"Goi y {len(data)} phim tuong tu voi movie_id={movie_id}",
     )
 
 
-@router.post("/search")
+@router.get("/search")
 async def search(request: SearchRequest, app_request: Request) -> dict:
     """API Search tong hop ho tro ca Semantic Search va cac mo hinh tim kiem khac."""
     svc = await _get_recommend_service(app_request)
@@ -120,7 +122,7 @@ async def search(request: SearchRequest, app_request: Request) -> dict:
 #     return paginated([], 0, request.page, request.pageSize, 'Recommendations generated')
 
 
-@router.get("/hybrid")
+@router.get("/hybrid-search")
 async def hybrid_search(
     request: Annotated[HybridRequest, Query()],
     current_user: Annotated[CurrentUser, Depends(get_current_user)],

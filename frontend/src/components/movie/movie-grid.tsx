@@ -8,7 +8,7 @@ interface MovieGridProps {
 
 export function MovieGrid({ movies }: MovieGridProps) {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 md:gap-4 lg:grid-cols-6">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 md:gap-4">
       {movies.map((movie) => (
         <MovieCard key={movie.id} movie={movie} />
       ))}
@@ -18,10 +18,10 @@ export function MovieGrid({ movies }: MovieGridProps) {
 
 export function MovieGridSkeleton({ items = 12 }: { items?: number }) {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 md:gap-4 lg:grid-cols-6">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 md:gap-4">
       {Array.from({ length: items }).map((_, index) => (
         <div key={index} className="flex flex-col overflow-hidden rounded-lg border">
-          <Skeleton className="aspect-[2/3] w-full rounded-none" />
+          <Skeleton className="aspect-[6/3] w-full rounded-none" />
           <div className="flex flex-col gap-2 p-3">
             <Skeleton className="h-4 w-full" />
             <Skeleton className="h-3 w-1/2" />

@@ -142,7 +142,7 @@ export class MoviesService {
   }
 
   async findAll(paginationDto: PaginationDto) {
-    return this.repo.findAll(paginationDto);
+    return await this.repo.findAll(paginationDto);
   }
 
   async findOne(id: number) {

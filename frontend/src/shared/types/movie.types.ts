@@ -49,6 +49,10 @@ export interface Movie extends BaseDto {
   releaseDate?: string;
   posterPath?: string;
   backdropPath?: string;
+  tmdbRating?: number;
+  homepage?: string;
+  originCountry?: string;
+  isAiTranslated?: boolean;
   voteAverage?: number;
   voteCount?: number;
   viewCount?: number;
@@ -59,6 +63,11 @@ export interface Movie extends BaseDto {
 
 export interface MovieDetail extends Movie {
   moviePeoples?: MoviePeople[];
+}
+
+/** Movie với similar score */
+export interface MovieWithSimilarScore extends Movie {
+  similarScore?: number;
 }
 
 /** Query hợp lệ của `GET /api/movies` — backend chỉ nhận `page`/`limit`/`keyword`. */

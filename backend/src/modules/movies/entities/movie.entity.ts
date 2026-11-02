@@ -119,6 +119,10 @@ export class Movie extends BaseAuditEntity {
   @Column({ name: 'is_ai_translated', type: 'boolean', default: false })
   isAiTranslated: boolean;
 
+  // rating tmdb
+  @Column({ name: 'tmdb_rating', type: 'float', nullable: true })
+  tmdbRating: number;
+
   @Column({ name: 'vote_average', type: 'float', nullable: true })
   voteAverage: number;
 
