@@ -10,8 +10,8 @@ import useGenre from '@/hooks/tankstack/useGenre';
 import useMovie from '@/hooks/tankstack/useMovie';
 
 export function LatestMovies() {
-  const { data, isLoading } = useMovie.useGetMovies({ page: 1, limit: 12 });
-  const { data: genres, isLoading: isGenresLoading } = useGenre.useGetAll({ limit: 20 });
+  const { data, isLoading } = useMovie.useLatestMovies({ limit: 12 });
+  const { data: genres, isLoading: isGenresLoading } = useGenre.useGetAll({ limit: 30 });
 
   return (
     <div className="w-full space-y-10">

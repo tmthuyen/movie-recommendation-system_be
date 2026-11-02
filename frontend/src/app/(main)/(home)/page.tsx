@@ -1,13 +1,6 @@
 'use client';
 
-import {
-  ArrowRight,
-  Play,
-  Star,
-  Eye,
-  Crown,
-  Calendar,
-} from 'lucide-react';
+import { ArrowRight, Play, Star, Eye, Crown, Calendar } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useMemo } from 'react';
@@ -47,7 +40,7 @@ function TopMovieCard({ movie, rank }: { movie: any; rank: number }) {
 
   return (
     <Link href={`/movies/${movie.id}`} className="group block">
-      <article className="relative overflow-hidden rounded-lg border bg-card shadow-sm transition-transform hover:-translate-y-1 hover:shadow-lg">
+      <article className="bg-card relative overflow-hidden rounded-lg border shadow-sm transition-transform hover:-translate-y-1 hover:shadow-lg">
         <div className="relative aspect-[2/3] w-full">
           {poster ? (
             <Image
@@ -225,23 +218,41 @@ export default function HomePage() {
   const movies = moviesData?.movies ?? [];
   const { isAuthenticated, user } = useAuthStore();
 
-  const { topRated, mostViewed, newest } = useMemo(() => {
-    const sortedByRating = [...movies].sort((a, b) => (b.voteAverage ?? 0) - (a.voteAverage ?? 0));
-    const sortedByViews = [...movies].sort(
-      (a, b) => (Number(b.viewCount) || 0) - (Number(a.viewCount) || 0),
-    );
-    const sortedByNewest = [...movies].sort((a, b) => {
-      const dateA = new Date(a.releaseDate || a.createdAt).getTime();
-      const dateB = new Date(b.releaseDate || b.createdAt).getTime();
-      return dateB - dateA;
-    });
+  // const { topRated, mostViewed, newest } = useMemo(() => {
+  //   const sortedByRating = [...movies].sort((a, b) => (b.voteAverage ?? 0) - (a.voteAverage ?? 0));
+  //   const sortedByViews = [...movies].sort(
+  //     (a, b) => (Number(b.viewCount) || 0) - (Number(a.viewCount) || 0),
+  //   );
+  //   const sortedByNewest = [...movies].sort((a, b) => {
+  //     const dateA = new Date(a.releaseDate || a.createdAt).getTime();
+  //     const dateB = new Date(b.releaseDate || b.createdAt).getTime();
+  //     return dateB - dateA;
+  //   });
 
-    return {
-      topRated: sortedByRating.slice(0, 6),
-      mostViewed: sortedByViews.slice(0, 12),
-      newest: sortedByNewest.slice(0, 12),
-    };
-  }, [movies]);
+  //   return {
+  //     topRated: sortedByRating.slice(0, 6),
+  //     mostViewed: sortedByViews.slice(0, 12),
+  //     newest: sortedByNewest.slice(0, 12),
+  //   };
+  // }, [movies]);
+
+  const { data: topRatedData, isLoading: isTopRatedLoading } = useMovie.useTopRatedMovies({
+    page: 1,
+    limit: 12,
+  });
+  const topRated = topRatedData?.movies ?? [];
+
+  const { data: mostViewedData, isLoading: isMostViewedLoading } = useMovie.useMostViewedMovies({
+    page: 1,
+    limit: 12,
+  });
+  const mostViewed = mostViewedData?.movies ?? [];
+
+  const { data: newestData, isLoading: isNewestLoading } = useMovie.useLatestMovies({
+    page: 1,
+    limit: 12,
+  });
+  const newest = newestData?.movies ?? [];
 
   return (
     <div className="animate-fade-in w-full space-y-10 pb-10">

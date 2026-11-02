@@ -71,7 +71,7 @@ export class Movie extends BaseAuditEntity {
   overviewVi: string;
 
   @Index('IDX_MOVIES_RELEASE_DATE')
-  @Column({ name: 'release_date', type: 'varchar', length: 20, nullable: true })
+  @Column({ name: 'release_date', type: 'date', nullable: true })
   releaseDate: string;
 
   @Column({ name: 'poster_path', type: 'varchar', length: 255, nullable: true })

@@ -67,10 +67,120 @@ export function useIncrementView() {
   });
 }
 
+/** Tìm kiếm phim (public)
+ * /api/movies/search?keyword=...&page=...&limit=...&sort=releaseDate:DESC,voteAverage:ASC
+ */
+export function useSearchMovies(
+  params: MovieQuery = {
+    page: 1,
+    limit: 10,
+    sort: 'releaseDate:DESC',
+  },
+  staleTime: number = 1000 * 60 * 5,
+  gcTime: number = 1000 * 60 * 10,
+) {
+  return useQuery({
+    queryKey: ['movies', 'search', params],
+    queryFn: async (): Promise<MovieListResult> => {
+      const response = await movieApi.search(params);
+      return {
+        movies: response.result,
+        total: response.pagination?.total ?? 0,
+        page: response.pagination?.page ?? params.page ?? 1,
+        limit: response.pagination?.limit ?? params.limit ?? 10,
+        totalPages: response.pagination?.totalPages ?? 1,
+      };
+    },
+    staleTime: staleTime,
+    gcTime: gcTime,
+  });
+}
+
+/** latest movies */
+export function useLatestMovies(
+  params: MovieQuery = {
+    page: 1,
+    limit: 10,
+  },
+  staleTime: number = 1000 * 60 * 5,
+  gcTime: number = 1000 * 60 * 10,
+) {
+  return useSearchMovies(
+    {
+      ...params,
+      sort: 'releaseDate:DESC',
+    },
+    staleTime,
+    gcTime,
+  );
+}
+
+/** top rated movies */
+export function useTopRatedMovies(
+  params: MovieQuery = {
+    page: 1,
+    limit: 10,
+  },
+  staleTime: number = 1000 * 60 * 5,
+  gcTime: number = 1000 * 60 * 10,
+) {
+  return useSearchMovies(
+    {
+      ...params,
+      sort: 'voteAverage:DESC',
+    },
+    staleTime,
+    gcTime,
+  );
+}
+
+/** most viewed movies */
+export function useMostViewedMovies(
+  params: MovieQuery = {
+    page: 1,
+    limit: 10,
+  },
+  staleTime: number = 1000 * 60 * 5,
+  gcTime: number = 1000 * 60 * 10,
+) {
+  return useSearchMovies(
+    {
+      ...params,
+      sort: 'viewCount:DESC',
+    },
+    staleTime,
+    gcTime,
+  );
+}
+
+/** most liked movies */
+export function useMostLikedMovies(
+  params: MovieQuery = {
+    page: 1,
+    limit: 10,
+  },
+  staleTime: number = 1000 * 60 * 5,
+  gcTime: number = 1000 * 60 * 10,
+) {
+  return useSearchMovies(
+    {
+      ...params,
+      sort: 'likeCount:DESC',
+    },
+    staleTime,
+    gcTime,
+  );
+}
+
 const useMovie = {
   useGetMovies,
   useGetMovieDetail,
   useIncrementView,
+  useSearchMovies,
+  useLatestMovies,
+  useTopRatedMovies,
+  useMostViewedMovies,
+  useMostLikedMovies,
 };
 
 export default useMovie;

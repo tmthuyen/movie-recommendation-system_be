@@ -13,6 +13,7 @@ export interface IMovieRepository {
   create(movie: Partial<Movie>): Promise<Movie>;
   update(id: number, movie: Partial<Movie>): Promise<Movie | null>;
   remove(id: number): Promise<boolean>;
+  findAllByIds(ids: number[]): Promise<Movie[]>;
 }
 
 @Injectable()
@@ -78,5 +79,15 @@ export class MovieRepository implements IMovieRepository {
   async remove(id: number): Promise<boolean> {
     const result = await this.repo.delete(id);
     return Boolean(result.affected && result.affected > 0);
+  }
+
+  async findAllByIds(ids: number[]): Promise<Movie[]> {
+    return this.repo
+      .createQueryBuilder('movie')
+      .leftJoinAndSelect('movie.genres', 'genre')
+      .leftJoinAndSelect('movie.moviePeoples', 'moviePeople')
+      .leftJoinAndSelect('moviePeople.people', 'people')
+      .whereInIds(ids)
+      .getMany();
   }
 }

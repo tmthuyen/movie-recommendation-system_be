@@ -20,6 +20,9 @@ import { PaginationDto } from '@/common/dtos/pagination.dto';
 import { type Request } from 'express';
 import { Req } from '@nestjs/common';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
+import { MovieSearchRequestDto } from '@/modules/movies/dto/movie-search-request.dto';
+import { plainToInstance } from 'class-transformer';
+import { MovieResponseDto } from '@/modules/movies/dto/movie-response.dto';
 
 @ApiTags('Movies')
 @Controller('movies')
@@ -79,6 +82,22 @@ export class MoviesController {
         limit: result.limit,
         totalPages: result.totalPages,
       },
+    };
+  }
+
+  // search nâng cao: genres, sortBy, keyword
+  @Get('/search')
+  @ApiOperation({ summary: 'Tìm kiếm phim (Public)' })
+  async search(@Query() query: MovieSearchRequestDto) {
+    const { result, pagination } = await this.moviesService.search(query);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Searched movies successfully',
+      result: plainToInstance(MovieResponseDto, result, {
+        excludeExtraneousValues: true,
+      }),
+      pagination,
     };
   }
 

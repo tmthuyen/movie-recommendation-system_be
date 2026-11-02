@@ -1,5 +1,6 @@
 import { BaseResponseDto } from '@/common/dtos/base-response.dto';
 import { GenreResponseDto } from '@/modules/genres/dto/genre-response.dto';
+import { MoviePeopleResponseDto } from '@/modules/movies/dto/movie-people-response.dto';
 import { Expose, Type } from 'class-transformer';
 
 export class MovieResponseDto extends BaseResponseDto {
@@ -76,5 +77,8 @@ export class MovieResponseDto extends BaseResponseDto {
   @Expose()
   @Type(() => GenreResponseDto)
   genres: GenreResponseDto[];
-  // moviePeoples: MoviePeopleResponseDto[]
+
+  @Expose()
+  @Type(() => MoviePeopleResponseDto)
+  moviePeoples: MoviePeopleResponseDto[];
 }

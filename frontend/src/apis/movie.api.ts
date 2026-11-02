@@ -64,4 +64,17 @@ export const movieApi = {
     const { data } = await axiosClient.delete(`/movies/${id}`);
     return data;
   },
+  /** Tìm kiếm phim (PUBLIC).
+   * /api/movies/search?keyword=...&page=...&limit=...&sort=releaseDate:DESC,voteAverage:ASC
+   */
+  search: async (
+    params: MovieQuery = {
+      page: 1,
+      limit: 10,
+      sort: 'releaseDate:DESC',
+    },
+  ): Promise<ApiPaginatedResponse<Movie[]>> => {
+    const { data } = await axiosClient.get('/movies/search', { params });
+    return data;
+  },
 };

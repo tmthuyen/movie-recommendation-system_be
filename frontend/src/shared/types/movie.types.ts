@@ -75,6 +75,17 @@ export interface MovieQuery {
   page?: number;
   limit?: number;
   keyword?: string;
+  genreIds?: number[];
+  sort?: string; // ví dụ: `releaseDate:DESC,voteAverage:ASC`
+  releaseYearFrom?: number;
+  releaseYearTo?: number;
+  minVoteAverage?: number;
+  maxVoteAverage?: number;
+  minVoteCount?: number;
+  maxVoteCount?: number;
+  minViewCount?: number;
+  maxViewCount?: number;
+  countryCode?: string;
 }
 
 /** Kết quả danh sách phim = `result` + `pagination` của envelope. */

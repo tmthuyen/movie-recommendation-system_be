@@ -13,9 +13,9 @@ import { Comment } from './entities/comment.entity';
 import { EventsGateway } from '@/modules/events/events.gateway';
 import { User } from '../users/entities/user.entity';
 import { Movie } from '../movies/entities/movie.entity';
-import { PaginatedResult } from '@/common/dtos/api-response.dto';
 import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
 import { MovieInteractionStatsService } from '../interactions/movie-interaction-stats.service';
+import { PaginatedResult } from '@/common/dtos/paginated-result.interface';
 
 @Injectable()
 export class CommentsService {

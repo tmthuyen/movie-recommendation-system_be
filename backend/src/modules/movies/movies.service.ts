@@ -22,16 +22,25 @@ import {
 } from '@/infrastructure/messaging/event.types';
 import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
 import { MovieInteractionStatsService } from '@/modules/interactions/movie-interaction-stats.service';
+import { MovieSearchRequestDto } from '@/modules/movies/dto/movie-search-request.dto';
+import { ResultWithPagination } from '@/common/dtos/paginated-result.interface';
 
 @Injectable()
 export class MoviesService {
   private readonly logger = new Logger(MoviesService.name);
+  private readonly allowMovieSortFields = [
+    'releaseDate',
+    'voteAverage',
+    'viewCount',
+    'likeCount',
+    'createdAt',
+  ];
 
   constructor(
     @Inject(IMovieRepository)
     private readonly repo: IMovieRepository,
-    private readonly movieProducer: MovieProducer,
     private readonly dataSource: DataSource,
+    private readonly movieProducer: MovieProducer,
     private readonly eventsGateway: EventsGateway,
     private readonly interactionProducer: InteractionProducer,
     private readonly statsService: MovieInteractionStatsService,
@@ -301,5 +310,199 @@ export class MoviesService {
       score,
       interaction: interactionState,
     };
+  }
+
+  /** search nâng cao */
+  async search(
+    query: MovieSearchRequestDto,
+  ): Promise<ResultWithPagination<Movie>> {
+    const {
+      page = 1,
+      limit = 10,
+      keyword,
+      sort = 'releaseDate:DESC',
+      genreIds,
+      releaseYearFrom,
+      releaseYearTo,
+    } = query;
+
+    const queryBuilder = this.dataSource
+      .getRepository(Movie)
+      .createQueryBuilder('movie');
+
+    // ====================
+    // loại nhứng phim không hợp lệ:
+    // title titleVi null, releaseDate null,
+    // overview null, overviewVi null,
+    // posterPath null, backdropPath null
+    //
+    // ====================
+    queryBuilder.andWhere('movie.title IS NOT NULL');
+    queryBuilder.andWhere('movie.titleVi IS NOT NULL');
+    queryBuilder.andWhere('movie.releaseDate IS NOT NULL');
+    queryBuilder.andWhere('movie.overview IS NOT NULL');
+    queryBuilder.andWhere('movie.overviewVi IS NOT NULL');
+    queryBuilder.andWhere('movie.posterPath IS NOT NULL');
+    queryBuilder.andWhere('movie.backdropPath IS NOT NULL');
+
+    // keyword search: titile, titleVi
+    if (keyword?.trim()) {
+      queryBuilder.andWhere(
+        '(movie.title ILIKE :keyword OR movie.titleVi ILIKE :keyword)',
+        { keyword: `%${keyword}%` },
+      );
+    }
+
+    // ====================
+    // JOIN FK
+    // ====================
+
+    // genres
+    queryBuilder
+      .leftJoin('movie.genres', 'genre')
+      .addSelect(['genre.id', 'genre.name']);
+    if (genreIds && genreIds.length > 0) {
+      queryBuilder.andWhere('genre.id IN (:...genreIds)', { genreIds });
+    }
+
+    // country
+    // chưa có
+
+    // people
+    queryBuilder
+      .leftJoin('movie.moviePeoples', 'moviePeople')
+      .leftJoin('moviePeople.people', 'people')
+      .addSelect(['people.id', 'people.fullName', 'people.mainRole']);
+    // chưa filter peopleIds
+
+    // ====================
+    // END JOIN FK
+    // ====================
+
+    // ====================
+    // START FILTER <= >=
+    // ====================
+
+    // releaseYearFrom
+    if (releaseYearFrom) {
+      queryBuilder.andWhere('movie.releaseDate >= :startDate', {
+        startDate: `${releaseYearFrom}-01-01`,
+      });
+    }
+
+    // releaseYearTo
+    if (releaseYearTo) {
+      queryBuilder.andWhere('movie.releaseDate <= :endDate', {
+        endDate: `${releaseYearTo}-12-31`,
+      });
+    }
+
+    // ====================
+    // END FILTER <= >=
+    // ====================
+
+    // ====================
+    // START SORT
+    // ====================
+
+    const sortOptions = SearchUtils.parseSort(sort, this.allowMovieSortFields);
+
+    for (const option of sortOptions) {
+      queryBuilder.addOrderBy(`movie.${option.field}`, option.direction);
+    }
+
+    // stable sort by id
+    if (!sortOptions.some(option => option.field === 'id')) {
+      queryBuilder.addOrderBy('movie.id', 'ASC');
+    }
+
+    // ====================
+    // END SORT
+    // ====================
+
+    // ====================
+    // START PAGINATION
+    // ====================
+    const skip = (page - 1) * limit;
+
+    queryBuilder.skip(skip).take(limit);
+
+    this.logger.log(`Executing search query: ${queryBuilder.getSql()}`);
+
+    const [data, total] = await queryBuilder.getManyAndCount();
+
+    const pagination = PaginationUtils.getPaginationMeta(page, limit, total);
+
+    // ====================
+    // END PAGINATION
+    // ====================
+
+    return {
+      result: data,
+      pagination,
+    };
+  }
+}
+
+class PaginationUtils {
+  static getPaginationMeta(page: number, limit: number, total: number) {
+    const totalPages = Math.ceil(total / limit);
+    return {
+      page,
+      limit,
+      total,
+      totalPages,
+    };
+  }
+}
+
+/** Sort option interface
+ * field: string, direction: 'ASC' | 'DESC'
+ */
+export interface SortOption {
+  field: string;
+  direction: 'ASC' | 'DESC';
+}
+
+class SearchUtils {
+  static allowDirections = ['ASC', 'DESC'];
+
+  /** Parse sort string thành mảng các option để dùng trong query builder
+   * @param sort: string, ví dụ: "releaseDate:DESC,voteAverage:ASC"
+   * @param allowedFields: mảng các field được phép sort, ví dụ: ['releaseDate', 'voteAverage']
+   * @returns Array<{ field: string, direction: 'ASC' | 'DESC' }>
+   * @throws BadRequestException nếu sort không hợp lệ
+   */
+  static parseSort(sort: string, allowedFields: string[]): Array<SortOption> {
+    if (!sort) return [{ field: 'releaseDate', direction: 'DESC' }];
+
+    // map allowFields
+    // ánh xạ field
+    const mapField = new Map<string, string>();
+    for (const f of allowedFields) {
+      mapField.set(f.toLowerCase(), f);
+    }
+
+    // trả về field và direction đúng quy định
+    const sortOptions = sort.split(',').map(s => {
+      const [field, direction] = s.split(':');
+
+      if (!field || !direction) {
+        throw new BadRequestException('Invalid sort format');
+      }
+
+      const mappedField = mapField.get(field.toLowerCase());
+      if (!mappedField) {
+        throw new BadRequestException('Invalid sort field');
+      }
+
+      if (!SearchUtils.allowDirections.includes(direction.toUpperCase())) {
+        throw new BadRequestException('Invalid sort direction');
+      }
+
+      return { field: mappedField, direction: direction.toUpperCase() };
+    });
+
+    return sortOptions as Array<SortOption>;
   }
 }
