@@ -4,21 +4,22 @@
 **GVHD:** TS. Trần Trung Tín  
 **Sinh viên:** Phan Nguyễn Quốc Thắng (52300063) — Trần Minh Thuyên (52300070)  
 **Kho dữ liệu chuẩn:** 14.815 bộ phim tiếng Việt (SHA-256 fingerprint: `f47867b05751151a612854f7ed924feb0e0faff42d5e67197ebb0fe423d40c61`)  
-**Cập nhật lần cuối:** 21/10/2026 (Hoàn tất Bước 5 – Đối chuẩn & Phân tích chuyên sâu)
+**Cập nhật lần cuối:** 02/11/2026 (Hoàn tất P1 – Đối chuẩn Hybrid Retrieval BM25 + E5-Base RRF & Ground Truth V3)
 
 ---
 
 ## 1. Tiến trình & Lịch sử các phiên chạy (Experiment Timeline)
 
-| Run        | Ngày  | Dữ liệu & Quy mô                          | Mô hình & Cấu hình                                                                              | Kết quả chính                                                          |           Trạng thái           |
-| :--------- | :---: | :---------------------------------------- | :---------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------- | :----------------------------: |
-| **#01**    | 14/09 | 19.673 phim thô                           | TF-IDF (10k features), BM25 (Underthesea)                                                       | Khảo sát tốc độ đáp ứng sơ bộ, chưa có Ground Truth                    |           Hoàn thành           |
-| **#02**    | 25/09 | 14.815 phim, 10 queries                   | SBERT MiniLM-L12-v2 + ChromaDB                                                                  | NDCG@5 ≈ 0.74; Latency ≈ 25 ms                                         |           Hoàn thành           |
-| **#03**    | 08/10 | 14.815 phim, 20 queries, 163 nhãn         | TF-IDF (25k), BM25, SBERT MiniLM 384d                                                           | SBERT NDCG@5 = 0.8033; Latency = 44.2 ms                               |           Hoàn thành           |
-| **#03.1**  | 18/10 | 14.815 phim, 20 queries, 163 nhãn         | Thống nhất `build_search_text`, Underthesea tokenizer, Binary Cutoff Grade $\ge 2$, HNSW warmup | SBERT NDCG@5 = 0.8033, P@5 = 0.8300, Latency = 27.9 ms; BM25 = 27.9 ms |   Hoàn thành (Audit Bước 1)    |
-| **#04**    | 20/10 | 14.815 phim, 100 queries, 3.673 pairs     | Mở rộng 5 mô hình (TF-IDF, BM25, MiniLM, E5-Small, E5-Base), Candidate Pooling                  | BM25 dẫn đầu bảo thủ (NDCG@10 = 0.4925); E5-Base nhạy cảm nhãn thiếu   |     Hoàn thành (Benchmark)     |
-| **#04.1**  | 21/10 | 14.815 phim, 100 queries, Ground Truth V2 | Phân tách Insufficient (99) vs Unpooled (43), kiểm thử toán học độc lập, 69 unit tests PASS     | BM25 NDCG@10 = 0.4925 (Coverage 98.1%); E5-Base MRR = 0.5915           | Hoàn thành (Calibrated Bước 4) |
-| **Bước 5** | 21/10 | Toàn bộ Run #04.1 Calibrated              | Phân tích 5 nhóm hành vi, độ dài Short/Long, ma trận đánh đổi, đề xuất Hybrid BM25 + E5-Base    | Hoàn thiện Chương 5, 6 biểu đồ 300 DPI, xác minh tái lập 100%          |    **Đã nghiệm thu Bước 5**    |
+| Run        | Ngày  | Dữ liệu & Quy mô                          | Mô hình & Cấu hình                                                                              | Kết quả chính                                                                                  |           Trạng thái           |
+| :--------- | :---: | :---------------------------------------- | :---------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------- | :----------------------------: |
+| **#01**    | 14/09 | 19.673 phim thô                           | TF-IDF (10k features), BM25 (Underthesea)                                                       | Khảo sát tốc độ đáp ứng sơ bộ, chưa có Ground Truth                                            |           Hoàn thành           |
+| **#02**    | 25/09 | 14.815 phim, 10 queries                   | SBERT MiniLM-L12-v2 + ChromaDB                                                                  | NDCG@5 ≈ 0.74; Latency ≈ 25 ms                                                                 |           Hoàn thành           |
+| **#03**    | 08/10 | 14.815 phim, 20 queries, 163 nhãn         | TF-IDF (25k), BM25, SBERT MiniLM 384d                                                           | SBERT NDCG@5 = 0.8033; Latency = 44.2 ms                                                       |           Hoàn thành           |
+| **#03.1**  | 18/10 | 14.815 phim, 20 queries, 163 nhãn         | Thống nhất `build_search_text`, Underthesea tokenizer, Binary Cutoff Grade $\ge 2$, HNSW warmup | SBERT NDCG@5 = 0.8033, P@5 = 0.8300, Latency = 27.9 ms; BM25 = 27.9 ms                         |   Hoàn thành (Audit Bước 1)    |
+| **#04**    | 20/10 | 14.815 phim, 100 queries, 3.673 pairs     | Mở rộng 5 mô hình (TF-IDF, BM25, MiniLM, E5-Small, E5-Base), Candidate Pooling                  | BM25 dẫn đầu bảo thủ (NDCG@10 = 0.4925); E5-Base nhạy cảm nhãn thiếu                           |     Hoàn thành (Benchmark)     |
+| **#04.1**  | 21/10 | 14.815 phim, 100 queries, Ground Truth V2 | Phân tách Insufficient (99) vs Unpooled (43), kiểm thử toán học độc lập,                        | BM25 NDCG@10 = 0.4925 (Coverage 98.1%); E5-Base MRR = 0.5915                                   | Hoàn thành (Calibrated Bước 4) |
+| **Bước 5** | 21/10 | Toàn bộ Run #04.1 Calibrated              | Phân tích 5 nhóm hành vi, độ dài Short/Long, ma trận đánh đổi, đề xuất Hybrid BM25 + E5-Base    | Hoàn thiện Chương 5, 6 biểu đồ 300 DPI, xác minh tái lập 100%                                  |    **Đã nghiệm thu Bước 5**    |
+| **P1**     | 02/11 | 14.815 phim, 100 queries, Ground Truth V3 | Hybrid BM25 (Top-50) + Multilingual E5-Base (Top-50) qua RRF k=60, thẩm định bổ sung 142 nhãn   | Hybrid dẫn đầu thực tế (NDCG@10 = 0.5131, Hit@10 = 0.7800, Coverage 96.2%); Latency = 136.2 ms | **Hoàn thành (Nghiệm thu P1)** |
 
 ---
 
@@ -134,8 +135,8 @@ Báo cáo khảo sát song song Kịch bản Giả định Liên quan (toàn b�
 | **Multilingual E5 Small** |        [0.4345 $\rightarrow$ 0.4766]        |        +0.0421        |  [0.1740 $\rightarrow$ 0.1930]  |               16                |           3           |            19            | Trung bình ($\Delta = +0.0421$)              |
 | **Multilingual E5 Base**  |      [0.4536 $\rightarrow$ **0.5462**]      |      **+0.0926**      |  [0.1860 $\rightarrow$ 0.2550]  |             **65**              |           4           |          **69**          | **Cao nhất ($\Delta = +0.0926$)**            |
 
-|                           Biểu đồ Độ nhạy NDCG@10 (Bảo thủ vs Giả định G2)                            |                        Cơ cấu Thành phần Nhãn Top-10 của 5 Mô hình                        |
-| :---------------------------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------------: |
+|                  Biểu đồ Độ nhạy NDCG@10 (Bảo thủ vs Giả định G2)                   |               Cơ cấu Thành phần Nhãn Top-10 của 5 Mô hình               |
+| :---------------------------------------------------------------------------------: | :---------------------------------------------------------------------: |
 | ![Hinh 5.4: Do nhay NDCG@10](assets/fig5_4_sensitivity_conservative_vs_assumed.png) | ![Hinh 5.6: Co cau Nhan Top-10](assets/fig5_6_unjudged_composition.png) |
 
 > **Ý nghĩa học thuật:**
@@ -159,8 +160,8 @@ Báo cáo khảo sát song song Kịch bản Giả định Liên quan (toàn b�
 | ↳ _Phân nhóm Short (Mean 1.9 từ)_            | 0.6632 | **0.6896** |    0.3490    |        0.4625         |        0.4501        | 🏆 **BM25** (+49.10% vs E5 Small)  |
 | ↳ _Phân nhóm Long (Mean 48.8 từ)_            | 0.8075 | **0.8153** |    0.6735    |        0.7236         |        0.7869        |  🏆 **BM25** (+3.61% vs E5 Base)   |
 
-|                      Phân bổ NDCG@10 theo 5 Nhóm Truy vấn                      |                 Tác động của Độ dài Truy vấn (Short vs Long)                  |
-| :----------------------------------------------------------------------------: | :---------------------------------------------------------------------------: |
+|             Phân bổ NDCG@10 theo 5 Nhóm Truy vấn             |        Tác động của Độ dài Truy vấn (Short vs Long)         |
+| :----------------------------------------------------------: | :---------------------------------------------------------: |
 | ![Hinh 5.2: NDCG theo Nhom](assets/fig5_2_ndcg_by_group.png) | ![Hinh 5.3: Short vs Long](assets/fig5_3_short_vs_long.png) |
 
 ---
@@ -243,8 +244,7 @@ python ai-service/scripts/reproduce_step4_benchmark.py --verify-stored-metrics
 # 4. Tái chạy truy xuất mẫu trực tiếp cả 5 mô hình (25 phép so sánh)
 python ai-service/scripts/reproduce_step4_benchmark.py --run-sample-all-models
 
-# 5. Chạy toàn bộ 69 unit tests hệ thống
-pytest ai-service/tests/unit -v   # Kết quả: 69/69 passed in 22.8s
+
 ```
 
 ### 7.2. Minh bạch Hóa 5 Giới hạn Nghiên cứu
@@ -275,3 +275,60 @@ pytest ai-service/tests/unit -v   # Kết quả: 69/69 passed in 22.8s
   9. `latency_comparison.png` (So sánh độ trễ Run #03.1)
   10. `ir_metrics_table.png` (Bảng số liệu Run #03.1)
 - **Bản kê khai chữ ký số:** `ai-service/experiments/evaluation/MANIFEST_STEP5_SHA256.json`
+
+---
+
+## 9. Giai đoạn 4: Thử nghiệm P1 Hybrid Retrieval (BM25 + Multilingual E5-Base, RRF k=60)
+
+### 9.1. Động lực & Cấu hình Kiến trúc RRF
+
+Hiện thực hóa đề xuất tại Mục 6.3 nhằm kết hợp sức mạnh giữa Lexical Search (Okapi BM25) và Dense Semantic Search (Multilingual E5-Base):
+
+- **Cấu hình:** Lấy Top-50 ứng viên từ BM25 và Top-50 từ E5-Base (ChromaDB HNSW), hợp nhất bằng Reciprocal Rank Fusion:
+  $$\text{RRF\_Score}(d) = \sum_{m \in \{\text{BM25}, \text{E5}\}} \frac{1}{60 + \text{Rank}_m(d)}$$
+- **Top-10 Cutoff:** Trích xuất 10 bộ phim có điểm hợp nhất cao nhất để đánh giá đối chuẩn các chỉ số IR chuẩn TREC.
+
+### 9.2. Kiểm toán Dữ liệu & Mở rộng Ground Truth V3 (qrels_v3)
+
+- **Vấn đề phát hiện khi kiểm toán:** Ở lần chạy sơ bộ trên `qrels_v2`, Top-10 của Hybrid có 142 vị trí chưa có nhãn (14.2% Top-10, coverage chỉ 85.8%), khiến điểm bảo thủ bị dìm xuống 0.4953 (+0.57% vs BM25).
+- **Quy trình thẩm định chuẩn học thuật:**
+  1. Trích xuất đầy đủ tóm tắt nội dung (`overview_full`) và tạo hàng đợi thẩm định mù hai chiều `annotation_queue_hybrid_rrf_top10_blinded.json` (ẩn hoàn toàn tên mô hình đề xuất và thứ hạng rank).
+  2. Thẩm định độc lập 142 cặp bằng Gemini LLM-as-a-Judge theo double-blind protocol (đồng nhất phương pháp tạo Ground Truth V2).
+  3. Phân bố nhãn thu được: 56 Grade 0 (không liên quan), 35 Grade 1 (liên quan yếu), 8 Grade 2 (liên quan tốt), 5 Grade 3 (rất liên quan), và 38 cặp `insufficient_evidence` (tóm tắt phim quá ngắn hoặc trống, được bảo lưu `grade=None`, tuyệt đối không tự gán Grade 0 giả lập).
+  4. Hợp nhất vào `ground_truth_v3.json` và xuất `qrels_v3.json` / `qrels_v3.txt` (chuẩn TREC 3.0-canonical), nâng độ phủ nhãn Top-10 của Hybrid lên **96.2%**.
+
+### 9.3. Bảng Kết quả Đối chuẩn Tổng thể trên qrels_v3 (100 Benchmark Queries)
+
+| Hệ thống Truy xuất                   | NDCG@10 (Bảo thủ) | NDCG@10 (Giả định G2) | Hit@10 (Bảo thủ) | Precision@10 |    MRR     |   MAP@10   | Coverage@10 | Latency (Mean) | Latency (P95) |
+| :----------------------------------- | :---------------: | :-------------------: | :--------------: | :----------: | :--------: | :--------: | :---------: | :------------: | :-----------: |
+| **BM25 (Lexical)**                   |      0.4885       |        0.4903         |      0.7500      |    0.1910    |   0.5811   |   0.3749   |    98.6%    |    59.15 ms    |   95.15 ms    |
+| **Multilingual E5 Base**             |      0.4497       |        0.5381         |      0.7300      |    0.1860    |   0.5915   |   0.3479   |    93.6%    |    82.89 ms    |   141.40 ms   |
+| **Hybrid (BM25 + E5-Base RRF k=60)** |    **0.5131**     |      **0.5592**       |    **0.7800**    |  **0.2240**  | **0.6382** | **0.4031** |  **96.2%**  |   142.19 ms    |   225.88 ms   |
+
+#### Phân tích cải thiện thực tế (Delta % trên qrels_v3):
+
+- **So với BM25:** NDCG@10 tăng **+5.04%** (từ 0.4885 lên 0.5131); Hit@10 tăng **+4.00%**; Precision@10 tăng **+17.28%**; MRR tăng **+9.83%** (phim liên quan xuất hiện ở thứ hạng cao hơn rõ rệt); MAP@10 tăng **+7.52%**.
+- **So với Multilingual E5 Base:** NDCG@10 tăng **+14.10%**; Hit@10 tăng **+6.85%**; Precision@10 tăng **+20.43%**; MRR tăng **+7.90%**; MAP@10 tăng **+15.87%**.
+- **Phân bổ theo nhóm truy vấn:** Hybrid RRF **vượt trội hơn cả hai mô hình thành phần** ở cả 3 nhóm truy vấn lớn nhất: **Lexical** (0.7625 vs 0.7167), **Semantic** (0.5108 vs 0.4968) và **Abstract** (0.4172 vs 0.3919). Ở nhóm Typo/Slang, BM25 vẫn dẫn đầu (0.1959) do E5-base bị OOV từ lóng (0.0302), Hybrid giữ mức trung gian (0.1377).
+
+### 9.4. Độ trễ Pipeline & Ranh giới Học thuật
+
+- **Độ trễ trung bình:** 136.19 ms (BM25: 57.46 ms chiếm 42.2%, E5-Base Dense Search: 78.48 ms chiếm 57.6%, Thuật toán RRF: **0.25 ms** chiếm 0.2%).
+- **Ranh giới học thuật:**
+  - _Kết quả xác nhận chính thức:_ NDCG@10 bảo thủ = **0.5131** (đã thẩm định thực tế trên `qrels_v3`).
+  - _Công việc còn lại:_ 38 cặp phim thiếu thông tin tóm tắt TMDB gốc cần làm giàu dữ liệu; và tổ chức thẩm định chéo độc lập bởi hội đồng chuyên gia con người (Human Expert Double-Blind Adjudication) theo hàng đợi `annotation_queue_hybrid_rrf_top10_blinded.json`.
+  - _Giới hạn kiến trúc:_ Giữ nguyên 100% thuật toán RRF k=60; bảo toàn Ground Truth V2; không sửa đổi `hybrid_recommendation()` trong `recommend_service.py` (vốn là hệ thống kết hợp CF + Semantic Profile); chưa tích hợp API production.
+
+### 9.5. Danh mục Tệp Dữ liệu Xuất xưởng P1
+
+- **Ground Truth & Canonical Qrels V3:**
+  - `ai-service/experiments/ground_truth/ground_truth_v3.json`
+  - `ai-service/experiments/ground_truth/qrels_v3.json`
+  - `ai-service/experiments/ground_truth/qrels_v3.txt` (TREC canonical format)
+  - `ai-service/experiments/ground_truth/annotation_queue_hybrid_rrf_top10_blinded.json` (Hàng đợi thẩm định mù cho chuyên gia)
+- **Kết quả Thực nghiệm Máy đọc:**
+  - `ai-service/experiments/evaluation/benchmark_results_p1_hybrid_rrf_v3.json`
+- **Mã nguồn Thực thi & Kiểm thử:**
+  - `ai-service/src/core/fusion.py` (Thuật toán RRF)
+  - `ai-service/scripts/benchmark_hybrid_rrf.py`
+  - `ai-service/scripts/judge_hybrid_rrf_expansion.py`

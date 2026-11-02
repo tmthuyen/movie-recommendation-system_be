@@ -250,12 +250,12 @@ def find_unjudged_candidates_for_run(
                             "existing_status": c_exist.get("status") or c_exist.get("llm_verdict", "insufficient_evidence"),
                             "tmdb_id": c_exist.get("tmdb_id") or meta.get("tmdb_id"),
                             "title_vi": c_exist.get("title_vi") or meta.get("title_vi") or meta.get("title") or "Unknown",
-                            "title_en": c_exist.get("title_en") or meta.get("title") or "",
+                            "title_en": c_exist.get("title_en") or meta.get("title_en") or meta.get("title") or "",
                             "genres": c_exist.get("genres") or meta.get("genres", ""),
                             "release_date": c_exist.get("release_date") or meta.get("release_date", ""),
                             "vote_average": c_exist.get("vote_average") or meta.get("vote_average", 0.0),
                             "overview_snippet": c_exist.get("overview_snippet") or meta.get("overview_snippet", meta.get("overview", "")[:120]),
-                            "overview_full": c_exist.get("overview_full") or meta.get("overview", ""),
+                            "overview_full": c_exist.get("overview_full") or meta.get("overview_full") or meta.get("overview", ""),
                             "proposed_by": [new_model_name],
                             "model_ranks": {new_model_name: rank},
                             "is_source_movie": (mid_int == q_obj.get("source_movie_id")),
@@ -283,12 +283,12 @@ def find_unjudged_candidates_for_run(
                         "existing_status": None,
                         "tmdb_id": meta.get("tmdb_id"),
                         "title_vi": meta.get("title_vi") or meta.get("title") or "Unknown",
-                        "title_en": meta.get("title") or "",
+                        "title_en": meta.get("title_en") or meta.get("title") or "",
                         "genres": meta.get("genres", ""),
                         "release_date": meta.get("release_date", ""),
                         "vote_average": meta.get("vote_average", 0.0),
                         "overview_snippet": meta.get("overview_snippet", meta.get("overview", "")[:120]),
-                        "overview_full": meta.get("overview", ""),
+                        "overview_full": meta.get("overview_full") or meta.get("overview", ""),
                         "proposed_by": [new_model_name],
                         "model_ranks": {new_model_name: rank},
                         "is_source_movie": (mid_int == q_obj.get("source_movie_id")),
@@ -322,19 +322,37 @@ def export_annotation_expansion_queue(
     unjudged_items: List[Dict[str, Any]],
     out_queue_file: Path,
     version: str = "2.1-expansion-queue",
+    blinded: bool = False,
 ) -> None:
-    """Xuất file hàng đợi gán nhãn mới, chuẩn bị cho LLM-as-a-Judge hoặc chuyên gia đánh giá mù."""
+    """Export annotation queue. Blinded=True hides model/source-ranking metadata.
+
+    The audit/internal queue (blinded=False) preserves provenance. The reviewer
+    queue (blinded=True) excludes retrieval model, rank, source-movie labels and
+    any other annotation hints. Blinding should not be called double-blind by
+    default: no independent annotator blinding protocol is implemented here.
+    """
     category_counts = Counter(item.get("queue_category", "unspecified") for item in unjudged_items)
+    if blinded:
+        # Keep only evidence needed for relevance judgment and stable pair linkage.
+        allowed = (
+            "queue_id", "query_id", "query", "movie_id", "tmdb_id",
+            "title_vi", "title_en", "genres", "release_date",
+            "overview_snippet", "overview_full", "annotated_by",
+            "annotated_at", "notes", "relevance_grade",
+        )
+        queue = [{key: item.get(key) for key in allowed} for item in unjudged_items]
+    else:
+        queue = unjudged_items
     payload = {
         "metadata": {
             "version": version,
             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "total_pending_items": len(unjudged_items),
-            "category_breakdown": dict(category_counts),
-            "blinded_evaluation": True,
-            "instruction": "Đánh giá mức độ liên quan thang 0-3 theo rubric chuẩn. Tuyệt đối không tự động gán nhãn mặc định.",
+            "category_breakdown": dict(category_counts) if not blinded else None,
+            "blinded_evaluation": blinded,
+            "instruction": "Đánh giá mức độ liên quan thang 0-3 theo rubric; không gán mặc định khi thiếu chứng cứ.",
         },
-        "queue": unjudged_items,
+        "queue": queue,
     }
     out_queue_file.parent.mkdir(parents=True, exist_ok=True)
     with open(out_queue_file, "w", encoding="utf-8") as f:
