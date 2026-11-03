@@ -30,6 +30,7 @@ export class MovieRepository implements IMovieRepository {
     const queryBuilder = this.repo
       .createQueryBuilder('movie')
       .leftJoinAndSelect('movie.genres', 'genre')
+      .leftJoinAndSelect('movie.countries', 'country')
       .leftJoinAndSelect('movie.moviePeoples', 'moviePeople')
       .leftJoinAndSelect('moviePeople.people', 'people');
 
@@ -85,6 +86,7 @@ export class MovieRepository implements IMovieRepository {
     return this.repo
       .createQueryBuilder('movie')
       .leftJoinAndSelect('movie.genres', 'genre')
+      .leftJoinAndSelect('movie.countries', 'country')
       .leftJoinAndSelect('movie.moviePeoples', 'moviePeople')
       .leftJoinAndSelect('moviePeople.people', 'people')
       .whereInIds(ids)

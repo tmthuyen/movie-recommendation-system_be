@@ -209,9 +209,9 @@ async function bootstrap() {
   console.log('Hoàn tất toàn bộ quy trình Seed!');
 }
 
-// bootstrap().catch(err => {
-//   console.error('Lỗi khi seed data:', err);
-//   process.exit(1);
-// });
+bootstrap().catch(err => {
+  console.error('Lỗi khi seed data:', err);
+  process.exit(1);
+});
 
 // run code: npx ts-node -r tsconfig-paths/register src/seed/country.seed.ts

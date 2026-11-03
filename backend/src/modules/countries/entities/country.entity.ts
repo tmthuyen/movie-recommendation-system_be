@@ -4,8 +4,8 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
-  OneToMany,
   Index,
+  ManyToMany,
 } from 'typeorm';
 
 @Entity('countries')
@@ -47,6 +47,6 @@ export class Country extends BaseAuditEntity {
   @Column({ type: 'varchar', length: 50, nullable: true })
   subregion: string;
 
-  // @OneToMany(() => Movie, movie => movie.country)
-  // movies: Movie[];
+  @ManyToMany(() => Movie, movie => movie.countries)
+  movies: Movie[];
 }

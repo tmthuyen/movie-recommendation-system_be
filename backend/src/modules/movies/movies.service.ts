@@ -321,6 +321,7 @@ export class MoviesService {
       limit = 10,
       keyword,
       sort = 'releaseDate:DESC',
+      countryIds,
       genreIds,
       releaseYearFrom,
       releaseYearTo,
@@ -366,7 +367,10 @@ export class MoviesService {
     }
 
     // country
-    // chưa có
+    queryBuilder.leftJoinAndSelect('movie.countries', 'country');
+    if (countryIds && countryIds.length > 0) {
+      queryBuilder.andWhere('country.id IN (:...countryIds)', { countryIds });
+    }
 
     // people
     queryBuilder

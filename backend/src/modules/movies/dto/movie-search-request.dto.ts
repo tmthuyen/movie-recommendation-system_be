@@ -2,12 +2,15 @@ import { PaginationDto } from '@/common/dtos/pagination.dto';
 import { Transform, Type } from 'class-transformer';
 import { IsArray, IsInt, IsOptional, IsString, Min } from 'class-validator';
 
-const parseIds = (value: unknown): unknown => {
-  if (value === undefined) return undefined;
-  if (typeof value !== 'string') return value;
+export function parseIds(value: unknown): number[] | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
 
-  return value.split(',').map(id => Number(id.trim()));
-};
+  const values = Array.isArray(value) ? value : [value];
+
+  return values.map(Number);
+}
 
 export class MovieSearchRequestDto extends PaginationDto {
   @IsOptional()
@@ -20,6 +23,14 @@ export class MovieSearchRequestDto extends PaginationDto {
   @IsInt({ each: true })
   @Min(1, { each: true })
   genreIds?: number[]; // optional array of genre IDs to filter by
+
+  // countryIds filter
+  @IsOptional()
+  @Transform(({ value }) => parseIds(value))
+  @IsArray()
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  countryIds?: number[]; // optional array of country IDs to filter by
 
   @IsOptional()
   @Type(() => Number)

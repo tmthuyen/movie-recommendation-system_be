@@ -155,12 +155,26 @@ export class Movie extends BaseAuditEntity {
   })
   genres: Genre[];
 
+  @ManyToMany(() => Country, country => country.movies, {
+    cascade: ['remove'],
+  })
+  @JoinTable({
+    name: 'movie_countries',
+    joinColumn: {
+      name: 'movie_id',
+      referencedColumnName: 'id',
+      foreignKeyConstraintName: 'fk_movie_countries_movie',
+    },
+    inverseJoinColumn: {
+      name: 'country_id',
+      referencedColumnName: 'id',
+      foreignKeyConstraintName: 'fk_movie_countries_country',
+    },
+  })
+  countries: Country[];
+
   @OneToMany(() => MoviePeople, moviePeople => moviePeople.movie)
   moviePeoples: MoviePeople[];
-
-  // @ManyToOne(() => Country, country => country.movies)
-  // @JoinColumn({ name: 'country_id' })
-  // country: Country;
 
   @OneToMany(() => Rating, rating => rating.movie)
   ratings: Rating[];

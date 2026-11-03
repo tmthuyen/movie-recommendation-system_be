@@ -90,16 +90,6 @@ async function bootstrap() {
   //   });
   // }
 
-  // update releaseDate column type to date
-  try {
-    await dataSource.query(`
-      ALTER TABLE movies ALTER COLUMN release_date TYPE date USING release_date::date;
-    `);
-    console.log('✅ Đã cập nhật kiểu dữ liệu cột release_date thành date.');
-  } catch (error) {
-    console.error('Lỗi khi cập nhật kiểu dữ liệu cột release_date:', error);
-  }
-
   if (fs.existsSync(moviesFilePath)) {
     console.log('Bắt đầu cập nhật releaseDate cho Movies...');
     const parser = fs.createReadStream(moviesFilePath).pipe(
@@ -110,18 +100,54 @@ async function bootstrap() {
       }),
     );
 
-    for await (const row of parser) {
-      if (!row.movieId) continue; // Bỏ qua những row chưa có id
+    let countReleaseDateNull = 0;
+    let i = 0;
 
-      // const releaseDate = String(row.release_date || '').trim();
+    // số lượng movie
+    const totalMovies = await movieRepo.count();
+    console.log(`Tổng số lượng Movies trong DB: ${totalMovies}`);
+    console.log(
+      `Số lượng Movies trong file CSV: ${parser.readableLength || 'unknown'}`,
+    );
+
+    for await (const row of parser) {
+      console.log(
+        `Đang cập nhật releaseDate cho Movie thứ ${++i}: ${row.release_date} (movieId: ${row.movieId})`,
+      );
+      if (!row.tmdb_id) continue; // Bỏ qua những row chưa có id
+
+      // Cập nhật theo tmdb_id
+      const tmdbId = Number(row.tmdb_id);
+
+      if (
+        !row.release_date ||
+        row.release_date.trim() === '' ||
+        new Date(row.release_date).toString() === 'Invalid Date'
+      ) {
+        countReleaseDateNull++;
+        console.warn(
+          `Movie ID ${row.movieId} có release_date trống, bỏ qua cập nhật.`,
+        );
+        continue;
+      }
+
+      const releaseDate = String(row.release_date).trim();
+
+      console.log(
+        `Đang cập nhật releaseDate cho Movie có tmdbId: ${tmdbId} (releaseDate: ${releaseDate})`,
+      );
 
       // await movieRepo.update(
-      //   { id: Number(row.movieId) },
+      //   { tmdbId: tmdbId },
       //   {
-      //     releaseDate: row.release_date,
+      //     releaseDate: releaseDate,
       //   },
       // );
     }
+
+    console.log(
+      `✅ Đã cập nhật releaseDate cho tất cả Movies. Số lượng Movies có release_date trống: ${countReleaseDateNull}`,
+    );
 
     console.log('✅ Đã cập nhật releaseDate cho tất cả Movies.');
   }
