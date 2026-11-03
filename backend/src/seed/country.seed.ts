@@ -5,6 +5,15 @@ import { DataSource } from 'typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Country } from '@/modules/countries/entities/country.entity';
+
+// load env variables from .env file
+import * as dotenv from 'dotenv';
+dotenv.config();
+console.log(
+  'Loaded environment variables from .env file:',
+  process.env.COUNTRY_API_KEY,
+);
+
 const getCountries = async ({
   limit,
   offset,
@@ -15,7 +24,7 @@ const getCountries = async ({
   const url = `https://api.restcountries.com/countries/v5?limit=${limit}&offset=${offset}&pretty=1`;
   const res = await fetch(url, {
     headers: {
-      Authorization: 'Bearer rc_live_0ad4c950c359485293756a1b52f33f7a',
+      Authorization: `Bearer ${process.env.COUNTRY_API_KEY}`,
     },
   });
 
@@ -200,9 +209,9 @@ async function bootstrap() {
   console.log('Hoàn tất toàn bộ quy trình Seed!');
 }
 
-bootstrap().catch(err => {
-  console.error('Lỗi khi seed data:', err);
-  process.exit(1);
-});
+// bootstrap().catch(err => {
+//   console.error('Lỗi khi seed data:', err);
+//   process.exit(1);
+// });
 
 // run code: npx ts-node -r tsconfig-paths/register src/seed/country.seed.ts

@@ -20,35 +20,35 @@ async function bootstrap() {
 
   // --- ĐỒNG BỘ LẠI SEQUENCE CHO AUTO_INCREMENT (PostgreSQL) ---
   console.log('Đồng bộ lại Sequence ID cho Movies...');
-  try {
-    await dataSource.query(`
-      SELECT setval(
-        pg_get_serial_sequence('movies', 'id'), 
-        COALESCE((SELECT MAX(id) FROM movies), 1)
-      );
-    `);
+  // try {
+  //   await dataSource.query(`
+  //     SELECT setval(
+  //       pg_get_serial_sequence('movies', 'id'),
+  //       COALESCE((SELECT MAX(id) FROM movies), 1)
+  //     );
+  //   `);
 
-    // Nếu bạn cũng import bảng genres, nên chạy thêm cho genres
-    await dataSource.query(`
-      SELECT setval(
-        pg_get_serial_sequence('genres', 'id'), 
-        COALESCE((SELECT MAX(id) FROM genres), 1)
-      );
-    `);
-    await dataSource.query(`
-      SELECT setval(
-        pg_get_serial_sequence('seed_ratings', 'id'), 
-        COALESCE((SELECT MAX(id) FROM seed_ratings), 1)
-      );
-    `);
+  //   // Nếu bạn cũng import bảng genres, nên chạy thêm cho genres
+  //   await dataSource.query(`
+  //     SELECT setval(
+  //       pg_get_serial_sequence('genres', 'id'),
+  //       COALESCE((SELECT MAX(id) FROM genres), 1)
+  //     );
+  //   `);
+  //   await dataSource.query(`
+  //     SELECT setval(
+  //       pg_get_serial_sequence('seed_ratings', 'id'),
+  //       COALESCE((SELECT MAX(id) FROM seed_ratings), 1)
+  //     );
+  //   `);
 
-    console.log('✅ Đã đồng bộ Sequence thành công!');
-  } catch (error) {
-    console.error(
-      'Lỗi khi đồng bộ Sequence (Có thể do bạn không dùng Postgres):',
-      error,
-    );
-  }
+  //   console.log('✅ Đã đồng bộ Sequence thành công!');
+  // } catch (error) {
+  //   console.error(
+  //     'Lỗi khi đồng bộ Sequence (Có thể do bạn không dùng Postgres):',
+  //     error,
+  //   );
+  // }
 
   const genresFilePath = path.join(__dirname, 'genres.csv');
   const moviesFilePath = path.join(
