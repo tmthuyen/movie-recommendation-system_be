@@ -77,7 +77,6 @@ async def get_similar_movies(
     app_request: Request,
     topK: int = Query(default=10, ge=1, le=50, description="So phim tuong tu can tim"),
 ) -> dict:
-    """Goi y danh sach phim co noi dung/ngu nghia tuong dong nhat voi movie_id (Item-to-Item)."""
     svc = await _get_recommend_service(app_request)
     try:
         data: list[SimilarMoviesResponse] = await svc.similar_movies(
@@ -91,6 +90,68 @@ async def get_similar_movies(
         page=1,
         page_size=topK,
         message=f"Goi y {len(data)} phim tuong tu voi movie_id={movie_id}",
+    )
+
+
+@router.get("/similar-rerank/{movie_id}")
+@router.get("/similar/{movie_id}/rerank")
+async def get_similar_movies_rerank(
+    movie_id: int,
+    app_request: Request,
+    topK: int | None = Query(default=None, ge=1, le=50, description="So luong phim can tim (camelCase)"),
+    top_k: int = Query(default=10, ge=1, le=50, description="Alias cho topK"),
+    mode: str = Query(
+        default="soft",
+        pattern="^(off|soft|strict)$",
+        description="Che do reranking the loai: off | soft | strict",
+    ),
+    genreWeight: float | None = Query(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Trong so the loai khi dung soft (camelCase)",
+    ),
+    genre_weight: float = Query(
+        default=0.3,
+        ge=0.0,
+        le=1.0,
+        description="Alias cho genreWeight",
+    ),
+    candidateK: int | None = Query(
+        default=None,
+        ge=20,
+        le=200,
+        description="Kich thuoc pool ung vien retrieval (camelCase)",
+    ),
+    candidate_k: int = Query(
+        default=100,
+        ge=20,
+        le=200,
+        description="Alias cho candidateK",
+    ),
+) -> dict:
+    """Goi y danh sach phim tuong tu kem Genre-aware Reranking (off | soft | strict) - Endpoint moi (chuan camelCase)."""
+    limit = topK if topK is not None else top_k
+    weight = genreWeight if genreWeight is not None else genre_weight
+    cand_k = candidateK if candidateK is not None else candidate_k
+
+    svc = await _get_recommend_service(app_request)
+    try:
+        data = await svc.similar_movies_rerank(
+            movie_id=movie_id,
+            top_k=limit,
+            mode=mode,
+            genre_weight=weight,
+            candidate_k=cand_k,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    return paginated(
+        data=data,
+        total_items=len(data),
+        page=1,
+        page_size=limit,
+        message=f"Goi y {len(data)} phim tuong tu voi movie_id={movie_id} (mode={mode})",
     )
 
 

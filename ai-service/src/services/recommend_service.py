@@ -14,27 +14,13 @@ from core.integrations import VectorStore
 from services.embedding_service import EmbeddingService
 from services.mapping_service import mapping_service
 from utils import setup_logger
+from utils.genre_utils import extract_genres, rerank_similar_candidates
 
 logger = setup_logger(name=__name__, filename=__name__)
 
 
-def _build_search_text(data: dict[str, Any]) -> str:
-    parts: list[str] = []
-    title_vi: str = str(data.get("title_vi") or "").strip()
-    title_en: str = str(data.get("title") or data.get("title_en") or "").strip()
-    if title_vi and title_vi.lower() not in ("nan", "none", ""):
-        parts.append(title_vi)
-    elif title_en:
-        parts.append(title_en)
-    genres = data.get("genres") or ""
-    if isinstance(genres, list):
-        genres = " ".join(genres)
-    if genres and str(genres).lower() not in ("nan", "none", ""):
-        parts.append(str(genres).strip())
-    overview: str = str(data.get("overview") or "").strip()
-    if overview and overview.lower() not in ("nan", "none", ""):
-        parts.append(overview)
-    return ". ".join(filter(None, parts))
+# Reuse the exact corpus text builder used by DataLoader; no index rebuild here.
+from data.data_loader import build_search_text as _build_search_text
 
 
 def _format_item(item: dict[str, Any]) -> dict[str, Any]:
@@ -46,15 +32,27 @@ def _format_item(item: dict[str, Any]) -> dict[str, Any]:
         if (title_vi and str(title_vi).strip() not in ("nan", "None", ""))
         else title_en
     )
-
-    return {
+    result = {
         "id": item.get("id"),
-        "similarityScore": round(float(item.get("score", 0.0)), 4),
+        "movieId": item.get("id"),
+        "similarityScore": round(float(item.get("raw_cosine_score", item.get("score", 0.0))), 4),
         "title": display_title,
         "titleVi": title_vi if str(title_vi) not in ("nan", "None") else None,
+        "titleEn": title_en if str(title_en) not in ("nan", "None") else None,
         "overview": meta.get("overview"),
         "overviewVi": meta.get("overview_vi"),
+        "genres": meta.get("genres"),
+        "genreNames": sorted(extract_genres(meta.get("genres"))),
+        "releaseDate": str(meta.get("release_date", ""))[:10],
+        "voteAverage": meta.get("vote_average"),
+        "tmdbId": meta.get("tmdb_id"),
+        "popularity": meta.get("popularity"),
     }
+    if "raw_cosine_score" in item:
+        result["rankingScore"] = round(float(item["score"]), 4)
+        if item.get("genre_similarity") is not None:
+            result["genreSimilarity"] = round(float(item["genre_similarity"]), 4)
+    return result
 
 
 class RecommendService:
@@ -75,13 +73,62 @@ class RecommendService:
 
     async def similar_movies(
         self, movie_id: int, top_k: int = 10
-    ) -> list[dict[str, SimilarMoviesResponse]]:
+    ) -> list[dict[str, Any]]:
         target = await self._vs.get_by_id(movie_id)
         if not target or not target.get("vector"):
             raise ValueError(f"Khong tim thay vector cho movieId={movie_id}")
         raw_results = await self._vs.query(vector=target["vector"], top_k=top_k + 1)
         filtered = [item for item in raw_results if item.get("id") != movie_id][:top_k]
         return [_format_item(item) for item in filtered]
+
+    async def similar_movies_rerank(
+        self,
+        movie_id: int,
+        top_k: int = 10,
+        mode: str = "soft",
+        genre_weight: float = 0.3,
+        candidate_k: int = 100,
+    ) -> list[dict[str, Any]]:
+        """
+        Gợi ý danh sách phim tương tự mới dựa trên vector similarity và genre-aware reranking.
+        """
+        target = await self._vs.get_by_id(movie_id)
+        vector = target.get("vector") if target else None
+        if vector is None or len(vector) == 0:
+            raise ValueError(f"Khong tim thay vector cho movieId={movie_id}")
+
+        target_meta = target.get("payload") or {}
+        target_genres = extract_genres(target_meta.get("genres"))
+
+        # Candidate Retrieval: Lấy pool ứng viên Top-50/100 từ vector store
+        # +1 accounts for the source movie occupying an ANN result slot.
+        pool_size = max(candidate_k, top_k) + 1
+        raw_results = await self._vs.query(vector=vector, top_k=pool_size)
+
+        # Loại bỏ phim gốc và khử trùng lặp movieId
+        seen_ids: set[int] = set()
+        candidates: list[dict[str, Any]] = []
+        for item in raw_results:
+            try:
+                cid = int(item.get("id"))
+            except (TypeError, ValueError, OverflowError):
+                continue
+            if cid == movie_id or cid in seen_ids:
+                continue
+            seen_ids.add(cid)
+            # Normalize IDs, so mixed string/int IDs cannot bypass deduplication.
+            candidates.append({**item, "id": cid})
+
+        # Genre-aware Reranking theo chế độ yêu cầu
+        reranked = rerank_similar_candidates(
+            candidates=candidates,
+            target_genres=target_genres,
+            mode=mode,
+            genre_weight=genre_weight,
+            top_k=top_k,
+        )
+
+        return [_format_item(item) for item in reranked]
 
     async def upsert_movie_vector(self, movie_data: dict[str, Any]) -> None:
         movie_id = movie_data.get("movieId") or movie_data.get("movie_id")
