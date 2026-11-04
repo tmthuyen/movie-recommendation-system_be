@@ -5,7 +5,7 @@ from typing import Dict, Optional
 
 import pandas as pd
 
-from services.storage_service import storage_service
+from infra.storage.storage_service import storage_service
 
 logger = logging.getLogger(__name__)
 

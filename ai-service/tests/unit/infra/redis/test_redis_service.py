@@ -3,7 +3,7 @@
 import asyncio
 from unittest.mock import MagicMock
 
-from src.core.redis_service import RedisStore
+from infra.redis.redis_service import RedisStore
 
 
 def run(coro):
@@ -20,7 +20,7 @@ class FakeRedisClient:
 
 class TestRedisStoreStart:
     def test_disabled_does_not_create_client(self, monkeypatch):
-        import src.core.redis_service as redis_module
+        import infra.redis.redis_service as redis_module
 
         factory = MagicMock(return_value=FakeRedisClient())
         monkeypatch.setattr(redis_module.Redis, "from_url", factory)
@@ -33,7 +33,7 @@ class TestRedisStoreStart:
         factory.assert_not_called()
 
     def test_enabled_creates_client_with_decode_responses(self, monkeypatch):
-        import src.core.redis_service as redis_module
+        import infra.redis.redis_service as redis_module
 
         sentinel = FakeRedisClient()
         calls = {}

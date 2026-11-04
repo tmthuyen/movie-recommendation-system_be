@@ -7,16 +7,41 @@ import pandas as pd
 
 from utils.logger import setup_logger
 
+_MISSING_TEXT_VALUES = {"", "nan", "none", "null"}
+
 
 def extract_genre_names(raw: Any) -> str:
-    """Chuyển genres JSON-list string sang chuỗi tên thể loại cách nhau bằng khoảng trắng."""
+    """Chuyển genres (JSON-list string hoặc list) sang chuỗi tên thể loại cách nhau bằng khoảng trắng."""
+    if raw is None:
+        return ""
+
+    if isinstance(raw, (list, tuple)):
+        names: list[str] = []
+        for genre in raw:
+            if isinstance(genre, dict):
+                value = genre.get("name") or genre.get("vi_name") or ""
+            elif isinstance(genre, str):
+                value = genre
+            else:
+                continue
+            text = str(value).strip()
+            if text.lower() not in _MISSING_TEXT_VALUES:
+                names.append(text)
+        return " ".join(names)
+
     if not isinstance(raw, str) or not raw.strip():
         return ""
+
+    text = raw.strip()
+    if text.lower() in _MISSING_TEXT_VALUES:
+        return ""
     try:
-        items = ast.literal_eval(raw)
-        return " ".join(str(g.get("name", "")) for g in items if isinstance(g, dict))
+        items = ast.literal_eval(text)
     except Exception:
-        return str(raw).strip()
+        return text
+    if isinstance(items, (list, tuple)):
+        return extract_genre_names(list(items))
+    return text
 
 
 def safe_int(val: Any) -> int:
@@ -38,8 +63,9 @@ def safe_float(val: Any) -> float:
 def _as_text(value: Any) -> str:
     """Chuẩn hoá giá trị CSV/pandas thành text sạch.
 
-    Ô trống khi đọc bằng pandas là ``NaN`` (truthy) nên nếu dùng
-    ``value or fallback`` sẽ ra chuỗi ``"nan"`` và fallback không chạy.
+    - Ô trống khi đọc bằng pandas là ``NaN`` (truthy) nên ``value or fallback``
+      sẽ ra chuỗi ``"nan"`` và fallback không chạy.
+    - CSV/TMDB đôi khi lưu literal ``"nan"``/``"None"``/``"null"`` — coi như rỗng.
     """
     if value is None:
         return ""
@@ -48,17 +74,22 @@ def _as_text(value: Any) -> str:
             return ""
     except (TypeError, ValueError):
         pass
-    return str(value).strip()
+    text = str(value).strip()
+    return "" if text.lower() in _MISSING_TEXT_VALUES else text
 
 
 def build_search_text(row: Union[pd.Series, dict]) -> str:
     """
     Hàm tạo search_text chuẩn hóa duy nhất dùng chung cho toàn bộ hệ thống:
-    - title: ưu tiên title_vi, nếu thiếu fallback sang title (tiếng Anh)
+    - title: ưu tiên title_vi, nếu thiếu fallback sang title (tiếng Anh) rồi title_en
     - overview: ưu tiên overview_vi, nếu thiếu fallback sang overview
-    - genres: trích xuất tên thể loại sạch từ JSON list
+    - genres: trích xuất tên thể loại sạch từ JSON list hoặc list
     """
-    title = _as_text(row.get("title_vi")) or _as_text(row.get("title"))
+    title = (
+        _as_text(row.get("title_vi"))
+        or _as_text(row.get("title"))
+        or _as_text(row.get("title_en"))
+    )
     overview = _as_text(row.get("overview_vi")) or _as_text(row.get("overview"))
     genres = extract_genre_names(row.get("genres", ""))
     text = f"{title} {overview} {genres}"

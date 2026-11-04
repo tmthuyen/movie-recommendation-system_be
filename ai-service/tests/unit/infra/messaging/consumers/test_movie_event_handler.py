@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pydantic import ValidationError
 
-from src.services.movie_event_handler import MovieEventHandler
+from infra.messaging.consumers.movie_event_handler import MovieEventHandler
 
 CREATED_PAYLOAD = {
     "movieId": 10,
@@ -30,9 +30,7 @@ def run(coro):
 
 
 class TestMovieEventDispatch:
-    @pytest.mark.parametrize(
-        "event_type", ["movie.created", "movie.updated"]
-    )
+    @pytest.mark.parametrize("event_type", ["movie.created", "movie.updated"])
     def test_created_and_updated_upsert_vector(self, event_type):
         handler, service = make_handler()
 

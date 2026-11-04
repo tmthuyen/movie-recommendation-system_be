@@ -10,7 +10,7 @@ from core.config import Settings
 from utils.logger import setup_logger
 
 if TYPE_CHECKING:
-    from services.movie_event_handler import MovieEventHandler
+    from infra.messaging.consumers.movie_event_handler import MovieEventHandler
 
 
 # ─────────────────────────────────────────────────────────────────────────────

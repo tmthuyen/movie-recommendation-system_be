@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 from botocore.exceptions import ClientError
 
-from src.services.storage_service import StorageService
+from infra.storage.storage_service import StorageService
 
 
 def make_service(enabled: bool = True, client=None) -> StorageService:
@@ -104,9 +104,7 @@ class TestDeleteAndList:
 
     def test_list_returns_keys(self):
         client = MagicMock()
-        client.list_objects_v2.return_value = {
-            "Contents": [{"Key": "a"}, {"Key": "b"}]
-        }
+        client.list_objects_v2.return_value = {"Contents": [{"Key": "a"}, {"Key": "b"}]}
         service = make_service(client=client)
 
         assert service.list_files("prefix/") == ["a", "b"]

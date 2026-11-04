@@ -12,15 +12,15 @@ from api.middleware import setup_middleware
 from api.routes import health, recommendations
 from core.config import get_settings
 from core.integrations import TrainingScheduler, VectorStore
-from core.interaction_queue import InteractionQueue
-from core.message_queue import MessageQueue
-from core.monitoring import configure_monitoring, update_metrics
-from core.redis_service import RedisStore
-from core.telemetry import configure_tracing
+from infra.messaging.consumers.interaction_event_handler import InteractionEventHandler
+from infra.messaging.consumers.movie_event_handler import MovieEventHandler
+from infra.messaging.interaction_queue import InteractionQueue
+from infra.messaging.message_queue import MessageQueue
+from infra.monitoring.prometheus import configure_monitoring, update_metrics
+from infra.redis.redis_service import RedisStore
+from infra.tracing.telemetry import configure_tracing
 from services.embedding_service import embedding_service
-from services.interaction_event_handler import InteractionEventHandler
 from services.mapping_service import mapping_service
-from services.movie_event_handler import MovieEventHandler
 from services.recommend_service import RecommendService
 
 settings = get_settings()

@@ -15,8 +15,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-import src.services.interaction_event_handler as handler_module
-from src.services.interaction_event_handler import InteractionEventHandler
+import infra.messaging.consumers.interaction_event_handler as handler_module
+from infra.messaging.consumers.interaction_event_handler import InteractionEventHandler
 
 
 def make_handler(store, scheduler=None) -> InteractionEventHandler:
@@ -128,9 +128,7 @@ class TestHandleInteractionCreatedValidation:
 
 
 class TestSemanticProfileUpdate:
-    def test_new_user_vector_is_normalized_movie_vector(
-        self, fake_chroma, monkeypatch
-    ):
+    def test_new_user_vector_is_normalized_movie_vector(self, fake_chroma, monkeypatch):
         handler = make_handler(fake_chroma)
         fake_chroma.seed(
             10, [3.0, 4.0, 0.0], collection_name=handler.settings.vector_collection
@@ -161,7 +159,11 @@ class TestSemanticProfileUpdate:
         )
         monkeypatch.setattr(handler_module.mapping_service, "get_user_idx", lambda _: 7)
 
-        run(handler._handle_interaction_created({"userId": "u-1", "movieId": 10, "score": 2.5}))
+        run(
+            handler._handle_interaction_created(
+                {"userId": "u-1", "movieId": 10, "score": 2.5}
+            )
+        )
 
         vector = upserts_for(
             fake_chroma, handler.settings.vector_user_profile_collection
@@ -176,29 +178,31 @@ class TestSemanticProfileUpdate:
 
         run(handler._handle_interaction_created({"userId": "u-1", "movieId": 10}))
 
-        assert upserts_for(
-            fake_chroma, handler.settings.vector_user_profile_collection
-        ) == []
+        assert (
+            upserts_for(fake_chroma, handler.settings.vector_user_profile_collection)
+            == []
+        )
 
     def test_empty_movie_vector_skips_semantic_update(self, fake_chroma, monkeypatch):
         handler = make_handler(fake_chroma)
-        fake_chroma.seed(
-            10, [], collection_name=handler.settings.vector_collection
-        )
+        fake_chroma.seed(10, [], collection_name=handler.settings.vector_collection)
         monkeypatch.setattr(handler_module.mapping_service, "get_user_idx", lambda _: 7)
 
         run(handler._handle_interaction_created({"userId": "u-1", "movieId": 10}))
 
-        assert upserts_for(
-            fake_chroma, handler.settings.vector_user_profile_collection
-        ) == []
+        assert (
+            upserts_for(fake_chroma, handler.settings.vector_user_profile_collection)
+            == []
+        )
 
     def test_unmapped_user_falls_back_to_hash_index(self, fake_chroma, monkeypatch):
         handler = make_handler(fake_chroma)
         fake_chroma.seed(
             10, [1.0, 0.0], collection_name=handler.settings.vector_collection
         )
-        monkeypatch.setattr(handler_module.mapping_service, "get_user_idx", lambda _: None)
+        monkeypatch.setattr(
+            handler_module.mapping_service, "get_user_idx", lambda _: None
+        )
 
         run(handler._handle_interaction_created({"userId": "new-user", "movieId": 10}))
 
@@ -208,7 +212,9 @@ class TestSemanticProfileUpdate:
         assert rows[0]["movie_id"] >= 0
         assert rows[0]["payload"]["user_uuid"] == "new-user"
 
-    def test_zero_score_produces_zero_vector_without_nan(self, fake_chroma, monkeypatch):
+    def test_zero_score_produces_zero_vector_without_nan(
+        self, fake_chroma, monkeypatch
+    ):
         handler = make_handler(fake_chroma)
         fake_chroma.seed(
             10, [1.0, 0.0], collection_name=handler.settings.vector_collection
@@ -253,9 +259,13 @@ class TestCfProfileUpdate:
 
     def test_cf_update_skips_cold_start_user(self, fake_chroma, monkeypatch):
         handler = make_handler(fake_chroma)
-        monkeypatch.setattr(handler_module.mapping_service, "get_user_idx", lambda _: None)
+        monkeypatch.setattr(
+            handler_module.mapping_service, "get_user_idx", lambda _: None
+        )
         run(handler._update_cf_profile("u-1", 10, 5.0))
-        assert upserts_for(fake_chroma, handler.settings.vector_user_cf_collection) == []
+        assert (
+            upserts_for(fake_chroma, handler.settings.vector_user_cf_collection) == []
+        )
 
     def test_cf_update_skips_missing_movie(self, fake_chroma, monkeypatch):
         handler = make_handler(fake_chroma)
@@ -266,7 +276,9 @@ class TestCfProfileUpdate:
         )
         monkeypatch.setattr(handler_module.mapping_service, "get_user_idx", lambda _: 7)
         run(handler._update_cf_profile("u-1", 10, 5.0))
-        assert upserts_for(fake_chroma, handler.settings.vector_user_cf_collection) == []
+        assert (
+            upserts_for(fake_chroma, handler.settings.vector_user_cf_collection) == []
+        )
 
     def test_cf_update_skips_missing_user_vector(self, fake_chroma, monkeypatch):
         handler = make_handler(fake_chroma)
@@ -277,7 +289,9 @@ class TestCfProfileUpdate:
         )
         monkeypatch.setattr(handler_module.mapping_service, "get_user_idx", lambda _: 7)
         run(handler._update_cf_profile("u-1", 10, 5.0))
-        assert upserts_for(fake_chroma, handler.settings.vector_user_cf_collection) == []
+        assert (
+            upserts_for(fake_chroma, handler.settings.vector_user_cf_collection) == []
+        )
 
 
 class TestRemovedFlagAndDispatch:

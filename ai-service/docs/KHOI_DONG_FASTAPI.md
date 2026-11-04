@@ -29,3 +29,9 @@ python scripts/train_baseline.py
 ```
 uvicorn src.api.server:app --host localhost --port 8082 --reload
 ```
+
+- Hoặc
+
+```
+python -m uvicorn src.api.server:app --host localhost --port 8082 --reload
+```

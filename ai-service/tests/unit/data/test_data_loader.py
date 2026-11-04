@@ -63,9 +63,9 @@ class TestExtractGenreNames:
     def test_returns_empty_for_empty_json_list(self):
         assert extract_genre_names("[]") == ""
 
-    def test_skips_non_dict_items(self):
-        # ``ast.literal_eval`` nên literal phải là ``None`` (không phải JSON ``null``).
-        assert extract_genre_names('[{"name": "A"}, 3, "B", None]') == "A"
+    def test_skips_non_name_items_but_keeps_string_names(self):
+        # Dict lấy ``name``; string giữ nguyên; số/None bị bỏ.
+        assert extract_genre_names('[{"name": "A"}, 3, "B", None]') == "A B"
 
     def test_json_null_falls_back_to_raw_string(self):
         # ``null`` không phải literal Python → fallback trả nguyên chuỗi.

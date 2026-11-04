@@ -19,7 +19,7 @@ from unittest.mock import MagicMock, call
 import pytest
 from prometheus_client import REGISTRY, Gauge
 
-import src.core.monitoring as monitoring
+import infra.monitoring.prometheus as prometheus
 
 GAUGE_ATTRS = (
     "cpu_usage",
@@ -37,7 +37,7 @@ def fake_gauges(monkeypatch):
     gauges = {}
     for attr in GAUGE_ATTRS:
         gauge = MagicMock(name=attr)
-        monkeypatch.setattr(monitoring, attr, gauge)
+        monkeypatch.setattr(prometheus, attr, gauge)
         gauges[attr] = gauge
     return gauges
 
@@ -90,7 +90,7 @@ class TestCreateGauge:
     def test_creates_new_gauge(self):
         name = f"pytest_gauge_{uuid.uuid4().hex}"
 
-        gauge = monitoring._create_gauge(name, "gauge cho test")
+        gauge = prometheus._create_gauge(name, "gauge cho test")
 
         assert isinstance(gauge, Gauge)
         assert gauge._name == name
@@ -98,8 +98,8 @@ class TestCreateGauge:
     def test_duplicate_name_returns_existing_collector(self):
         name = f"pytest_gauge_{uuid.uuid4().hex}"
 
-        first = monitoring._create_gauge(name, "doc 1")
-        second = monitoring._create_gauge(name, "doc 2")
+        first = prometheus._create_gauge(name, "doc 1")
+        second = prometheus._create_gauge(name, "doc 2")
 
         assert second is first
 
@@ -109,15 +109,15 @@ class TestCreateGauge:
         def boom(*args, **kwargs):
             raise ValueError("Duplicated timeseries in CollectorRegistry")
 
-        monkeypatch.setattr(monitoring, "Gauge", boom)
+        monkeypatch.setattr(prometheus, "Gauge", boom)
 
         with pytest.raises(ValueError, match="Duplicated"):
-            monitoring._create_gauge("pytest_gauge_not_registered", "doc")
+            prometheus._create_gauge("pytest_gauge_not_registered", "doc")
 
     def test_gauge_is_registered_in_global_registry(self):
         name = f"pytest_gauge_{uuid.uuid4().hex}"
 
-        gauge = monitoring._create_gauge(name, "doc")
+        gauge = prometheus._create_gauge(name, "doc")
 
         assert REGISTRY._names_to_collectors.get(name) is gauge
 
@@ -127,26 +127,16 @@ class TestModuleLevelGauges:
 
     @pytest.mark.parametrize("attr", GAUGE_ATTRS)
     def test_gauge_exists_and_is_registered(self, attr):
-        gauge = getattr(monitoring, attr)
+        gauge = getattr(prometheus, attr)
 
         assert isinstance(gauge, Gauge)
         assert REGISTRY._names_to_collectors.get(gauge._name) is gauge
 
-    def test_import_under_second_package_name_reuses_collectors(self):
-        """``core.monitoring`` (entrypoint cũ) và ``src.core.monitoring`` trùng gauge."""
-        before = {attr: getattr(monitoring, attr) for attr in GAUGE_ATTRS}
-
-        alias = importlib.import_module("core.monitoring")
-
-        assert alias is not monitoring
-        for attr in GAUGE_ATTRS:
-            assert getattr(alias, attr) is before[attr]
-
     def test_reload_does_not_crash_on_duplicate_metrics(self):
         """Reload module = import lần 2 → ``_create_gauge`` trả collector cũ."""
-        before = {attr: getattr(monitoring, attr) for attr in GAUGE_ATTRS}
+        before = {attr: getattr(prometheus, attr) for attr in GAUGE_ATTRS}
 
-        reloaded = importlib.reload(monitoring)
+        reloaded = importlib.reload(prometheus)
 
         for attr in GAUGE_ATTRS:
             assert getattr(reloaded, attr) is before[attr]
@@ -157,10 +147,10 @@ class TestConfigureMonitoring:
 
     def test_instruments_app_and_exposes_metrics_endpoint(self, monkeypatch):
         instrumentator_cls = MagicMock()
-        monkeypatch.setattr(monitoring, "Instrumentator", instrumentator_cls)
+        monkeypatch.setattr(prometheus, "Instrumentator", instrumentator_cls)
         app = MagicMock()
 
-        monitoring.configure_monitoring(app)
+        prometheus.configure_monitoring(app)
 
         instance = instrumentator_cls.return_value
         instrumentator_cls.assert_called_once_with(
@@ -174,11 +164,11 @@ class TestConfigureMonitoring:
         instance.expose.assert_called_once_with(app, endpoint="/api/metrics")
 
     def test_logs_metrics_endpoint(self, monkeypatch):
-        monkeypatch.setattr(monitoring, "Instrumentator", MagicMock())
+        monkeypatch.setattr(prometheus, "Instrumentator", MagicMock())
         fake_logger = MagicMock()
-        monkeypatch.setattr(monitoring, "logger", fake_logger)
+        monkeypatch.setattr(prometheus, "logger", fake_logger)
 
-        monitoring.configure_monitoring(MagicMock())
+        prometheus.configure_monitoring(MagicMock())
 
         assert "/api/metrics" in fake_logger.info.call_args.args[0]
 
@@ -187,10 +177,10 @@ class TestConfigureMonitoring:
         instrumentator_cls.return_value.instrument.side_effect = RuntimeError(
             "instrument lỗi"
         )
-        monkeypatch.setattr(monitoring, "Instrumentator", instrumentator_cls)
+        monkeypatch.setattr(prometheus, "Instrumentator", instrumentator_cls)
 
         with pytest.raises(RuntimeError, match="instrument lỗi"):
-            monitoring.configure_monitoring(MagicMock())
+            prometheus.configure_monitoring(MagicMock())
 
         instrumentator_cls.return_value.expose.assert_not_called()
 
@@ -200,11 +190,11 @@ class TestUpdateMetrics:
 
     def test_one_iteration_sets_every_gauge(self, monkeypatch, fake_gauges):
         fake_psutil = _fake_psutil()
-        monkeypatch.setattr(monitoring, "psutil", fake_psutil)
-        monkeypatch.setattr(monitoring, "process", FakeProcess())
+        monkeypatch.setattr(prometheus, "psutil", fake_psutil)
+        monkeypatch.setattr(prometheus, "process", FakeProcess())
         event = FakeStopEvent(stop_after=1)
 
-        monitoring.update_metrics(event)
+        prometheus.update_metrics(event)
 
         fake_gauges["cpu_usage"].set.assert_called_once_with(12.5)
         fake_gauges["memory_usage"].set.assert_called_once_with(42.5)
@@ -215,40 +205,40 @@ class TestUpdateMetrics:
 
     def test_primes_cpu_percent_without_blocking(self, monkeypatch, fake_gauges):
         fake_psutil = _fake_psutil()
-        monkeypatch.setattr(monitoring, "psutil", fake_psutil)
-        monkeypatch.setattr(monitoring, "process", FakeProcess())
+        monkeypatch.setattr(prometheus, "psutil", fake_psutil)
+        monkeypatch.setattr(prometheus, "process", FakeProcess())
 
-        monitoring.update_metrics(FakeStopEvent(stop_after=1))
+        prometheus.update_metrics(FakeStopEvent(stop_after=1))
 
         assert call(interval=None) in fake_psutil.cpu_percent.call_args_list
         assert call(interval=0.1) in fake_psutil.cpu_percent.call_args_list
 
     def test_waits_five_seconds_between_iterations(self, monkeypatch, fake_gauges):
-        monkeypatch.setattr(monitoring, "psutil", _fake_psutil())
-        monkeypatch.setattr(monitoring, "process", FakeProcess())
+        monkeypatch.setattr(prometheus, "psutil", _fake_psutil())
+        monkeypatch.setattr(prometheus, "process", FakeProcess())
         event = FakeStopEvent(stop_after=1)
 
-        monitoring.update_metrics(event)
+        prometheus.update_metrics(event)
 
         assert event.wait_calls == [5]
 
     def test_multiple_iterations_before_stop(self, monkeypatch, fake_gauges):
-        monkeypatch.setattr(monitoring, "psutil", _fake_psutil())
-        monkeypatch.setattr(monitoring, "process", FakeProcess())
+        monkeypatch.setattr(prometheus, "psutil", _fake_psutil())
+        monkeypatch.setattr(prometheus, "process", FakeProcess())
         event = FakeStopEvent(stop_after=2)
 
-        monitoring.update_metrics(event)
+        prometheus.update_metrics(event)
 
         assert fake_gauges["cpu_usage"].set.call_count == 2
         assert event.wait_calls == [5, 5]
 
     def test_already_set_event_skips_gauge_updates(self, monkeypatch, fake_gauges):
         fake_psutil = _fake_psutil()
-        monkeypatch.setattr(monitoring, "psutil", fake_psutil)
-        monkeypatch.setattr(monitoring, "process", FakeProcess())
+        monkeypatch.setattr(prometheus, "psutil", fake_psutil)
+        monkeypatch.setattr(prometheus, "process", FakeProcess())
         event = FakeStopEvent(stop_after=0)
 
-        monitoring.update_metrics(event)
+        prometheus.update_metrics(event)
 
         for gauge in fake_gauges.values():
             gauge.set.assert_not_called()
@@ -258,10 +248,10 @@ class TestUpdateMetrics:
 
     def test_disk_usage_uses_root_path(self, monkeypatch, fake_gauges):
         fake_psutil = _fake_psutil()
-        monkeypatch.setattr(monitoring, "psutil", fake_psutil)
-        monkeypatch.setattr(monitoring, "process", FakeProcess())
+        monkeypatch.setattr(prometheus, "psutil", fake_psutil)
+        monkeypatch.setattr(prometheus, "process", FakeProcess())
 
-        monitoring.update_metrics(FakeStopEvent(stop_after=1))
+        prometheus.update_metrics(FakeStopEvent(stop_after=1))
 
         fake_psutil.disk_usage.assert_called_once_with("/")
 
@@ -270,10 +260,10 @@ class TestCheckInfra:
     """``check_infra`` trả dict số liệu RAM/CPU và in báo cáo ra stdout."""
 
     def test_returns_expected_keys_and_rounded_values(self, monkeypatch):
-        monkeypatch.setattr(monitoring, "psutil", _fake_psutil())
-        monkeypatch.setattr(monitoring, "os", SimpleNamespace(getpid=lambda: 4242))
+        monkeypatch.setattr(prometheus, "psutil", _fake_psutil())
+        monkeypatch.setattr(prometheus, "os", SimpleNamespace(getpid=lambda: 4242))
 
-        result = monitoring.check_infra()
+        result = prometheus.check_infra()
 
         assert result == {
             "pid": 4242,
@@ -285,18 +275,18 @@ class TestCheckInfra:
 
     def test_creates_psutil_process(self, monkeypatch):
         fake_psutil = _fake_psutil()
-        monkeypatch.setattr(monitoring, "psutil", fake_psutil)
-        monkeypatch.setattr(monitoring, "os", SimpleNamespace(getpid=lambda: 1))
+        monkeypatch.setattr(prometheus, "psutil", fake_psutil)
+        monkeypatch.setattr(prometheus, "os", SimpleNamespace(getpid=lambda: 1))
 
-        monitoring.check_infra()
+        prometheus.check_infra()
 
         fake_psutil.Process.assert_called_once_with()
 
     def test_prints_report(self, monkeypatch, capsys):
-        monkeypatch.setattr(monitoring, "psutil", _fake_psutil())
-        monkeypatch.setattr(monitoring, "os", SimpleNamespace(getpid=lambda: 4242))
+        monkeypatch.setattr(prometheus, "psutil", _fake_psutil())
+        monkeypatch.setattr(prometheus, "os", SimpleNamespace(getpid=lambda: 4242))
 
-        monitoring.check_infra()
+        prometheus.check_infra()
 
         out = capsys.readouterr().out
         assert "PID: 4242" in out

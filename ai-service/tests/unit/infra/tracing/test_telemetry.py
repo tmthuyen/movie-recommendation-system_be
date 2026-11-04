@@ -18,7 +18,7 @@ from unittest.mock import MagicMock
 import pytest
 from opentelemetry.sdk.trace import TracerProvider as RealTracerProvider
 
-import src.core.telemetry as telemetry
+import infra.tracing.telemetry as telemetry
 
 
 def _settings(enabled=True, url="http://localhost:4318", service_name="ai-service"):
@@ -91,7 +91,9 @@ class TestConfigureTracingDisabled:
         otel.logger.info.assert_not_called()
 
     def test_returns_none(self, otel):
-        assert telemetry.configure_tracing(MagicMock(), _settings(enabled=False)) is None
+        assert (
+            telemetry.configure_tracing(MagicMock(), _settings(enabled=False)) is None
+        )
 
 
 class TestConfigureTracingEnabled:

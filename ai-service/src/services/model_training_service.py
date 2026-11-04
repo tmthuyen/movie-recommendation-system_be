@@ -15,7 +15,7 @@ import scipy.sparse as sparse
 from implicit.als import AlternatingLeastSquares
 
 from core.config import get_settings
-from services.storage_service import storage_service
+from infra.storage.storage_service import storage_service
 
 if TYPE_CHECKING:
     from core.integrations import VectorStore

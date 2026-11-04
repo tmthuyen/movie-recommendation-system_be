@@ -3,9 +3,8 @@ from typing import Any
 from redis.asyncio import Redis
 
 from api.schemas import MovieEvent, UserInteractionEvent
+from core.config import Settings
 from utils import setup_logger
-
-from .config import Settings
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Redis Store (cache)

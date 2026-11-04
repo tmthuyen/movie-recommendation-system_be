@@ -4,8 +4,8 @@ import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock
 
-import src.core.message_queue as queue_module
-from src.core.message_queue import MessageQueue
+import infra.messaging.message_queue as queue_module
+from infra.messaging.message_queue import MessageQueue
 
 
 def run(coro):

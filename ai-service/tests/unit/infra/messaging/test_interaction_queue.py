@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-import src.core.interaction_queue as queue_module
-from src.core.interaction_queue import InteractionQueue
+import infra.messaging.interaction_queue as queue_module
+from infra.messaging.interaction_queue import InteractionQueue
 
 
 def run(coro):
@@ -60,9 +60,7 @@ class TestHandleMessageAck:
         handler = MagicMock()
         handler.handle = AsyncMock()
         queue.set_handler(handler)
-        message = FakeMessage(
-            json.dumps({"eventType": "interaction.event"}).encode()
-        )
+        message = FakeMessage(json.dumps({"eventType": "interaction.event"}).encode())
 
         run(queue._handle_message(message))
 

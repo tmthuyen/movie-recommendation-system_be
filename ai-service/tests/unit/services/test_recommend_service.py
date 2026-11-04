@@ -81,6 +81,9 @@ def patch_query_vector(service: RecommendService, vector: list[float]) -> None:
 
 
 class TestBuildSearchText:
+    """`recommend_service` dùng lại `data_loader.build_search_text`
+    (format: "title overview genres", join bằng khoảng trắng)."""
+
     def test_prefers_vietnamese_title_and_joins_list_genres(self):
         text = _build_search_text(
             {
@@ -91,7 +94,7 @@ class TestBuildSearchText:
             }
         )
 
-        assert text == "Dune: Hành tinh cát. Sci-Fi Phiêu lưu. Một hành tinh sa mạc."
+        assert text == ("Dune: Hành tinh cát Một hành tinh sa mạc. Sci-Fi Phiêu lưu")
 
     @pytest.mark.parametrize("missing_title", ["", None, "nan", "None", "   "])
     def test_falls_back_to_english_title(self, missing_title):
@@ -109,7 +112,7 @@ class TestBuildSearchText:
             {"title": "Heat", "genres": "Crime Drama", "overview": "nan"}
         )
 
-        assert text == "Heat. Crime Drama"
+        assert text == "Heat Crime Drama"
 
     def test_empty_payload_returns_empty_string(self):
         assert _build_search_text({}) == ""
@@ -131,11 +134,14 @@ class TestFormatItem:
 
         assert _format_item(item) == {
             "id": 7,
+            "movieId": 7,
             "similarityScore": 0.1235,
             "title": "Dune Vi",
             "titleVi": "Dune Vi",
             "overview": "A desert planet",
             "overviewVi": "Hành tinh sa mạc",
+            "genres": None,
+            "genreNames": [],
         }
 
     def test_nan_vietnamese_title_falls_back_to_english_title(self):
@@ -244,112 +250,70 @@ class TestSimilarMovies:
             run(service.similar_movies(1))
 
 
-class TestUpsertMovieVector:
-    def test_encodes_document_and_stores_payload(
-        self, service, fake_chroma, fake_model
-    ):
-        movie = {
-            "movieId": 10,
-            "title_vi": "Dune Vi",
-            "title": "Dune",
-            "genres": ["Sci-Fi", "Phiêu lưu"],
-            "overview": "Hành tinh sa mạc",
-        }
+class TestSimilarMoviesRerank:
+    """`similar_movies_rerank` — ANN candidates + genre-aware rerank."""
 
-        run(service.upsert_movie_vector(movie))
+    def test_missing_target_vector_raises(self, service, fake_chroma):
+        with pytest.raises(ValueError, match="movieId=99"):
+            run(service.similar_movies_rerank(99))
 
-        assert len(fake_chroma.upserts) == 1
-        stored = fake_chroma.upserts[0]
-        assert stored["movie_id"] == 10
-        assert "movieId" not in stored["payload"]
-        assert stored["payload"]["search_text"] == (
-            "Dune Vi. Sci-Fi Phiêu lưu. Hành tinh sa mạc"
-        )
-        assert len(stored["vector"]) == fake_model.dim
-        assert sum(value * value for value in stored["vector"]) == pytest.approx(1.0)
-        # search_text được encode đúng một lần, như document (không phải query).
-        assert fake_model.encoded == [stored["payload"]["search_text"]]
+    def test_mode_off_returns_cosine_order_without_target(self, service, fake_chroma):
+        fake_chroma.seed(1, [1.0, 0.0], {"genres": ["Action"]})
+        fake_chroma.seed(2, [0.9, 0.1], {"genres": ["Drama"]})
+        fake_chroma.seed(3, [0.5, 0.5], {"genres": ["Action"]})
 
-    def test_accepts_snake_case_movie_id_and_string_value(
-        self, service, fake_chroma
-    ):
-        run(service.upsert_movie_vector({"movie_id": "12", "title": "Heat"}))
+        results = run(service.similar_movies_rerank(1, top_k=2, mode="off"))
 
-        assert fake_chroma.upserts[0]["movie_id"] == 12
+        assert [item["id"] for item in results] == [2, 3]
 
-    def test_missing_movie_id_raises_value_error(self, service, fake_chroma):
-        with pytest.raises(ValueError, match="movieId"):
-            run(service.upsert_movie_vector({"title": "No id"}))
+    def test_strict_keeps_only_shared_genres(self, service, fake_chroma):
+        fake_chroma.seed(1, [1.0, 0.0], {"genres": ["Action"]})
+        fake_chroma.seed(2, [0.9, 0.1], {"genres": ["Drama"]})
+        fake_chroma.seed(3, [0.5, 0.5], {"genres": ["Action"]})
 
-        assert fake_chroma.upserts == []
+        results = run(service.similar_movies_rerank(1, mode="strict"))
 
-    def test_skips_when_no_searchable_metadata(
-        self, service, fake_chroma, fake_model, caplog
-    ):
-        with caplog.at_level(logging.WARNING):
-            run(service.upsert_movie_vector({"movieId": 3, "title_vi": "None"}))
+        assert [item["id"] for item in results] == [3]
 
-        assert fake_chroma.upserts == []
-        assert fake_model.encoded == []
-        assert "khong du metadata" in caplog.text
+    def test_soft_mode_exposes_raw_cosine_and_ranking_score(self, service, fake_chroma):
+        fake_chroma.seed(1, [1.0, 0.0], {"genres": ["Action"]})
+        fake_chroma.seed(2, [0.9, 0.1], {"genres": ["Drama"]})
+        fake_chroma.seed(3, [0.5, 0.5], {"genres": ["Action"]})
 
-    def test_falls_back_to_english_title(self, service, fake_chroma):
-        run(
-            service.upsert_movie_vector(
-                {"movieId": 4, "title_vi": "nan", "title": "Heat"}
-            )
+        results = run(
+            service.similar_movies_rerank(1, mode="soft", genre_weight=0.5, top_k=3)
         )
 
-        assert fake_chroma.upserts[0]["payload"]["search_text"] == "Heat"
+        by_id = {item["id"]: item for item in results}
+        # similarityScore = cosine gốc; rankingScore = điểm sau rerank.
+        assert by_id[3]["similarityScore"] == pytest.approx(0.7071, abs=1e-3)
+        assert by_id[3]["rankingScore"] > by_id[3]["similarityScore"]
+        assert by_id[3]["genreSimilarity"] == pytest.approx(1.0)
+        assert by_id[2]["rankingScore"] <= by_id[2]["similarityScore"] + 1e-9
+        assert by_id[2]["genreSimilarity"] == pytest.approx(0.0)
 
-    def test_primitive_payload_values_keep_type(self, service, fake_chroma):
-        run(
-            service.upsert_movie_vector(
-                {
-                    "movieId": 5,
-                    "title": "Heat",
-                    "popularity": 7.5,
-                    "adult": False,
-                }
-            )
+    def test_duplicate_and_invalid_ids_are_skipped(self, service, fake_chroma):
+        fake_chroma.seed(1, [1.0, 0.0], {"genres": ["Action"]})
+        fake_chroma.seed(2, [0.9, 0.1], {"genres": ["Action"]})
+        fake_chroma.query = AsyncMock(
+            return_value=[
+                {"id": 2, "score": 0.9, "payload": {"genres": ["Action"]}},
+                {"id": 2, "score": 0.9, "payload": {"genres": ["Action"]}},
+                {"id": "bad", "score": 0.8, "payload": {}},
+                {"id": 3, "score": 0.5, "payload": {"genres": ["Action"]}},
+            ]
         )
 
-        payload = fake_chroma.upserts[0]["payload"]
-        assert payload["popularity"] == 7.5
-        assert payload["adult"] is False
+        results = run(service.similar_movies_rerank(1, mode="off"))
 
+        assert [item["id"] for item in results] == [2, 3]
 
-class TestDeleteMovieVector:
-    def test_returns_false_when_backend_does_not_support_delete(self, service):
-        assert run(service.delete_movie_vector(1)) is False
+    def test_invalid_mode_propagates_value_error(self, service, fake_chroma):
+        fake_chroma.seed(1, [1.0, 0.0], {"genres": ["Action"]})
+        fake_chroma.seed(2, [0.9, 0.1], {"genres": ["Action"]})
 
-    def test_deletes_from_chroma_collection(self, service, fake_chroma, settings):
-        collection = FakeCollection()
-        fake_chroma.backend = FakeChromaBackend(settings, collection)
-
-        assert run(service.delete_movie_vector(7)) is True
-        assert collection.deleted_ids == [["7"]]
-
-    def test_returns_false_when_collection_not_initialised(
-        self, service, fake_chroma, settings
-    ):
-        fake_chroma.backend = FakeChromaBackend(settings, None)
-
-        assert run(service.delete_movie_vector(7)) is False
-
-    def test_returns_false_for_backend_without_collections_registry(
-        self, service, fake_chroma, settings
-    ):
-        fake_chroma.backend = SimpleNamespace(settings=settings)
-
-        assert run(service.delete_movie_vector(7)) is False
-
-    def test_string_movie_id_is_converted_to_int(self, service, fake_chroma, settings):
-        collection = FakeCollection()
-        fake_chroma.backend = FakeChromaBackend(settings, collection)
-
-        assert run(service.delete_movie_vector("12")) is True
-        assert collection.deleted_ids == [["12"]]
+        with pytest.raises(ValueError, match="mode"):
+            run(service.similar_movies_rerank(1, mode="unknown"))
 
 
 class TestHybridRecommendation:

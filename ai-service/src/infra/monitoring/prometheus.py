@@ -3,7 +3,7 @@ import threading
 
 import psutil
 from fastapi import FastAPI
-from prometheus_client import Gauge
+from prometheus_client import REGISTRY, Gauge
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from utils.logger import setup_logger
@@ -41,7 +41,6 @@ def _create_gauge(name: str, doc: str) -> Gauge:
     try:
         return Gauge(name, doc)
     except ValueError:
-        from prometheus_client import REGISTRY
 
         existing = REGISTRY._names_to_collectors.get(name)
         if existing is None:
@@ -51,7 +50,9 @@ def _create_gauge(name: str, doc: str) -> Gauge:
 
 cpu_usage = _create_gauge("system_cpu_usage_percent", "System CPU usage (%)")
 memory_usage = _create_gauge("system_memory_usage_percent", "System RAM usage (%)")
-memory_total = _create_gauge("system_memory_total_bytes", "System total physical memory")
+memory_total = _create_gauge(
+    "system_memory_total_bytes", "System total physical memory"
+)
 memory_available = _create_gauge(
     "system_memory_available_bytes", "System available memory"
 )

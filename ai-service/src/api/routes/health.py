@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Request
 
 from api.dependencies.auth import get_current_user
 from api.schemas import CurrentUser
-from core.monitoring import check_infra
+from infra.monitoring.prometheus import check_infra
 from utils import setup_logger
 
 from ..response import success

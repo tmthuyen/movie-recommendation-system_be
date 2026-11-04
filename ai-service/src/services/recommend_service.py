@@ -6,7 +6,6 @@ Business-logic layer for all AI recommendation operations.
 from __future__ import annotations
 
 import asyncio
-import logging
 from typing import Any
 
 from api.schemas import SimilarMoviesResponse
@@ -24,6 +23,14 @@ from data.data_loader import build_search_text as _build_search_text
 
 
 def _format_item(item: dict[str, Any]) -> dict[str, Any]:
+    """Format kết gợi phim
+
+    Args:
+        item (dict[str, Any]): dữ liệu phim và metadata
+
+    Returns:
+        dict[str, Any]: _description_
+    """
     meta = item.get("payload") or {}
     title_vi = meta.get("title_vi")
     title_en = meta.get("title")
@@ -35,18 +42,15 @@ def _format_item(item: dict[str, Any]) -> dict[str, Any]:
     result = {
         "id": item.get("id"),
         "movieId": item.get("id"),
-        "similarityScore": round(float(item.get("raw_cosine_score", item.get("score", 0.0))), 4),
+        "similarityScore": round(
+            float(item.get("raw_cosine_score", item.get("score", 0.0))), 4
+        ),
         "title": display_title,
         "titleVi": title_vi if str(title_vi) not in ("nan", "None") else None,
-        "titleEn": title_en if str(title_en) not in ("nan", "None") else None,
         "overview": meta.get("overview"),
         "overviewVi": meta.get("overview_vi"),
         "genres": meta.get("genres"),
         "genreNames": sorted(extract_genres(meta.get("genres"))),
-        "releaseDate": str(meta.get("release_date", ""))[:10],
-        "voteAverage": meta.get("vote_average"),
-        "tmdbId": meta.get("tmdb_id"),
-        "popularity": meta.get("popularity"),
     }
     if "raw_cosine_score" in item:
         result["rankingScore"] = round(float(item["score"]), 4)
@@ -59,6 +63,12 @@ class RecommendService:
     def __init__(
         self, vector_store: VectorStore, embedding_service: EmbeddingService
     ) -> None:
+        """Gợi ý phim tương tự (Content Search), nội dung liên quan cho user dựa trên tương tác (CF)
+
+        Args:
+            vector_store (VectorStore): Nơi lưu trữ vector
+            embedding_service (EmbeddingService): Embedding text -> vector
+        """
         self._vs = vector_store
         self._emb = embedding_service
         self.cf_weight = 0.6
@@ -67,6 +77,7 @@ class RecommendService:
     async def semantic_search(
         self, query: str, top_k: int = 10
     ) -> list[dict[str, Any]]:
+        """Semantic Search: Tìm phim dựa trên truy vấn tìm kiếm"""
         vector = await self._emb.encode_async(query, is_query=True)
         raw_results = await self._vs.query(vector, top_k=top_k)
         return [_format_item(item) for item in raw_results]
@@ -74,6 +85,7 @@ class RecommendService:
     async def similar_movies(
         self, movie_id: int, top_k: int = 10
     ) -> list[dict[str, Any]]:
+        """Semantic Search: Gợi ý phim tương tự dựa trên movieId và vector similarity"""
         target = await self._vs.get_by_id(movie_id)
         if not target or not target.get("vector"):
             raise ValueError(f"Khong tim thay vector cho movieId={movie_id}")
@@ -129,53 +141,6 @@ class RecommendService:
         )
 
         return [_format_item(item) for item in reranked]
-
-    async def upsert_movie_vector(self, movie_data: dict[str, Any]) -> None:
-        movie_id = movie_data.get("movieId") or movie_data.get("movie_id")
-        if movie_id is None:
-            raise ValueError("movie_data phai chua truong 'movieId'")
-        movie_id = int(movie_id)
-        search_text = _build_search_text(movie_data)
-        if not search_text.strip():
-            logger.warning(
-                "upsert_movie_vector: movieId=%s khong du metadata, bo qua.", movie_id
-            )
-            return
-        vector: list[float] = await self._emb.encode_async(search_text, is_query=False)
-        payload: dict[str, Any] = {
-            k: (v if isinstance(v, (str, int, float, bool)) else str(v))
-            for k, v in movie_data.items()
-            if k not in ("movieId", "movie_id")
-        }
-        payload["search_text"] = search_text
-        await self._vs.upsert(movie_id, vector, payload)
-        logger.info(
-            "upsert_movie_vector: movieId=%s text_len=%d", movie_id, len(search_text)
-        )
-
-    async def delete_movie_vector(self, movie_id: int) -> bool:
-        movie_id = int(movie_id)
-        backend = getattr(self._vs, "backend", None)
-        if backend is not None and hasattr(backend, "_collections"):
-            collection = backend._get_collection(backend.settings.vector_collection)
-            if collection is None:
-                logger.warning(
-                    "delete_movie_vector: ChromaDB collection chua khoi tao."
-                )
-                return False
-
-            def _sync_delete() -> None:
-                collection.delete(ids=[str(movie_id)])
-
-            await asyncio.to_thread(_sync_delete)
-            logger.info(
-                "delete_movie_vector: movieId=%s da xoa khoi ChromaDB.", movie_id
-            )
-            return True
-        logger.warning(
-            "delete_movie_vector: backend %s khong ho tro xoa.", type(backend).__name__
-        )
-        return False
 
     async def hybrid_recommendation(
         self, user_uuid: str, top_k: int = 10

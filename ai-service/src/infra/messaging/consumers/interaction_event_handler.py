@@ -9,8 +9,8 @@ import pandas as pd
 
 from core.config import get_settings
 from core.integrations import TrainingScheduler, VectorStore
+from infra.storage.storage_service import storage_service
 from services.mapping_service import mapping_service
-from services.storage_service import storage_service
 
 logger = logging.getLogger(__name__)
 

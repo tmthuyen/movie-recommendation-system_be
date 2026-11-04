@@ -7,9 +7,8 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
+from core.config import Settings
 from utils import setup_logger
-
-from .config import Settings
 
 logger = setup_logger(name="FastAPI-Recommendations", filename=__name__)
 
