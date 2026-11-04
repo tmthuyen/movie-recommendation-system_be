@@ -98,7 +98,9 @@ async def get_similar_movies(
 async def get_similar_movies_rerank(
     movie_id: int,
     app_request: Request,
-    topK: int | None = Query(default=None, ge=1, le=50, description="So luong phim can tim (camelCase)"),
+    topK: int | None = Query(
+        default=None, ge=1, le=50, description="So luong phim can tim (camelCase)"
+    ),
     top_k: int = Query(default=10, ge=1, le=50, description="Alias cho topK"),
     mode: str = Query(
         default="soft",

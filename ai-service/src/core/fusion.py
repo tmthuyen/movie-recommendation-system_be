@@ -40,7 +40,9 @@ def reciprocal_rank_fusion(
             3. item_id (ID nhỏ hơn đứng trước để đảm bảo tính tất định tuyệt đối)
     """
     if k <= 0:
-        raise ValueError(f"Hệ số làm mượt k phải là số nguyên dương (k > 0), nhận k = {k}")
+        raise ValueError(
+            f"Hệ số làm mượt k phải là số nguyên dương (k > 0), nhận k = {k}"
+        )
 
     if not ranked_lists:
         return []
@@ -98,7 +100,9 @@ def reciprocal_rank_fusion_with_details(
     Dùng cho việc kiểm toán thực nghiệm, truy vết ứng viên và phân tích định tính.
     """
     if k <= 0:
-        raise ValueError(f"Hệ số làm mượt k phải là số nguyên dương (k > 0), nhận k = {k}")
+        raise ValueError(
+            f"Hệ số làm mượt k phải là số nguyên dương (k > 0), nhận k = {k}"
+        )
 
     if not ranked_lists:
         return []
@@ -143,16 +147,17 @@ def reciprocal_rank_fusion_with_details(
 
     results: List[Dict[str, Any]] = []
     for rank, did in enumerate(sorted_docs, start=1):
-        results.append({
-            "fused_rank": rank,
-            "movie_id": did,
-            "rrf_score": round(scores[did], 6),
-            "model_ranks": doc_ranks[did],
-            "raw_scores": doc_raw_scores[did],
-            "contributing_models": list(doc_ranks[did].keys()),
-            "agreement_count": len(doc_ranks[did]),
-            "best_individual_rank": best_rank[did],
-        })
+        results.append(
+            {
+                "fused_rank": rank,
+                "movie_id": did,
+                "rrf_score": round(scores[did], 6),
+                "model_ranks": doc_ranks[did],
+                "raw_scores": doc_raw_scores[did],
+                "contributing_models": list(doc_ranks[did].keys()),
+                "agreement_count": len(doc_ranks[did]),
+                "best_individual_rank": best_rank[did],
+            }
+        )
 
     return results
-

@@ -2,6 +2,7 @@
 
 No vector database mutation. All modes rerank the same ANN candidates.
 """
+
 from __future__ import annotations
 
 import ast
@@ -14,32 +15,60 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 KNOWN_GENRES_VI: tuple[str, ...] = (
-    "phim khoa học viễn tưởng", "chương trình truyền hình", "phim chiến tranh",
-    "phim phiêu lưu", "phim gia đình", "phim giả tượng", "phim hoạt hình",
-    "phim chính kịch", "phim hành động", "phim lãng mạn", "phim lịch sử",
-    "phim miền tây", "phim kinh dị", "phim hình sự", "phim tài liệu",
-    "phim gây cấn", "phim bí ẩn", "phim nhạc", "phim hài",
+    "phim khoa học viễn tưởng",
+    "chương trình truyền hình",
+    "phim chiến tranh",
+    "phim phiêu lưu",
+    "phim gia đình",
+    "phim giả tượng",
+    "phim hoạt hình",
+    "phim chính kịch",
+    "phim hành động",
+    "phim lãng mạn",
+    "phim lịch sử",
+    "phim miền tây",
+    "phim kinh dị",
+    "phim hình sự",
+    "phim tài liệu",
+    "phim gây cấn",
+    "phim bí ẩn",
+    "phim nhạc",
+    "phim hài",
 )
 
 GENRE_EN_TO_VI: dict[str, str] = {
-    "action": "phim hành động", "adventure": "phim phiêu lưu",
-    "animation": "phim hoạt hình", "comedy": "phim hài",
-    "crime": "phim hình sự", "documentary": "phim tài liệu",
-    "drama": "phim chính kịch", "family": "phim gia đình",
-    "fantasy": "phim giả tượng", "history": "phim lịch sử",
-    "horror": "phim kinh dị", "music": "phim nhạc",
-    "musical": "phim nhạc", "mystery": "phim bí ẩn",
-    "romance": "phim lãng mạn", "science fiction": "phim khoa học viễn tưởng",
-    "sci-fi": "phim khoa học viễn tưởng", "tv movie": "chương trình truyền hình",
-    "thriller": "phim gây cấn", "war": "phim chiến tranh",
+    "action": "phim hành động",
+    "adventure": "phim phiêu lưu",
+    "animation": "phim hoạt hình",
+    "comedy": "phim hài",
+    "crime": "phim hình sự",
+    "documentary": "phim tài liệu",
+    "drama": "phim chính kịch",
+    "family": "phim gia đình",
+    "fantasy": "phim giả tượng",
+    "history": "phim lịch sử",
+    "horror": "phim kinh dị",
+    "music": "phim nhạc",
+    "musical": "phim nhạc",
+    "mystery": "phim bí ẩn",
+    "romance": "phim lãng mạn",
+    "science fiction": "phim khoa học viễn tưởng",
+    "sci-fi": "phim khoa học viễn tưởng",
+    "tv movie": "chương trình truyền hình",
+    "thriller": "phim gây cấn",
+    "war": "phim chiến tranh",
     "western": "phim miền tây",
 }
 
 # Word boundaries prevent e.g. "war" matching "award", "action" matching "interaction".
-_VI_PATTERNS = [(re.compile(r"(?<!\w)" + re.escape(g) + r"(?!\w)", re.I), g)
-                for g in KNOWN_GENRES_VI]
-_EN_PATTERNS = [(re.compile(r"(?<!\w)" + re.escape(g) + r"(?!\w)", re.I), vi)
-                for g, vi in GENRE_EN_TO_VI.items()]
+_VI_PATTERNS = [
+    (re.compile(r"(?<!\w)" + re.escape(g) + r"(?!\w)", re.I), g)
+    for g in KNOWN_GENRES_VI
+]
+_EN_PATTERNS = [
+    (re.compile(r"(?<!\w)" + re.escape(g) + r"(?!\w)", re.I), vi)
+    for g, vi in GENRE_EN_TO_VI.items()
+]
 
 
 def extract_genres(raw: Any) -> set[str]:
@@ -86,7 +115,9 @@ def extract_genres(raw: Any) -> set[str]:
     return result
 
 
-def compute_genre_similarity(target_genres: set[str], candidate_genres: set[str]) -> float:
+def compute_genre_similarity(
+    target_genres: set[str], candidate_genres: set[str]
+) -> float:
     """0.5 * Jaccard + 0.5 * target genre recall, in [0, 1]."""
     if not target_genres or not candidate_genres:
         return 0.0
@@ -140,20 +171,28 @@ def rerank_similar_candidates(
 
     if mode == "strict":
         # IMPORTANT: strict must never backfill with nonmatching movies.
-        return [c for c in ranked if extract_genres(
-            c.get("genres") or (c.get("payload") or {}).get("genres")
-        ) & target_genres][:top_k]
+        return [
+            c
+            for c in ranked
+            if extract_genres(c.get("genres") or (c.get("payload") or {}).get("genres"))
+            & target_genres
+        ][:top_k]
 
     if genre_weight == 0.0:
         return ranked[:top_k]
     scored: list[dict[str, Any]] = []
     for cand in ranked:
         raw_cosine = float(cand.get("score", 0.0))
-        genres = extract_genres(cand.get("genres") or (cand.get("payload") or {}).get("genres"))
+        genres = extract_genres(
+            cand.get("genres") or (cand.get("payload") or {}).get("genres")
+        )
         genre_score = compute_genre_similarity(target_genres, genres)
         # Missing candidate metadata: neutral fallback to the raw cosine score.
-        final_score = ((1.0 - genre_weight) * raw_cosine + genre_weight * genre_score
-                       if genres else raw_cosine)
+        final_score = (
+            (1.0 - genre_weight) * raw_cosine + genre_weight * genre_score
+            if genres
+            else raw_cosine
+        )
         item = dict(cand)
         item["raw_cosine_score"] = raw_cosine
         item["genre_similarity"] = genre_score if genres else None

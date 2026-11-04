@@ -5,14 +5,14 @@
 
 ## Bảng workflow hiện tại (`.github/workflows/`)
 
-| Workflow | File | Trigger | Paths | Checks |
-|---|---|---|---|---|
-| BACKEND CI | `backend-CI.yml` | push/PR → `dev`, `ci-cd` | `backend/**` | npm ci → lint → type-check (`tsc --noEmit`) → test (`npm test -- --coverage`, ngưỡng ở `package.json` → `jest.coverageThreshold`) → upload artifact `backend/coverage` → build (nest) · matrix Node 20.x/22.x |
-| Frontend CI | `frontend-CI.yml` | push/PR → `dev`, `ci-cd` | `frontend/**` | npm ci → lint → type-check (`tsc --noEmit`) → test (`npm test -- --coverage`, ngưỡng ở `vitest.config.ts`) → upload artifact `frontend/coverage` → build (next) · matrix Node 20.x/22.x |
-| AI-SERVICE CI | `ai-CI.yml` | push/PR → `dev`, `ci-cd` | `ai-service/**` | pip install `-e ".[dev]"` → black --check → isort --check-only → pytest `--cov=src --cov-fail-under=65` → import check `src.api.server` · matrix Python 3.10/3.11/3.12 |
-| BACKEND CD | `backend-CD.yml` | push → `main`, `production` (+ manual) | `backend/**` | detect Dockerfile → placeholder deploy |
-| Frontend CD | `frontend-CD.yml` | push → `main`, `production` (+ manual) | `frontend/**` | detect package.json → placeholder deploy |
-| AI-SERVICE CD | `ai-CD.yml` | push → `main`, `production` (+ manual) | `ai-service/**` | pip install build-check → detect Dockerfile → placeholder deploy |
+| Workflow      | File              | Trigger                                | Paths           | Checks                                                                                                                                                                                                        |
+| ------------- | ----------------- | -------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BACKEND CI    | `backend-CI.yml`  | push/PR → `dev`, `ci-cd`               | `backend/**`    | npm ci → lint → type-check (`tsc --noEmit`) → test (`npm test -- --coverage`, ngưỡng ở `package.json` → `jest.coverageThreshold`) → upload artifact `backend/coverage` → build (nest) · matrix Node 20.x/22.x |
+| Frontend CI   | `frontend-CI.yml` | push/PR → `dev`, `ci-cd`               | `frontend/**`   | npm ci → lint → type-check (`tsc --noEmit`) → test (`npm test -- --coverage`, ngưỡng ở `vitest.config.ts`) → upload artifact `frontend/coverage` → build (next) · matrix Node 20.x/22.x                       |
+| AI-SERVICE CI | `ai-CI.yml`       | push/PR → `dev`, `ci-cd`               | `ai-service/**` | pip install `-e ".[dev]"` → black --check → isort --check-only → pytest `--cov=src --cov-fail-under=65` → import check `src.api.server` · matrix Python 3.10/3.11/3.12                                        |
+| BACKEND CD    | `backend-CD.yml`  | push → `main`, `production` (+ manual) | `backend/**`    | detect Dockerfile → placeholder deploy                                                                                                                                                                        |
+| Frontend CD   | `frontend-CD.yml` | push → `main`, `production` (+ manual) | `frontend/**`   | detect package.json → placeholder deploy                                                                                                                                                                      |
+| AI-SERVICE CD | `ai-CD.yml`       | push → `main`, `production` (+ manual) | `ai-service/**` | pip install build-check → detect Dockerfile → placeholder deploy                                                                                                                                              |
 
 Lưu ý: **bước `paths` của workflow file phải khớp đúng tên file** — đổi tên file workflow thì phải sửa `paths` tương ứng (đã từng bị lỗi với `ai-service-CI.yml`).
 
@@ -27,10 +27,10 @@ python -m venv .venv
 pip install -e ".[dev]"         # cài deps + black/isort/pytest
 ```
 
-| Action | Type | Branch | Commands |
-|:---:|:---:|:---|:---|
-| **CI** | Lint | `dev`, `ci-cd` | `black --check src`<br>`isort --check-only src` |
-| **CI** | Test | `dev`, `ci-cd` | `pytest tests/ -v --cov=src --cov-fail-under=65` |
+| Action |  Type  | Branch         | Commands                                                                                        |
+| :----: | :----: | :------------- | :---------------------------------------------------------------------------------------------- |
+| **CI** |  Lint  | `dev`, `ci-cd` | `black src`<br>`black --check src`<br> `isort src` <br>`isort --check-only src`                 |
+| **CI** |  Test  | `dev`, `ci-cd` | `pytest tests/ -v --cov=src --cov-fail-under=65`                                                |
 | **CI** | Verify | `dev`, `ci-cd` | `set JWT_SECRET_KEY=...` + `set JWT_ALGORITHM=HS256` rồi<br>`python -c "import src.api.server"` |
 
 - 2 biến `JWT_SECRET_KEY` / `JWT_ALGORITHM` **bắt buộc** khi import app (`Settings` không có default) — CI đã set giá trị dummy.
@@ -45,12 +45,12 @@ pip install -e ".[dev]"         # cài deps + black/isort/pytest
 
 ### Frontend (NextJS)
 
-| Action | Type | Branch | Commands |
-|:---:|:---:|:---|:---|
-| **CI** | Lint | `dev`, `ci-cd` | `npm ci` rồi `npm run lint` (fix tự động: `npx eslint . --fix`) |
-| **CI** | Type check | `dev`, `ci-cd` | `npm run type-check` |
-| **CI** | Test | `dev`, `ci-cd` | `npm test -- --coverage` (threshold 60% trong `vitest.config.ts`) |
-| **CI** | Build | `dev`, `ci-cd` | `npm run build` |
+| Action |    Type    | Branch         | Commands                                                          |
+| :----: | :--------: | :------------- | :---------------------------------------------------------------- |
+| **CI** |    Lint    | `dev`, `ci-cd` | `npm ci` rồi `npm run lint` (fix tự động: `npx eslint . --fix`)   |
+| **CI** | Type check | `dev`, `ci-cd` | `npm run type-check`                                              |
+| **CI** |    Test    | `dev`, `ci-cd` | `npm test -- --coverage` (threshold 60% trong `vitest.config.ts`) |
+| **CI** |   Build    | `dev`, `ci-cd` | `npm run build`                                                   |
 
 - Node >= 20.9 (Next 16). Đã có test (Vitest + Testing Library + jsdom), **không còn `passWithNoTests`**.
 - Chạy local: `npm test` (hoặc `npm test -- --coverage`) — coverage output ở `frontend/coverage/` (đã gitignore).
@@ -58,12 +58,12 @@ pip install -e ".[dev]"         # cài deps + black/isort/pytest
 
 ### Backend (NestJS)
 
-| Action | Type | Branch | Commands |
-|:---:|:---:|:---|:---|
-| **CI** | Lint | `dev`, `ci-cd` | `npm ci` rồi `npm run lint` (fix tự động: `npm run lint:fix`) |
-| **CI** | Type check | `dev`, `ci-cd` | `npm run type-check` |
-| **CI** | Test | `dev`, `ci-cd` | `npm test -- --coverage` (threshold trong `package.json` → `jest.coverageThreshold`) |
-| **CI** | Build | `dev`, `ci-cd` | `npm run build` |
+| Action |    Type    | Branch         | Commands                                                                             |
+| :----: | :--------: | :------------- | :----------------------------------------------------------------------------------- |
+| **CI** |    Lint    | `dev`, `ci-cd` | `npm ci` rồi `npm run lint` (fix tự động: `npm run lint:fix`)                        |
+| **CI** | Type check | `dev`, `ci-cd` | `npm run type-check`                                                                 |
+| **CI** |    Test    | `dev`, `ci-cd` | `npm test -- --coverage` (threshold trong `package.json` → `jest.coverageThreshold`) |
+| **CI** |   Build    | `dev`, `ci-cd` | `npm run build`                                                                      |
 
 - Node >= 20 (NestJS 11).
 - Jest đã cấu hình `moduleNameMapper` cho alias `@/`, `@config/`, `@modules/`, `@common/`, `@infrastructure/` — spec mới dùng DI token thì mock đúng token trong `providers`.

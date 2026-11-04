@@ -5,7 +5,7 @@ import aio_pika
 from aio_pika import ExchangeType, IncomingMessage
 
 from core.config import Settings
-from services.interaction_event_handler import InteractionEventHandler
+from infra.messaging.consumers.interaction_event_handler import InteractionEventHandler
 from utils.logger import setup_logger
 
 # ─────────────────────────────────────────────────────────────────────────────
