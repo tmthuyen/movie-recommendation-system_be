@@ -2,6 +2,8 @@
 
 > Tài liệu mô tả service `backend/` trong dự án **Ứng dụng mô hình ngôn ngữ vào hệ thống gợi ý phim**.
 > Viết lại từ code thật trong `backend/src/` (đọc controller/service/DTO/entity trực tiếp). Nếu code thay đổi, cập nhật tài liệu này.
+>
+> **Ngày xác minh: 2026-11-04.** Các kết luận hành vi dưới đây được đối chiếu trực tiếp với code (file:line ghi kèm khi cần). Phần nào chưa chạy runtime sẽ ghi rõ “cần xác minh”.
 
 ## About
 
@@ -10,8 +12,10 @@
 - REST API cho toàn bộ nghiệp vụ: auth, users/RBAC, movies, genres/countries/peoples, ratings, comments, interactions, files, failed-events, health.
 - Xác thực bằng **JWT (Bearer)** + **refresh token trong cookie (httpOnly)** + session lưu trên **Redis**; OAuth **Google**.
 - Real-time qua **Socket.IO** (comment/rating/viewCount/typing/interaction theo phim).
-- Đồng bộ dữ liệu với `ai-service/` **hoàn toàn qua RabbitMQ** (không HTTP-call giữa backend ↔ ai-service).
-- **Không có endpoint recommendation trong backend** — recommendation do `ai-service/` cung cấp (`/api/recommendations`).
+- Giao tiếp với `ai-service/` qua **2 kênh**:
+  - **RabbitMQ**: đồng bộ dữ liệu/event (movie/user/interaction/training) — xem mục RabbitMQ.
+  - **HTTP**: module `recommendations` proxy sang ai-service qua `AI_SERVICE_URL` (mặc định `http://localhost:8082/api/recommendations`) — xem mục `Module recommendations`.
+- **Có endpoint recommendation trong backend** tại prefix `/api/recommendations`: `similar` đã hoạt động (proxy ai-service + map DB), `semantic-search`/`hybrid-search` hiện là stub.
 
 | Thông số | Giá trị |
 |---|---|
@@ -94,6 +98,7 @@ backend/src/
 │   ├── ratings/        # CRUD rating + transaction cập nhật voteAverage/voteCount + WS + publish interaction.created; entities Rating, SeedRating
 │   ├── comments/       # CRUD comment phân cấp (parentId) + WS + publish interaction.created; entity Comment
 │   ├── interactions/   # TOGGLE like + stats + WS + publish interaction.created; entity Interaction; interaction.cron.ts
+│   ├── recommendations/ # proxy HTTP sang ai-service: similar (thật), semantic-search/hybrid-search (stub)
 │   ├── files/          # upload file chung (S3/R2)
 │   ├── failed-events/  # danh sách message rớt DLQ + retry thủ công
 │   ├── events/         # EventsGateway (Socket.IO)
@@ -148,6 +153,7 @@ Lỗi — từ `src/common/filters/http-exception.filter.ts` (bắt `HttpExcepti
 - **Ngoại lệ (KHÔNG theo envelope)**:
   - `GET /api/health` → format Terminus của `@nestjs/terminus`.
   - `POST /api/failed-events/:id/retry` → `{success, statusCode, message}` — **không có `result`**.
+  - `GET /api/recommendations/semantic-search` và `GET /api/recommendations/hybrid-search` → `{status, message, data}` (stub, chưa triển khai).
   - `GET /api` (AppController) → plain text.
   - Swagger UI `/api`.
 
@@ -228,13 +234,16 @@ JWT payload: `{sub, fullName, email, scopes, sessionId, jti}`. `JwtStrategy` ki�
 |---|---|---|---|---|---|
 | POST | `/api/movies` | JWT + `@Roles(ADMIN, SUPERADMIN)` **⚠ không enforce** | `CreateMovieDto` (xem dưới) | movie | `201`; validate genreIds/countryId/peopleIds tồn tại; publish `movie.created` |
 | POST | `/api/movies/test-created` | **Public** (guard bị comment) | `CreateMovieDto` | `result: undefined` (bị lược khỏi JSON) | test publish event (movieId cứng 101000) |
-| GET | `/api/movies` | Public | query `{page, limit, keyword}` — keyword ILIKE `title` OR `titleVi` | movie[] + `pagination` | join `genres`, `country`, `moviePeoples.people`; sort `createdAt DESC` |
+| GET | `/api/movies` | Public | query `{page, limit, keyword}` — keyword ILIKE `title` OR `titleVi` | movie[] + `pagination` | join `genres`, `countries` (M2M), `moviePeoples.people`; sort `createdAt DESC` |
+| GET | `/api/movies/search` | Public | query `MovieSearchRequestDto`: `page=1`, `limit=10`, `keyword?`, `sort=releaseDate:DESC`, `genreIds?` (number[]), `countryIds?` (number[]), `releaseYearFrom?`, `releaseYearTo?` | movie[] + `pagination` | Search nâng cao: chỉ lấy phim có đủ `title/titleVi/releaseDate/overview/overviewVi/posterPath/backdropPath`; `sort` cho phép `releaseDate,voteAverage,viewCount,likeCount,createdAt` (nhiều field cách nhau dấu phẩy, thêm `id ASC` để ổn định) |
 | GET | `/api/movies/:id` | Public | path `id` (number) | movie (kèm relations) | `404` nếu không thấy |
 | POST | `/api/movies/:id/view` | **Optional JWT** | path `id` | `{viewCount, score, interaction: 'created'\|'updated'\|'none'}` | transaction: luôn +`viewCount`; nếu đã đăng nhập: tạo Interaction `click` (score 1, publish MQ) hoặc xem lại → `score = min(5, score+1)` (không publish lại); WS `movie-{id}-viewCount` + `movie-{id}-interaction` (chỉ khi user đăng nhập) |
 | PATCH | `/api/movies/:id` | JWT + `@Roles` **⚠** | `UpdateMovieDto` = Partial(`CreateMovieDto`) | movie | publish `movie.updated` nếu đổi title/titleVi/overview/overviewVi/genreIds/peopleIds |
 | DELETE | `/api/movies/:id` | JWT + `@Roles` **⚠** | path `id` | `{success: true}` | publish `movie.deleted` |
 
 `CreateMovieDto` fields: `title` (bắt buộc, ≤255), `titleVi?`, `overview?`, `overviewVi?`, `releaseDate?` (string ≤20), `posterPath?`, `backdropPath?`, `originCountry?`, `originalLanguage?`, `budget?`, `revenue?`, `status?`, `video?` (boolean), `voteAverage?`, `voteCount?`, `genreIds?` (number[]), `countryId?` (number), `peopleIds?` (number[]).
+
+⚠ Lưu ý hiện trạng: `countryId` được validate tồn tại (`movies.service.ts:68-73`) nhưng `mapDtoToEntity` lại gán `entity.country = {id: countryId}` (`movies.service.ts:49-57`), trong khi entity `Movie` **không còn quan hệ `country`** — chỉ có M2M `countries` (`movie.entity.ts:158-174`). Việc quốc gia có thực sự được lưu khi tạo phim bằng `countryId` **cần xác minh runtime**. Search/filter quốc gia dùng M2M `countries` (`movies.service.ts:369-373`).
 
 ### Module `genres` — `/api/genres`
 
@@ -250,7 +259,7 @@ JWT payload: `{sub, fullName, email, scopes, sessionId, jti}`. `JwtStrategy` ki�
 
 | Method | Path | Auth | Request | Response `result` |
 |---|---|---|---|---|
-| POST | `/api/countries` | JWT + `@Roles` **⚠** | `CreateCountryDto` `{name, code}` | country (`201`) |
+| POST | `/api/countries` | JWT + `@Roles` **⚠** | `CreateCountryDto` `{viName, enName, code, region}` (`subregion` có ở entity nhưng không có trong DTO tạo) | country (`201`) |
 | GET | `/api/countries` | Public | `{page, limit, keyword}` | country[] + `pagination` |
 | GET | `/api/countries/:id` | Public | — | country |
 | PATCH | `/api/countries/:id` | JWT + `@Roles` **⚠** | Partial | country |
@@ -299,10 +308,23 @@ Rating unique theo (user, movie).
 | GET | `/api/interactions` | Public | `{page, limit}` | interaction[] + `pagination` | join `user`, `movie` |
 | GET | `/api/interactions/my-history` | JWT | `{page, limit}` | interaction[] + `pagination` | chỉ `type=click` (lịch sử xem), join `movie` |
 | GET | `/api/interactions/my-favorites` | JWT | `{page, limit}` | interaction[] + `pagination` | chỉ `type=like` |
+| GET | `/api/interactions/movie/:movieId/me` | JWT | path `movieId` | `{isLiked: boolean, click: boolean, commentCount: number, rating: rating\|null}` | **Trạng thái tương tác của user với 1 phim** — dùng cho trang chi tiết (`interactions.controller.ts:152-175`); gộp 2 query song song (interactions + rating, `interactions.service.ts:237-259`) |
 | GET | `/api/interactions/:id` | Public | — | interaction | |
 | DELETE | `/api/interactions/:id` | JWT | — | `{success: true}` | |
 
 `InteractionScoreMap` (band 5 = **độ tin cậy**, không hiển thị cho user): `like=5`, `comment=4`, `click=1` (tăng dần tối đa 5 khi xem lại), `rating=0` (động, lấy đúng số sao user nhập). Enum chỉ còn `like/rating/comment/click`; index `(user, movie, type)` **không unique** (cho phép nhiều comment/click/rating cùng phim).
+
+### Module `recommendations` — `/api/recommendations` (⚠ **không gắn guard** → Public)
+
+Module đã được đăng ký trong `AppModule` (`app.module.ts:42,118`) và import `MoviesModule` (`recommendations.module.ts:9-11`).
+
+| Method | Path | Auth | Request | Response | Ghi chú |
+|---|---|---|---|---|---|
+| GET | `/api/recommendations/similar/:id` | Public | path `id` (number), query `topK?` (number, mặc định `10` nếu falsy) | envelope chuẩn: `result` = movie[] kèm `similarityScore`, `rank`; `pagination` = map từ ai-service (`currentPage`→`page`, `pageSize`→`limit`, `totalItems`→`total`, `totalPages`) | **Đã hoạt động**: gọi HTTP `GET ${AI_SERVICE_URL}/similar/{id}?topK=...` (`recommendations.service.ts:36-43`), validate response bằng Zod (`:45-47`), rồi map từng `id` với DB qua `movieRepository.findById` (bỏ qua id không có trong DB — `:69-76`). Lỗi response không hợp lệ → `AppException` 400 `AI_SERVICE_ERROR` (`:51-61`). `message` hiện vẫn là chuỗi placeholder (`recommendations.controller.ts:26-27`). |
+| GET | `/api/recommendations/semantic-search` | Public | query `keyword?`, `topK?` | **KHÔNG envelope**: `{status: 'success', message, data: []}` | **Stub**: controller trả thẳng object, không gọi service (`recommendations.controller.ts:33-45`); service method rỗng (`recommendations.service.ts:110`). |
+| GET | `/api/recommendations/hybrid-search` | Public | query `HybridSearchQuery`: `userId` (bắt buộc), `keyword?` (≤255), `topK?` (1–100, mặc định 50), `page?` (≥1, mặc định 1), `pageSize?` (1–100, mặc định 20) | **KHÔNG envelope**: `{status: 'success', message, data: []}` | **Stub**: controller trả thẳng object (`recommendations.controller.ts:47-55`); service method rỗng (`recommendations.service.ts:112`). DTO: `hybrid-search-query.dto.ts:11-39`. |
+
+⚠ Hệ quả cho client: chỉ `similar` dùng được và theo envelope; `semantic-search`/`hybrid-search` **không** trả `{success, statusCode, result}` và hiện luôn trả `data: []`. Nếu cần semantic/hybrid thật, gọi trực tiếp ai-service (`:8082`) cho tới khi backend hoàn thiện.
 
 ### Module `files` — `/api/files` (class-level `JwtAuthGuard`)
 
@@ -368,7 +390,7 @@ Consumer đọc header `x-death` / `x-first-death-*` để khôi phục routing 
 
 **Cron**: `@Cron('0 */1440 * * * *')` (**mỗi 24 giờ**) — `interaction.cron.ts`: gửi `training.batch` gồm seed ratings (chunk 10.000, tối đa 10.000 dòng) + toàn bộ interactions của app (chunk 10.000); có cờ chống chạy chồng.
 
-**Backend KHÔNG consume `movie.queue`/`user.queue`/`interaction.queue` business và KHÔNG HTTP-call ai-service** — chỉ publish + consume DLQ.
+**Backend KHÔNG consume `movie.queue`/`user.queue`/`interaction.queue` business** — chỉ publish business event + consume DLQ. Ngoài RabbitMQ, backend **có HTTP-call ai-service** qua module `recommendations` (`recommendations.service.ts:15-16,41-43` dùng `fetch` tới `AI_SERVICE_URL`), xem mục `Module recommendations`. `semantic-search`/`hybrid-search` trong backend hiện **chưa gọi HTTP** (service method rỗng — `recommendations.service.ts:110-112`).
 
 ## Database entities
 
@@ -379,9 +401,9 @@ TypeORM + PostgreSQL, `synchronize: true` (**không migration**). Mọi entity k
 | `User` (`users`) | `id` uuid | `status` enum `UNVERIFIED/ACTIVE/INACTIVE/BLOCKED` (mặc định UNVERIFIED), `email` unique, `isVerified`, `password`, `fullName`, `phoneNumber`, `avatarUrl`, `preferenceData` jsonb, `birthDate`, `gender`; M2M `roles` (bảng `user_roles`); 1-n `ratings`, `comments`, `interactions` |
 | `UserProvider` (`user_providers`) | `id` uuid | `userId`, `provider`, `providerId`; unique (provider, providerId) — OAuth Google |
 | `Role` (`roles`) | `id` number | `code` unique, `name`, `description`; M2M `users` |
-| `Movie` (`movies`) | `id` **bigint** | `tmdbId` (bigint, unique), `imdbId` (varchar, unique), `title`, `titleVi`, `overview`, `overviewVi`, `releaseDate` **varchar(20)**, `posterPath`, `backdropPath`, `homepage`, `originCountry`, `originalLanguage`, `budget`, `revenue`, `status`, `video`, `isAiTranslated`, `voteAverage`, `voteCount`, `viewCount`; M2M `genres` (bảng `movie_genres`); 1-n `moviePeoples`; n-1 `country`; 1-n `ratings`, `comments`, `interactions` |
+| `Movie` (`movies`) | `id` **bigint** | `tmdbId` (bigint, unique, nullable), `imdbId` (varchar 50, unique, nullable), `title`, `titleVi`, `overview`, `overviewVi`, `releaseDate` **date** (nullable, indexed), `posterPath`, `backdropPath`, `homepage`, `originCountry`, `originalLanguage`, `budget`, `revenue`, `status`, `video`, `isAiTranslated`, `tmdbRating` (float, nullable), `voteAverage`, `voteCount`, `viewCount` (indexed), `likeCount` (indexed); M2M `genres` (bảng `movie_genres`); M2M `countries` (bảng `movie_countries`); 1-n `moviePeoples`; 1-n `ratings`, `comments`, `interactions` (`movie.entity.ts:42-186`) |
 | `Genre` (`genres`) | `id` number | `name`, `enName?`; M2M `movies` |
-| `Country` (`countries`) | `id` number | `name`, `code`; 1-n `movies` |
+| `Country` (`countries`) | `id` number | `viName`, `enName` (unique, nullable), `code` (varchar 2, unique, nullable), `region`, `subregion`; M2M `movies` (bảng `movie_countries`) (`country.entity.ts:11-51`) |
 | `People` (`peoples`) | `id` number | `fullName`, `birthDate`, `nationality`, `gender`, `mainRole` (mặc định `actor`); 1-n `moviePeoples` |
 | `MoviePeople` (`movie_peoples`) | kép `movieId` + `peopleId` | n-1 `movie`, n-1 `people`, `role` varchar(50) |
 | `Rating` (`ratings`) | `id` number | `rating` float, `timestamp`; n-1 `user`, `movie`; **unique (user, movie)** |
@@ -389,7 +411,7 @@ TypeORM + PostgreSQL, `synchronize: true` (**không migration**). Mọi entity k
 | `Comment` (`comments`) | `id` number | `content` text, `parentId` bigint (null = root); n-1 `user`, `movie` |
 | `Interaction` (`interactions`) | `id` number | `score` float (band 5 = độ tin cậy), `type` enum `like/rating/comment/click`; n-1 `user`, `movie`; index `(user, movie, type)` **không unique** |
 | `FailedEvent` (`failed_events`) | `id` uuid | `source`, `queueName`, `routingKey`, `eventId` unique, `eventType`, `correlationId`, `payload` json, `errorReason`, `status` `PENDING/RETRIED_SUCCESS/RETRIED_FAILED`, `retryCount` |
-| `Permission` (`permissions`) | — | entity có trong module permissions nhưng **chưa dùng** (module là stub) |
+| `Permission` (`—`) | — | Class rỗng `export class Permission {}` (`permissions/entities/permission.entity.ts:1`), **không phải entity TypeORM** và không có bảng `permissions`; module permissions là stub |
 
 Redis keys liên quan: `auth:session:{sessionId}`, `auth:blacklist:{jti}`, `auth:user:{userId}:sessions`, `auth:verify_email:{token}`, `auth:reset_password:{token}`, `rl:{strategy}:...` (rate-limit).
 
@@ -433,7 +455,7 @@ Vượt limit → HTTP **429 Too Many Requests** với message của decorator (
 4. **Validation strict**: `forbidNonWhitelisted` → không gửi field thừa; field body/query có thể gửi snake_case (interceptor đổi sang camelCase).
 5. **Interactions là TOGGLE like**: `POST /api/interactions` gọi 1 lần để thích, gọi lại để bỏ — đọc `result.action` (`added`/`removed`); client **không gửi `score`** (backend tự tính band 5) và `result.likeCount` phục vụ cập nhật số like. `POST /api/movies/:id/view` là Optional JWT (tăng view kể cả khi chưa đăng nhập; chỉ user đăng nhập mới tạo/tăng `click`).
 6. **Real-time**: kết nối Socket.IO tới `http://localhost:8081` rồi subscribe `movie-{id}-comment`, `movie-{id}-rating`, `movie-{id}-interaction`, `movie-{id}-viewCount`, `movie-{id}-typing`; gửi `typingComment` khi người dùng gõ.
-7. **Không có endpoint recommendation trong backend**: gợi ý nằm ở ai-service — gọi qua Kong `http://localhost:8000/api/recommendations/...` hoặc trực tiếp `http://localhost:8082/api/recommendations/...`. Backend chỉ trao đổi với ai-service qua RabbitMQ.
+7. **Gợi ý phim**: backend **có** module `/api/recommendations` — dùng `GET /api/recommendations/similar/:id?topK=10` (envelope chuẩn) cho phim tương tự; backend proxy sang ai-service qua `AI_SERVICE_URL` rồi map với DB. `semantic-search`/`hybrid-search` hiện là **stub** (trả `{status, message, data: []}`, không envelope) — nếu cần semantic/hybrid thật, gọi trực tiếp ai-service (`http://localhost:8082/api/recommendations/...`) hoặc qua Kong (`http://localhost:8000/api/recommendations/...`) cho tới khi backend hoàn thiện. Ngoài HTTP, backend vẫn trao đổi event với ai-service qua RabbitMQ.
 8. **Phân quyền thực tế**: `@Roles` chưa được enforce ở hầu hết module (RolesGuard chỉ gắn ở `/api/roles`). Đừng dựa vào `@Roles` để bảo vệ UI/API phía client — kiểm tra `roles` trong `GET /api/auth/me`.
 9. **Đổi mật khẩu** (`PATCH /api/auth/change-password`) sẽ logout toàn bộ phiên → client cần đăng nhập lại.
 10. **Upload ảnh**: `POST /api/files/upload` và `POST /api/users/avatar` — multipart field `file`, ≤5MB, chỉ `jpg/jpeg/png/webp` → `{result: {url}}`.

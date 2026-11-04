@@ -27,8 +27,10 @@ Bảng tóm tắt nhanh (chi tiết trong `docs/BACKEND.md`, `docs/AI-SERVICE.md
   | gateway | Kong (`gateway/kong.yml`) — **:8000**: `/api` → 8081, `/api/recommendations` → 8082 |
   | Hạ tầng | PostgreSQL, Redis (session/blacklist/rate-limit), RabbitMQ (exchanges movie/user/interaction + DLQ → `failed_events`), Chroma (ai-service), Docker |
 
-- Backend ↔ ai-service giao tiếp **qua RabbitMQ**, không HTTP-call lẫn nhau.
-- **Backend không có endpoint recommendation** — recommendation do ai-service cung cấp (`/api/recommendations`).
+- Backend ↔ ai-service giao tiếp **qua 2 kênh**:
+  - **RabbitMQ**: đồng bộ dữ liệu/event (movie/user/interaction/training).
+  - **HTTP**: module `recommendations` của backend proxy sang ai-service qua `AI_SERVICE_URL` (mặc định `http://localhost:8082/api/recommendations`), ví dụ `GET /api/recommendations/similar/:id`.
+- **Backend có module recommendation** (`/api/recommendations/*`): `similar` đã hoạt động; `semantic-search`/`hybrid-search` còn stub — xem `docs/BACKEND.md`.
 
 ## Quy ước code & git
 
@@ -43,7 +45,8 @@ Dưới đây là quy ước chung cơ bản. Chi tiết các quy ước code (R
 ## Tài liệu & Quy tắc
 
 - **Backend rules** → `docs/BACKEND_RULES.md`: **CHỈ ĐỌC**, không sửa khi chưa được developer yêu cầu.
-- **Frontend rules** → `docs/FRONTEND_RULES.md`: chỉ trỏ dẫn, **KHÔNG sửa nội dung file đó**.
+- **Frontend rules** → `docs/FRONTEND_RULES.md` (**file rules frontend duy nhất**): envelope, stack, shadcn/ui, motion cho card, responsive, dark mode, a11y, naming — chỉ trỏ dẫn, **KHÔNG sửa nội dung file đó** khi developer chưa yêu cầu.
+- **Code rules xuyên service** → `docs/CODE_RULES.md`: logging, async/await, testing, return contract `{result, pagination}`, Definition of Done.
 - **Mô tả service (hiện trạng, cập nhật theo code)**:
   - `docs/BACKEND.md` — backend NestJS: techstack, cấu trúc `src/`, quy ước response (envelope), **bảng endpoint đầy đủ từng module**, WebSocket events, RabbitMQ events, entities, port/CORS/rate-limit, lưu ý cho client.
   - `docs/FRONTEND.md` — frontend NextJS.
@@ -55,7 +58,7 @@ Dưới đây là quy ước chung cơ bản. Chi tiết các quy ước code (R
 - Khi nhận task/yêu cầu, agent **phải lập plan và lưu vào `docs/plans/`** trước khi triển khai.
   - Đặt tên file plan theo định dạng: `V{index}_{scope}_{task_name}.md`
     - `{index}`: số thứ tự liên tục (integer), bắt đầu từ 0. Chỉ số được đánh số tuần tự dựa trên toàn bộ plans đã có trong `docs/plans/` (xem `PLAN_INDEX.md` để tra cứu index hiện tại và next index).
-    - `{scope}`: phải thuộc enum `backend` | `frontend` | `cicd` | `ai` (thêm `cicd` vào scope enum). Lưu ý: các plan cũ có thể dùng `ai-service` trong slug nhưng scope được chuẩn hoá thành `ai` khi đặt tên mới.
+    - `{scope}`: phải thuộc enum `backend` | `frontend` | `cicd` | `ai` | `docs` | `testing`. Lưu ý: các plan cũ có thể dùng `ai-service` trong slug nhưng scope được chuẩn hoá thành `ai` khi đặt tên mới; `docs` dùng cho tài liệu/rules, `testing` dùng cho chương trình test/coverage.
     - `{task_name}`: tên task dạng slug (lowercase, dùng dấu `-` thay khoảng trắng), mô tả ngắn gọn công việc.
     - Ví dụ: `V0_init-plan.md`, `V1_cicd_ci-cd-split-workflows.md`, `V2_backend_retrieval-target-validation.md`, `V3_backend_retrieval-api.md`
   - Tiêu đề trong file: `# V{index} — <mô tả>`

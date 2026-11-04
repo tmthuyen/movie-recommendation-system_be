@@ -35,6 +35,22 @@ def safe_float(val: Any) -> float:
         return 0.0
 
 
+def _as_text(value: Any) -> str:
+    """Chuẩn hoá giá trị CSV/pandas thành text sạch.
+
+    Ô trống khi đọc bằng pandas là ``NaN`` (truthy) nên nếu dùng
+    ``value or fallback`` sẽ ra chuỗi ``"nan"`` và fallback không chạy.
+    """
+    if value is None:
+        return ""
+    try:
+        if pd.isna(value):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    return str(value).strip()
+
+
 def build_search_text(row: Union[pd.Series, dict]) -> str:
     """
     Hàm tạo search_text chuẩn hóa duy nhất dùng chung cho toàn bộ hệ thống:
@@ -42,8 +58,8 @@ def build_search_text(row: Union[pd.Series, dict]) -> str:
     - overview: ưu tiên overview_vi, nếu thiếu fallback sang overview
     - genres: trích xuất tên thể loại sạch từ JSON list
     """
-    title = str(row.get("title_vi") or row.get("title") or "").strip()
-    overview = str(row.get("overview_vi") or row.get("overview") or "").strip()
+    title = _as_text(row.get("title_vi")) or _as_text(row.get("title"))
+    overview = _as_text(row.get("overview_vi")) or _as_text(row.get("overview"))
     genres = extract_genre_names(row.get("genres", ""))
     text = f"{title} {overview} {genres}"
     return " ".join(text.split())

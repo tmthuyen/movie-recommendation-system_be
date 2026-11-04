@@ -42,9 +42,26 @@ export class RecommendationsService implements IRecommendationsService {
       `${AI_SERVICE_URL}/similar/${movieId}?topK=${topK || 10}`,
     );
 
-    const parsedResponse = SimilarFromAiServiceResponseSchema.parse(
-      await res.json(),
-    );
+    // AI service trả lỗi HTTP hoặc body không đúng schema → map về AppException
+    // (nếu không, ZodError sẽ nổi lên thành 500 thay vì 400).
+    let parsedResponse: SimilarFromAiServiceResponse;
+    try {
+      parsedResponse = SimilarFromAiServiceResponseSchema.parse(
+        await res.json(),
+      );
+    } catch (error) {
+      this.logger.error(
+        `Invalid response from AI service (status=${res.status}): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'Invalid response from AI service',
+        'The AI service did not return a valid response for similar movies.',
+        'AI_SERVICE_ERROR',
+      );
+    }
 
     this.logger.log(`AI service response: ${JSON.stringify(parsedResponse)}`);
 

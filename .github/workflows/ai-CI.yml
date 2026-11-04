@@ -71,16 +71,16 @@ jobs:
 
       - name: Run tests
         run: |
-          if pytest --version >/dev/null 2>&1; then
-            pytest tests/ -v
-          fi
-        shell: bash 
-      
+          pytest tests/ -v --cov=src --cov-fail-under=65 --cov-report=term
+        shell: bash
+        env:
+          JWT_SECRET_KEY: ci-dummy-secret
+          JWT_ALGORITHM: HS256
+
       - name: Verify application
         run: |
           python -c "import src.api.server; print('BUILD_OK')"
         shell: bash
         env:
-          # Settings yêu cầu 2 biến này (không có default) — giá trị dummy cho CI
           JWT_SECRET_KEY: ci-dummy-secret
           JWT_ALGORITHM: HS256

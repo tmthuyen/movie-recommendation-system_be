@@ -1,0 +1,266 @@
+"""Unit test cho ``core/integrations.py`` (memory backend, Chroma helpers, facade).
+
+Không khởi tạo ChromaDB/Qdrant/Redis thật; chỉ test logic chuyển đổi và
+các nhánh ``vector_db_enabled=False``.
+"""
+
+import asyncio
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
+
+import numpy as np
+import pytest
+
+from src.core.integrations import (
+    ChromaVectorBackend,
+    MemoryVectorBackend,
+    TrainingScheduler,
+    VectorStore,
+)
+
+
+def run(coro):
+    return asyncio.run(coro)
+
+
+class TestMemoryVectorBackend:
+    def test_empty_backend_returns_no_results(self):
+        backend = MemoryVectorBackend()
+        run(backend.start())
+        assert run(backend.query([1.0, 0.0])) == []
+
+    def test_upsert_and_query_cosine_order(self):
+        backend = MemoryVectorBackend()
+        run(backend.upsert(1, [1.0, 0.0], {"title": "a"}))
+        run(backend.upsert(2, [0.0, 1.0], {"title": "b"}))
+
+        results = run(backend.query([1.0, 0.0], top_k=2))
+
+        assert [row["id"] for row in results] == [1, 2]
+        assert results[0]["score"] == pytest.approx(1.0)
+        assert results[1]["score"] == pytest.approx(0.0)
+
+    def test_top_k_is_respected(self):
+        backend = MemoryVectorBackend()
+        for idx in range(3):
+            run(backend.upsert(idx, [1.0, float(idx)], {"idx": idx}))
+
+        assert len(run(backend.query([1.0, 0.0], top_k=2))) == 2
+
+    def test_zero_query_vector_does_not_crash(self):
+        backend = MemoryVectorBackend()
+        run(backend.upsert(1, [1.0, 0.0], {}))
+        results = run(backend.query([0.0, 0.0]))
+        assert results[0]["score"] == 0.0
+
+    def test_close_is_noop(self):
+        run(MemoryVectorBackend().close())
+
+
+class FakeChromaCollection:
+    def __init__(self):
+        self.query_kwargs = None
+        self.get_result = {"ids": []}
+
+    def query(self, **kwargs):
+        self.query_kwargs = kwargs
+        return {
+            "ids": [["1", "2"]],
+            "distances": [[0.0, 0.5]],
+            "metadatas": [[{"movie_id": 1}, {"movie_id": 2}]],
+        }
+
+    def get(self, ids, include):
+        return self.get_result
+
+
+class FakeChromaClient:
+    def __init__(self, collection):
+        self.collection = collection
+        self.requested_names = []
+
+    def get_or_create_collection(self, name, metadata=None):
+        self.requested_names.append(name)
+        return self.collection
+
+
+def make_chroma_backend(collection):
+    backend = ChromaVectorBackend.__new__(ChromaVectorBackend)
+    backend._client = FakeChromaClient(collection)
+    backend._collections = {}
+    return backend
+
+
+class TestChromaHelpers:
+    def test_sanitise_meta_keeps_primitives_and_stringifies_others(self):
+        meta = ChromaVectorBackend._sanitise_meta(
+            {"s": "x", "i": 1, "f": 1.5, "b": True, "list": [1, 2], "dict": {"a": 1}}
+        )
+        assert meta["s"] == "x"
+        assert meta["i"] == 1
+        assert meta["f"] == 1.5
+        assert meta["b"] is True
+        assert isinstance(meta["list"], str)
+        assert isinstance(meta["dict"], str)
+
+    def test_sync_query_converts_distance_to_similarity(self):
+        collection = FakeChromaCollection()
+        backend = make_chroma_backend(collection)
+
+        results = backend._sync_query(
+            [1.0, 0.0], top_k=2, where=None, collection_name="movies"
+        )
+
+        assert results == [
+            {"id": 1, "score": 1.0, "payload": {"movie_id": 1}},
+            {"id": 2, "score": 0.5, "payload": {"movie_id": 2}},
+        ]
+        assert collection.query_kwargs["n_results"] == 2
+        assert "where" not in collection.query_kwargs
+
+    def test_sync_query_passes_where_filter(self):
+        collection = FakeChromaCollection()
+        backend = make_chroma_backend(collection)
+
+        backend._sync_query([1.0], top_k=1, where={"genre": "action"}, collection_name="movies")
+
+        assert collection.query_kwargs["where"] == {"genre": "action"}
+
+    def test_sync_get_by_id_returns_vector_and_payload(self):
+        collection = FakeChromaCollection()
+        collection.get_result = {
+            "ids": ["1"],
+            "embeddings": [[0.1, 0.2]],
+            "metadatas": [{"movie_id": 1}],
+        }
+        backend = make_chroma_backend(collection)
+
+        result = backend._sync_get_by_id(1, collection_name="movies")
+
+        assert result == {
+            "id": 1,
+            "vector": [0.1, 0.2],
+            "payload": {"movie_id": 1},
+        }
+
+    def test_sync_get_by_id_handles_numpy_embeddings(self):
+        collection = FakeChromaCollection()
+        collection.get_result = {
+            "ids": ["1"],
+            "embeddings": np.array([[0.1, 0.2]]),
+            "metadatas": [{}],
+        }
+        backend = make_chroma_backend(collection)
+
+        assert backend._sync_get_by_id(1, collection_name="movies")["vector"] == pytest.approx(
+            [0.1, 0.2]
+        )
+
+    def test_sync_get_by_id_missing_returns_none(self):
+        backend = make_chroma_backend(FakeChromaCollection())
+        assert backend._sync_get_by_id(1, collection_name="movies") is None
+
+    def test_sync_get_by_id_without_embeddings_returns_none_vector(self):
+        collection = FakeChromaCollection()
+        collection.get_result = {
+            "ids": ["1"],
+            "embeddings": None,
+            "metadatas": [{"a": 1}],
+        }
+        backend = make_chroma_backend(collection)
+
+        result = backend._sync_get_by_id(1, collection_name="movies")
+
+        assert result["vector"] is None
+        assert result["payload"] == {"a": 1}
+
+
+class TestVectorStoreFacade:
+    def test_unsupported_provider_raises(self):
+        with pytest.raises(ValueError, match="Unsupported vector_db_provider"):
+            VectorStore(SimpleNamespace(vector_db_provider="unknown"))
+
+    def test_disabled_store_accepts_write_and_returns_no_reads(self):
+        store = VectorStore(
+            SimpleNamespace(vector_db_provider="memory", vector_db_enabled=False)
+        )
+
+        run(store.upsert(1, [1.0], {"a": 1}))
+        assert run(store.query([1.0])) == []
+        assert run(store.get_by_id(1)) is None
+        run(store.close())
+        assert store.backend.items == {}
+
+    def test_enabled_memory_store_roundtrip(self):
+        store = VectorStore(
+            SimpleNamespace(vector_db_provider="memory", vector_db_enabled=True)
+        )
+        run(store.start())
+        run(store.upsert(1, [1.0, 0.0], {"a": 1}))
+
+        results = run(store.query([1.0, 0.0], top_k=1))
+
+        assert results[0]["id"] == 1
+        assert results[0]["payload"] == {"a": 1}
+        run(store.close())
+
+
+class TestTrainingScheduler:
+    def test_start_disabled_does_not_create_scheduler(self):
+        scheduler = TrainingScheduler(SimpleNamespace(model_train_enabled=False))
+        run(scheduler.start())
+        assert scheduler.scheduler is None
+
+    def test_enqueue_returns_job_name_and_creates_task(self, monkeypatch):
+        scheduler = TrainingScheduler(SimpleNamespace(model_train_enabled=False))
+        created = []
+
+        def fake_create_task(coro):
+            created.append(coro)
+            coro.close()
+            return MagicMock()
+
+        monkeypatch.setattr(asyncio, "create_task", fake_create_task)
+
+        name = run(scheduler.enqueue(SimpleNamespace(modelName="main", force=True)))
+
+        assert name == "training-main-queued"
+        assert len(created) == 1
+
+    def test_train_without_app_state_resets_flag(self):
+        scheduler = TrainingScheduler(SimpleNamespace(model_train_enabled=False))
+        run(scheduler.train_main_model())
+        assert scheduler.is_training is False
+
+    def test_train_skips_when_already_running(self):
+        scheduler = TrainingScheduler(SimpleNamespace(model_train_enabled=False))
+        scheduler.is_training = True
+        run(scheduler.train_main_model())
+        assert scheduler.is_training is True
+
+    def test_train_runs_pipeline_when_app_state_has_vector_store(self, monkeypatch):
+        service = MagicMock()
+        service.run_training_pipeline = AsyncMock()
+        service_factory = MagicMock(return_value=service)
+        monkeypatch.setattr(
+            "src.core.integrations.ModelTrainingService", service_factory
+        )
+        app_state = SimpleNamespace(vector_store=object())
+        scheduler = TrainingScheduler(
+            SimpleNamespace(model_train_enabled=False), app_state=app_state
+        )
+
+        run(scheduler.train_main_model())
+
+        service_factory.assert_called_once_with(vector_store=app_state.vector_store)
+        service.run_training_pipeline.assert_awaited_once()
+        assert scheduler.is_training is False
+
+    def test_close_calls_scheduler_shutdown(self):
+        scheduler = TrainingScheduler(SimpleNamespace(model_train_enabled=False))
+        scheduler.scheduler = MagicMock()
+        run(scheduler.close())
+        scheduler.scheduler.shutdown.assert_called_once_with(wait=False)
+
+    def test_close_without_scheduler_is_noop(self):
+        run(TrainingScheduler(SimpleNamespace(model_train_enabled=False)).close())

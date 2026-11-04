@@ -11,6 +11,12 @@ __pycache__/
 dist/
 build/
 
+# test & coverage artifacts
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
 
 # ide
 .vscode/

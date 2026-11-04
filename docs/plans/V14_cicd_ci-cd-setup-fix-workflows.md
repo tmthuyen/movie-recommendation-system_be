@@ -7,6 +7,7 @@
 | Trạng thái | ✅ Đã hoàn thành |
 | Người thực hiện | AI agent (Big Pickle) + Developer |
 | Thời gian | 2026-10-18 |
+| Ngày xác minh | 2026-11-04 — xem "Ghi chú xác minh" cuối file |
 | Scope | `cicd` |
 | Nhánh | `ci-cd` (nhánh CI/CD hiện có của repo) |
 | Modules sửa | `.github/workflows/*`, `backend/` (package.json, tsconfig.json, 2 file lint-fix), `frontend/` (package.json, vitest.config.ts, eslint deps, 2-3 file fix), `ai-service/tests/` (smoke test), `docs/guildes/CICD_GUILDLINES.md` |
@@ -115,3 +116,11 @@
 7. Jest `moduleNameMapper` được thêm cho các alias `@/`, `@config/`, `@modules/`, `@common/`, `@infrastructure/` (trước đó 22 suite không resolve được alias).
 
 **Còn lại cần user quyết định (ngoài scope plan này):** deploy thật (GHCR/SSH), `docker/docker-compose.prod.yml` đang trống, `ai-service/Dockerfile` đang bị comment (WIP), hạ tiếp warnings (194 backend / 118 frontend).
+
+## Ghi chú xác minh (2026-11-04)
+
+- **`admin.ts` vẫn còn `eslint-disable react-hooks/rules-of-hooks`** (`frontend/src/hooks/tankstack/admin.ts:96-104`) — đây là disable **có chủ đích + có chú thích** cho 3 dòng `usePagedList(...)` ở module level (factory pattern, xác minh trong `admin-crud.ts`). **Không** phải nợ kỹ thuật cần xoá; ghi chú cũ trong V17 ("đã thay bằng `createPagedList`") là **không chính xác** — repo không có helper tên `createPagedList`.
+- **6 workflow vẫn đúng tên/trigger/paths** sau khi rà lại `.github/workflows/` (backend/frontend/ai × CI/CD) — khớp bảng trong `docs/guildes/CICD_GUILDLINES.md`.
+- **CI hiện chạy `npm test -- --passWithNoTests`** (cả backend lẫn frontend). Đây là điểm sẽ đổi ở **V19** (bỏ cờ này + bật coverage threshold) — sau khi V19 xong, cần sửa lại bảng lệnh trong `CICD_GUILDLINES.md`.
+- **`ai-service/Dockerfile`** vẫn đang bị comment toàn bộ (WIP của developer) — chưa đụng, đúng phạm vi.
+

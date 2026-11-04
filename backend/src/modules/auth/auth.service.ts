@@ -244,9 +244,10 @@ export class AuthService {
     const session = await this.sessionService.getSession(sessionId);
 
     if (!session || session.refreshToken !== refreshToken) {
-      // this.logger.warn('[Session]', JSON.stringify(session));
-      this.logger.log('[Session Token]', session?.refreshToken);
-      this.logger.log('[Refresh Token]', refreshToken);
+      // Không log token/session (dữ liệu nhạy cảm) — xem docs/CODE_RULES.md §2.4
+      this.logger.warn(
+        `[Session] Refresh token không hợp lệ hoặc session đã bị thu hồi: sessionId=${sessionId}`,
+      );
       throw new UnauthorizedException('Token không hợp lệ hoặc đã hết hạn');
     }
 

@@ -1,27 +1,38 @@
 # Kế hoạch đồ án — Movie App & Recommendation System
 
-> Đây là kế hoạch tổng thể để phát triển trọn vẹn **2 service** (backend + ai-service) theo từng giai đoạn.
+> ⚠ **Tài liệu lịch sử**: nội dung chính dưới đây là **kế hoạch/ảnh chụp giai đoạn đầu** của dự án. Hiện trạng đã thay đổi đáng kể — xem mục **2.1 Hiện trạng xác minh 2026-11-04** và các tài liệu hiện trạng:
+>
+> - [BACKEND.md](./BACKEND.md) — backend NestJS
+> - [AI-SERVICE.md](./AI-SERVICE.md) — ai-service FastAPI
+> - [FRONTEND.md](./FRONTEND.md) — frontend Next.js
+> - [DATABASE-DESIGN.md](./DATABASE-DESIGN.md) — thiết kế DB thực tế
+>
+> **Ngày xác minh phần hiện trạng: 2026-11-04.**
+
 > Chi tiết triển khai từng service ở các file riêng:
 >
-> - [V2_backend-plan.md](./V2_backend-plan.md) — Kế hoạch phát triển **backend** (NestJS)
-> - [ai-service-plan.md](./ai-service-plan.md) — Kế hoạch phát triển **ai-service** (Python/FastAPI)
+> - [plans/V1_backend-plan.md](./plans/V1_backend-plan.md) — Kế hoạch phát triển **backend** (NestJS)
+> - [plans/V7_ai-service-architecture.md](./plans/V7_ai-service-architecture.md) — Kiến trúc **ai-service** (Python/FastAPI)
 
 ---
 
 ## 1. Tóm tắt dự án
 
-Ứng dụng **web phim** với hệ thống **gợi ý phim thông minh**, gồm 2 phần:
+Ứng dụng **web phim** với hệ thống **gợi ý phim thông minh**, gồm 3 phần:
 
 | Phần           | Công nghệ           | Vai trò                                                                                        |
 | -------------- | ------------------- | ---------------------------------------------------------------------------------------------- |
-| **backend**    | NestJS + PostgreSQL | Web phim: CRUD phim, xem phim, tương tác user (đánh giá, yêu thích, xem), data lấy từ **TMDB** |
+| **backend**    | NestJS + PostgreSQL | Web phim: auth/RBAC, CRUD phim, xem phim, tương tác user (đánh giá, yêu thích, xem), data lấy từ **TMDB** |
 | **ai-service** | Python + FastAPI    | Gợi ý phim: **semantic search tiếng Việt** + **collaborative filtering**                       |
+| **frontend**   | Next.js + Tailwind + shadcn/ui | Giao diện user/admin, gọi backend qua HTTP                                            |
 
-Hai service **giao tiếp bất đồng bộ qua RabbitMQ** và **gọi HTTP** khi cần kết quả tức thời.
+Hai service backend ↔ ai-service **giao tiếp bất đồng bộ qua RabbitMQ** và **gọi HTTP** khi cần kết quả tức thời (module recommendations của backend).
 
 ---
 
-## 2. Hiện trạng
+## 2. Hiện trạng (lịch sử — giai đoạn đầu, không còn đúng)
+
+> Phần này giữ lại để tham khảo lịch sử. **Không dùng làm hiện trạng** — xem mục 2.1.
 
 ### backend — đã có nền, còn thiếu phần lõi
 
@@ -40,9 +51,31 @@ Hai service **giao tiếp bất đồng bộ qua RabbitMQ** và **gọi HTTP** k
 
 > ⚠️ **Chốt quan trọng theo chủ dự án:** các bước _format data khớp DB của app_, _lưu vector search_, _kết nối giao tiếp 2 service_ chỉ tiến hành **sau khi dịch xong sang tiếng Việt**.
 
+### 2.1 Hiện trạng xác minh 2026-11-04
+
+**backend (NestJS `:8081`, global prefix `api`)**
+- ✅ Đầy đủ module: `auth` (JWT + refresh cookie + Redis session + Google OAuth), `users`, `roles`, `movies`, `genres`, `countries`, `peoples`, `ratings`, `comments`, `interactions`, `files`, `failed-events`, `health`, `recommendations`.
+- ✅ Redis (session/blacklist/rate-limit), RabbitMQ producer (`movie.exchange`, `user.exchange`, `interaction.exchange`) + consumer DLQ ghi `failed_events`, Socket.IO realtime, cron `training.batch`.
+- ✅ `GET /api/movies/search` (search nâng cao) hoạt động; `GET /api/recommendations/similar/:id` proxy HTTP sang ai-service; `semantic-search`/`hybrid-search` còn **stub**.
+- ⚠ `permissions` vẫn là module stub; `@Roles` chỉ được enforce ở `/api/roles` (RolesGuard chỉ gắn ở RolesController). Chi tiết: [BACKEND.md](./BACKEND.md).
+
+**ai-service (FastAPI `:8082`, prefix `/api/recommendations`)**
+- ✅ FastAPI thật với các route health/tracing/auth, semantic-search, similar, search, hybrid-search; embedding Sentence-Transformers + ChromaDB; ALS (implicit); RabbitMQ consumer (`recommendation.queue`, `interaction.queue`); Redis; OpenTelemetry; TrainingScheduler; bộ test `tests/unit/`.
+- ⚠ `/search` nhiều khả năng lỗi 500 (route đọc `pageSize` trong khi schema là `page_size`); CORS mặc định thiếu `:3002`; Dockerfile comment toàn bộ. Chi tiết: [AI-SERVICE.md](./AI-SERVICE.md).
+
+**frontend (Next.js `:3002`)**
+- ✅ App Router với các trang user/admin thật (auth, profile, movies, my-history/favorites, dashboard, CRUD admin).
+- ✅ Dùng `GET /api/movies/search` cho home (latest/top-rated/most-viewed) và `/api/recommendations/similar/:id` cho “Phim tương tự”; onboarding sở thích V15 đã mount.
+- ⚠ Trang `/movies` vẫn lọc/sắp xếp client-side; lệch shape `country` vs `countries`. Chi tiết: [FRONTEND.md](./FRONTEND.md).
+
+**Hạ tầng**
+- PostgreSQL (TypeORM `synchronize: true`, không migration), Redis, RabbitMQ (DLQ), ChromaDB, Kong gateway (`:8000`), Prometheus/OpenTelemetry. Dockerfile ai-service chưa dùng được.
+
 ---
 
-## 3. Kiến trúc mục tiêu
+## 3. Kiến trúc mục tiêu (lịch sử)
+
+> Sơ đồ dưới là kiến trúc **mục tiêu ban đầu**. Hiện trạng đã gần đạt; khác biệt chính: ai-service dùng **ChromaDB** (không phải Qdrant bắt buộc), CF dùng **ALS (implicit)**, backend có thêm module recommendations proxy HTTP.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -80,15 +113,17 @@ Hai service **giao tiếp bất đồng bộ qua RabbitMQ** và **gọi HTTP** k
                     └─────────────────────────────┘
 ```
 
-### Hạ tầng dùng chung (docker-compose)
+### Hạ tầng dùng chung (hiện trạng 2026-11-04)
 
 | Thành phần    | Trạng thái      | Ghi chú                                              |
 | ------------- | --------------- | ---------------------------------------------------- |
-| PostgreSQL    | cần thêm        | db chính của backend (auth đã dùng)                  |
-| RabbitMQ      | ✅ có (compose) | message broker giữa 2 service                        |
-| Redis         | ✅ có (compose) | cache backend + job queue ai-service                 |
-| Vector DB     | ❌ chưa có      | đề xuất **Qdrant** (đơn giản, nhẹ, có client Python) |
-| Observability | ✅ có (compose) | Jaeger/Prometheus/Logstash                           |
+| PostgreSQL    | ✅ dùng         | DB chính của backend (TypeORM `synchronize: true`)   |
+| RabbitMQ      | ✅ dùng         | `movie.exchange`, `user.exchange`, `interaction.exchange` + DLQ |
+| Redis         | ✅ dùng         | backend: session/blacklist/rate-limit; ai-service: `RedisStore` |
+| Vector DB     | ✅ ChromaDB     | ai-service persist `./data/chroma_db`; hỗ trợ qdrant/redis/memory qua env |
+| Gateway       | ✅ Kong `:8000` | `/api` → `:8081`, `/api/recommendations` → `:8082`   |
+| Observability | ✅ OpenTelemetry + Prometheus | backend Winston/OTel; ai-service `/api/metrics` |
+| Docker        | ⚠ một phần      | `ai-service/Dockerfile` đang comment toàn bộ — chưa build được |
 
 ---
 
@@ -106,7 +141,9 @@ Cần thống nhất **khóa định danh** giữa 3 nguồn:
 
 Mapping bắt buộc: `movies.tmdb_id` (backend) ↔ `tmdb_id` (ai-service index) thông qua bảng `links.csv` để nối rating MovieLens → phim của app.
 
-### 4.2 RabbitMQ (bất đồng bộ)
+### 4.2 RabbitMQ (bất đồng bộ) — thiết kế ban đầu (lịch sử)
+
+> Routing key/exchange dưới đây là **thiết kế ban đầu**; hiện trạng dùng tên khác — xem mục 4.3.
 
 - **Exchange:** `movie.events` (kiểu `topic`)
 - **Routing keys / Message:**
@@ -125,9 +162,23 @@ Mapping bắt buộc: `movies.tmdb_id` (backend) ↔ `tmdb_id` (ai-service index
 3. AI service **consume** các event → cập nhật vector DB + dữ liệu train collab **mà không cần hỏi lại backend từng record**.
 4. Khi frontend cần **kết quả tức thời** (tìm kiếm, gợi ý) → backend **gọi HTTP** đến ai-service.
 
+### 4.3 Kênh giao tiếp thực tế (xác minh 2026-11-04)
+
+- **RabbitMQ** (backend producer; ai-service consumer):
+  - `movie.exchange` — routing key `movie.created` / `movie.updated` / `movie.deleted`.
+  - `user.exchange` — `user.created` / `user.updated` / `user.deleted` / `user.email_verification.requested` / `user.email_verified`.
+  - `interaction.exchange` — `interaction.event` (`eventType=interaction.created`) và `training.batch`.
+  - DLQ: `recommendation.queue.dlq` + `interaction.queue.dlq` → backend consumer ghi bảng `failed_events`.
+- **HTTP**:
+  - backend → ai-service: `GET {AI_SERVICE_URL}/similar/:id` (module recommendations; mặc định `http://localhost:8082/api/recommendations`).
+  - frontend → backend: `http://localhost:8081/api` (axiosClient), chưa dùng Kong gateway.
+- Chi tiết đầy đủ ở [BACKEND.md](./BACKEND.md) mục RabbitMQ và [AI-SERVICE.md](./AI-SERVICE.md).
+
 ---
 
-## 5. Roadmap tổng thể
+## 5. Roadmap tổng thể (lịch sử — đã hoàn thành phần lớn)
+
+> Bảng dưới là roadmap ban đầu. Tính đến 2026-11-04: P0–P4 đã triển khai (backend + ai-service + frontend + kênh giao tiếp); P5 còn một số việc (Dockerfile ai-service, test/coverage, hoàn thiện semantic/hybrid phía backend).
 
 > Kế hoạch triển khai **theo từng phần**, mỗi phần có thể code + kiểm thử độc lập trước khi sang phần sau.
 
@@ -159,5 +210,9 @@ Mapping bắt buộc: `movies.tmdb_id` (backend) ↔ `tmdb_id` (ai-service index
 
 |                                           | File                                       |
 | ----------------------------------------- | ------------------------------------------ |
-| Chi tiết hiện trạng + kế hoạch backend    | [V2_backend-plan.md](./V2_backend-plan.md) |
-| Chi tiết hiện trạng + kế hoạch ai-service | [ai-service-plan.md](./ai-service-plan.md) |
+| Chi tiết hiện trạng backend               | [BACKEND.md](./BACKEND.md)                 |
+| Chi tiết hiện trạng ai-service            | [AI-SERVICE.md](./AI-SERVICE.md)           |
+| Chi tiết hiện trạng frontend              | [FRONTEND.md](./FRONTEND.md)               |
+| Thiết kế DB thực tế                       | [DATABASE-DESIGN.md](./DATABASE-DESIGN.md) |
+| Kế hoạch backend (lịch sử)                | [plans/V1_backend-plan.md](./plans/V1_backend-plan.md) |
+| Kiến trúc ai-service (lịch sử)            | [plans/V7_ai-service-architecture.md](./plans/V7_ai-service-architecture.md) |

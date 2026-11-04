@@ -347,10 +347,11 @@ export class MoviesService {
     queryBuilder.andWhere('movie.backdropPath IS NOT NULL');
 
     // keyword search: titile, titleVi
-    if (keyword?.trim()) {
+    const trimmedKeyword = keyword?.trim();
+    if (trimmedKeyword) {
       queryBuilder.andWhere(
         '(movie.title ILIKE :keyword OR movie.titleVi ILIKE :keyword)',
-        { keyword: `%${keyword}%` },
+        { keyword: `%${trimmedKeyword}%` },
       );
     }
 

@@ -33,6 +33,8 @@ class ApiResponse(BaseModel, Generic[DataT]):
     result: DataT | None = None
     errorCode: str | None = None
     pagination: Pagination | None = None
+    timestamp: str | None = None
+    path: str | None = None
 
 
 # Similar & Semantic Search Movies Response

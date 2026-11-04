@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from typing import Any
 
@@ -38,8 +38,10 @@ class MovieEventHandler:
             Re-raise moi loi khac de MessageQueue quyet dinh retry hay DLQ.
         """
 
-        if payload.get("title", "") == "" or payload.get("overview", "") == "":
-            raise Exception("Title or overview is required")
+        # Chỉ created/updated cần title & overview; movie.deleted chỉ có movieId.
+        if event_type in ("movie.created", "movie.updated"):
+            if payload.get("title", "") == "" or payload.get("overview", "") == "":
+                raise Exception("Title or overview is required")
 
         if event_type == "movie.created":
             await self._on_movie_created(payload)

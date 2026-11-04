@@ -1,8 +1,9 @@
 # V11 — Frontend UI Roadmap (User-facing + Admin CRUD)
 
-- **Trạng thái**: Đang thực hiện — **Phase 0 (baseline) xong ở mức môi trường**, **Phase 1 (nền tảng + trang chủ + danh sách phim + movie card UX) hoàn thành → đã đóng**, **Phase 2 (chi tiết phim `/movies/[id]`) hoàn thành → đã đóng**, **Phase 1.5 (base layout shell responsive: fix scroll ngang, bottom nav, header user dropdown, footer site info + trang about/contact/privacy/terms) hoàn thành → đã đóng**, **Phase 3 (tương tác cá nhân: `/my-history`, `/my-favorites`, dislike ở chi tiết, nav cá nhân, guard đăng nhập) hoàn thành → đã đóng**, **Phase 5 (admin CRUD + dashboard: kit data-table/form-dialog, CRUD movies/genres/countries/people/users/roles, trang interaction 3 tab, dashboard recharts) hoàn thành → đã đóng**, **Mở rộng Phase 5 (fix cuộn ngang admin, bottom nav mobile admin, dropdown điều hướng nhanh header user+admin, footer admin, nâng cấp Dashboard: 6 thẻ chỉ số + 7 biểu đồ + hoạt động gần đây + cảnh báo dữ liệu + lọc thời gian/làm mới/xuất CSV) hoàn thành** — một số thống kê cần backend aggregate (trend theo thời gian, người dùng mới trong kỳ) chưa làm, đã ghi rõ trong plan; còn lại **Phase 4 (semantic search — ⚠ đang bị chặn bởi ai-service lỗi 500 + CORS)**. Lưu ý: DoD `lint`/`build` đang bị chặn bởi lỗi baseline có sẵn trong repo (xem "Ghi chú triển khai Phase 1").
+- **Trạng thái**: Đang thực hiện — **Phase 0 (baseline) xong ở mức môi trường**, **Phase 1 (nền tảng + trang chủ + danh sách phim + movie card UX) hoàn thành → đã đóng**, **Phase 2 (chi tiết phim `/movies/[id]`) hoàn thành → đã đóng**, **Phase 1.5 (base layout shell responsive: fix scroll ngang, bottom nav, header user dropdown, footer site info + trang about/contact/privacy/terms) hoàn thành → đã đóng**, **Phase 3 (tương tác cá nhân: `/my-history`, `/my-favorites`, dislike ở chi tiết, nav cá nhân, guard đăng nhập) hoàn thành → đã đóng**, **Phase 5 (admin CRUD + dashboard: kit data-table/form-dialog, CRUD movies/genres/countries/people/users/roles, trang interaction 3 tab, dashboard recharts) hoàn thành → đã đóng**, **Mở rộng Phase 5 (fix cuộn ngang admin, bottom nav mobile admin, dropdown điều hướng nhanh header user+admin, footer admin, nâng cấp Dashboard: 6 thẻ chỉ số + 7 biểu đồ + hoạt động gần đây + cảnh báo dữ liệu + lọc thời gian/làm mới/xuất CSV) hoàn thành** — một số thống kê cần backend aggregate (trend theo thời gian, người dùng mới trong kỳ) chưa làm, đã ghi rõ trong plan; còn lại **Phase 4 (semantic search) — mới mở khoá một phần**: backend đã có `GET /api/recommendations/similar/:id` (proxy HTTP → ai-service, xem `backend/src/modules/recommendations/recommendations.controller.ts:18-31`) và `GET /api/movies/search` (lọc/sắp xếp server-side, `backend/src/modules/movies/movies.controller.ts`); FE đã dùng similar ở trang chi tiết. Tuy nhiên `semantic-search`/`hybrid-search` của backend vẫn là **stub** trả `{status, message, data: []}` và ai-service `/search` có lỗi tiềm ẩn (`pageSize` vs `page_size`) + CORS mặc định chưa có `:3002` → semantic search vẫn **chưa làm được**. Lưu ý: DoD `lint`/`build` đang bị chặn bởi lỗi baseline có sẵn trong repo (xem "Ghi chú triển khai Phase 1").
 - **Người thực hiện**: AI Agent
 - **Thời gian**: 2026-10-17
+- **Ngày xác minh**: 2026-11-04 (đối chiếu lại với code thực tế; xem `docs/FRONTEND.md`, `docs/BACKEND.md`, `docs/AI-SERVICE.md` cùng ngày)
 - **Phạm vi**: `frontend/` — xây dựng toàn bộ giao diện user-facing (trang chủ, danh sách phim, chi tiết phim, tương tác cá nhân, semantic search) và khu vực admin CRUD (movies/genres/countries/peoples/users/roles/interaction + dashboard). Không sửa backend/ai-service.
 - **Tài liệu liên quan**: [../FRONTEND.md](../FRONTEND.md), [../FRONTEND_RULES.md](../FRONTEND_RULES.md)
 
@@ -28,9 +29,9 @@
 
 **Mục tiêu**: Cài dependencies và xác lập baseline build/lint trước khi viết code.
 
-- [ ] Chạy `npm install` trong `frontend/` (node_modules hiện chưa có)
-- [ ] Chạy `npm run lint` — ghi nhận danh sách warning/error hiện có làm baseline
-- [ ] Chạy `npm run build` — xác nhận build pass trước khi thay đổi
+- [x] Chạy `npm install` trong `frontend/` — ✅ đã có `frontend/node_modules` + `package-lock.json` (xác minh 2026-11-04; ghi chú cũ "chưa có node_modules" đã lỗi thời)
+- [ ] Chạy `npm run lint` — ghi nhận danh sách warning/error hiện có làm baseline *(đã được xử lý sau đó ở V14: lint/type-check/build xanh — xem `V14_cicd_ci-cd-setup-fix-workflows.md`)*
+- [ ] Chạy `npm run build` — xác nhận build pass trước khi thay đổi *(đã được xử lý sau đó ở V14)*
 - [ ] Kiểm tra backend chạy ở `http://localhost:8081/api` và CORS cho `http://localhost:3002`
 - [ ] Kiểm tra `frontend/.env` có `NEXT_PUBLIC_API_BASE_URL=http://localhost:8081/api`
 - [ ] Chạy `npm run dev`, mở `http://localhost:3002/auth/login` xác nhận auth thật hoạt động
@@ -131,7 +132,7 @@
 - [x] Tạo `frontend/src/components/movie/movie-rating.tsx` — chọn sao 1–5 + submit `POST /api/ratings` (`{ rating, movieId }`), hiển thị `voteAverage`/`voteCount`, cập nhật realtime qua WS `movie-{id}-rating` (`movieStats`)
 - [x] Tạo `frontend/src/components/movie/movie-comments.tsx` — root comments (`GET /api/comments/movie/:movieId?page&limit`), tải reply theo `parentId`, form gửi `POST /api/comments` (`{ content, movieId, parentId? }`), phân trang bằng `DataPagination`, hiển thị `replyCount`, tái sử dụng `Textarea`/`Input`/`Avatar` shadcn
 - [x] Tạo `frontend/src/components/movie/movie-view-count.tsx` — hiển thị lượt xem từ `{ viewCount }`, cập nhật realtime qua WS `movie-{id}-viewCount`
-- [x] Tạo `frontend/src/components/movie/similar-movies.tsx` — **placeholder** (chưa có endpoint phim tương đồng; hiển thị giải thích + link khám phá theo thể loại của phim)
+- [x] Tạo `frontend/src/components/movie/similar-movies.tsx` — **đã hoạt động thật** (xác minh 2026-11-04): gọi `useGetSimilarMovies` → `GET /api/recommendations/similar/:id` (backend proxy HTTP sang ai-service), hiển thị `MovieRow` + empty state. *Lưu ý: comment "placeholder" còn sót trong file là ghi chú cũ, không phản ánh code hiện tại.*
 - [x] Tạo `frontend/src/hooks/tankstack/useRating.ts` (`['ratings', movieId]` + mutation invalidate `['ratings']`/`['movie']`/`['movies']`)
 - [x] Tạo `frontend/src/hooks/tankstack/useComment.ts` (`['comments', movieId]` + mutation invalidate, optimistic prepend khi gửi, rollback `onError`)
 - [x] Tạo `frontend/src/hooks/useMovieSocket.ts` — kết nối `socket.io-client` (URL derive từ `NEXT_PUBLIC_API_BASE_URL`, **không hardcode cổng**), lắng nghe `movie-{id}-comment`, `movie-{id}-rating`, `movie-{id}-viewCount`, `movie-{id}-typing`; **emit `typingComment`** `{ movieId, isTyping, userFullName? }`; handler giữ ref, cleanup khi unmount
@@ -146,7 +147,7 @@
 - **URL Socket.IO** derive từ `NEXT_PUBLIC_API_BASE_URL` (bỏ hậu tố `/api`) — không hardcode `:8081` (tuân thủ rule env).
 - **Không dùng class `prose`** cho `react-markdown` vì repo không cài `@tailwindcss/typography` → style markdown bằng arbitrary variant (`[&_p]:mb-2`, `[&_li]:list-disc`…).
 - **Rating submit lại**: backend unique (user, movie) — submit lần 2 trả lỗi → hiển thị message server qua toast (không tự thay đổi logic backend).
-- **`similar-movies`**: placeholder có chủ đích (backend chưa có endpoint); hiển thị giải thích + link khám phá theo thể loại — không bịa dữ liệu.
+- **`similar-movies`**: **đã cập nhật sau này** — code hiện tại gọi `useGetSimilarMovies` (`GET /api/recommendations/similar/:id`) và render `MovieRow`; ghi chú "placeholder" phía trên chỉ đúng ở thời điểm Phase 2 (2026-10-17), khi backend chưa có endpoint. Xem `docs/FRONTEND.md` mục recommendation.
 - **Chặn DoD**: vẫn là 4 lỗi baseline cũ (`api/auth/signup/route.ts` ×2, `ui/calendar.tsx`, `ui/drawer.tsx`) — `tsc --noEmit` không phát sinh lỗi mới cho toàn bộ code Phase 2.
 - **File dự kiến tạo**: `src/app/(main)/movies/[id]/page.tsx` + `loading.tsx`, `src/components/movie/{movie-detail,movie-detail-view,movie-rating,movie-comments,movie-view-count,similar-movies}.tsx`, `src/hooks/tankstack/{useRating,useComment}.ts`, `src/hooks/useMovieSocket.ts`, thêm `src/shared/types/{rating,comment}.types.ts` + `src/apis/{rating,comment}.api.ts`
 
@@ -186,7 +187,7 @@
 
 **Mục tiêu**: Tìm kiếm ngữ nghĩa tiếng Việt (kết hợp keyword fallback), hiển thị kết quả kèm mức tương đồng.
 
-> **Điều kiện tiên quyết (blocking)**: (1) ai-service phải fix lỗi **HTTP 500** ở `/search` và `/hybrid` và cấu hình **CORS**; (2) phải chốt **cách gọi**: backend **KHÔNG có** endpoint search/recommendation — recommendation do ai-service cung cấp tại prefix `/api/recommendations`, có thể gọi qua **Kong gateway `:8000`** (`/api/recommendations` → `:8082`). Nếu chưa chốt/chưa sẵn sàng → chuyển sang Phase 5 và quay lại sau.
+> **Điều kiện tiên quyết (cập nhật 2026-11-04)**: backend **đã có** module `RecommendationsModule` gọi HTTP sang ai-service (`GET /api/recommendations/similar/:id` hoạt động) và **đã có** `GET /api/movies/search` (lọc/sắp xếp server-side). Phần còn thiếu để làm semantic search: (1) backend `GET /api/recommendations/semantic-search` và `/hybrid-search` vẫn là **stub** trả `{status, message, data: []}` (chưa gọi ai-service, `backend/src/modules/recommendations/recommendations.controller.ts:33-55`); (2) ai-service `/search` có lỗi tiềm ẩn `request.pageSize` vs schema `page_size` (cần xác minh runtime) và CORS mặc định chỉ cho `:3000`/`:5173`, **chưa có `:3002`** nếu không override env. Vì vậy có thể làm ngay phần search keyword/filter qua backend; semantic/hybrid phải chờ 2 điểm trên.
 
 - [ ] Chốt với dev/backend: gọi ai-service qua gateway `:8000/api/recommendations` hay qua base URL riêng; xác nhận contract (method, query `q`, response `result` + `score`)
 - [ ] Thêm biến env cho base URL ai-service/gateway (ví dụ `NEXT_PUBLIC_AI_BASE_URL`) — **không hardcode URL**

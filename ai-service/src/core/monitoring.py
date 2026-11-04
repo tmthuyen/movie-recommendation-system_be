@@ -31,12 +31,32 @@ def configure_monitoring(app: FastAPI) -> None:
     logger.info("Prometheus monitoring configured at /api/metrics")
 
 
-cpu_usage = Gauge("system_cpu_usage_percent", "System CPU usage (%)")
-memory_usage = Gauge("system_memory_usage_percent", "System RAM usage (%)")
-memory_total = Gauge("system_memory_total_bytes", "System total physical memory")
-memory_available = Gauge("system_memory_available_bytes", "System available memory")
-app_memory = Gauge("app_memory_usage_bytes", "AI service RAM usage")
-disk_usage = Gauge("system_disk_usage_percent", "Disk usage (%)")
+def _create_gauge(name: str, doc: str) -> Gauge:
+    """Tạo Gauge, trả về collector đã đăng ký nếu module bị import 2 lần.
+
+    Module này có thể được import dưới 2 tên package (`core.monitoring` và
+    `src.core.monitoring`) tuỳ entrypoint; prometheus_client sẽ ném
+    DuplicateTimeseries. Giữ hành vi cũ nhưng không crash khi import lặp.
+    """
+    try:
+        return Gauge(name, doc)
+    except ValueError:
+        from prometheus_client import REGISTRY
+
+        existing = REGISTRY._names_to_collectors.get(name)
+        if existing is None:
+            raise
+        return existing  # type: ignore[return-value]
+
+
+cpu_usage = _create_gauge("system_cpu_usage_percent", "System CPU usage (%)")
+memory_usage = _create_gauge("system_memory_usage_percent", "System RAM usage (%)")
+memory_total = _create_gauge("system_memory_total_bytes", "System total physical memory")
+memory_available = _create_gauge(
+    "system_memory_available_bytes", "System available memory"
+)
+app_memory = _create_gauge("app_memory_usage_bytes", "AI service RAM usage")
+disk_usage = _create_gauge("system_disk_usage_percent", "Disk usage (%)")
 
 process = psutil.Process()
 

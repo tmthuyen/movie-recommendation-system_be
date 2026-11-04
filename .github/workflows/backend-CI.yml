@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-# NestJS Ci
+  # NestJS Ci
   backend-ci:
     runs-on: ubuntu-latest
     strategy:
@@ -57,8 +57,17 @@ jobs:
 
       - name: Test
         run: |
-          npm test -- --passWithNoTests
+          npm test -- --coverage
         shell: bash
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage-node-${{ matrix.node-version }}
+          path: backend/coverage
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Build
         run: |

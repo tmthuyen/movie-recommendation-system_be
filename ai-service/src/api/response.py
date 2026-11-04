@@ -37,5 +37,5 @@ def failure(message: str, error_code: str, status_code: int, request: Request) -
         message=message,
         errorCode=error_code,
         timestamp=datetime.now().isoformat(),
-        path=request.path,
+        path=request.url.path,
     ).model_dump(exclude_none=True)

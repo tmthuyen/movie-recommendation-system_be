@@ -1,17 +1,23 @@
 # FRONTEND — Next.js (movie-recommendation)
 
 > Tài liệu hiện trạng frontend. Quy tắc bắt buộc khi viết code xem [FRONTEND_RULES.md](./FRONTEND_RULES.md). Kế hoạch triển khai UI xem [plans/V11_frontend_ui-roadmap.md](./plans/V11_frontend_ui-roadmap.md).
+>
+> **Ngày xác minh: 2026-11-04.** Các kết luận hành vi dưới đây được đối chiếu trực tiếp với code `frontend/src/` và controller backend tương ứng (file:line ghi kèm khi cần). Phần nào chưa chạy runtime sẽ ghi rõ “cần xác minh”.
 
 ## About
 
 - Frontend là lớp giao diện web của dự án **"Ứng dụng mô hình ngôn ngữ vào hệ thống gợi ý phim"**, nằm ở thư mục `frontend/`, chạy **Next.js 16 (App Router) + React 19 + TypeScript + Tailwind CSS v4 + shadcn/ui**.
 - Vai trò chính: hiển thị danh sách/chi tiết phim, tìm kiếm, tương tác người dùng (đánh giá, bình luận, yêu thích, lịch sử xem) và khu vực quản trị (CRUD) cho admin.
 - Giao tiếp **trực tiếp** với backend NestJS tại `http://localhost:8081/api` từ trình duyệt (không qua tầng BFF), thông qua `axiosClient` ở `frontend/src/lib/axiosClient.ts` với `withCredentials=true` (refresh token nằm trong httpOnly cookie của backend).
-- **Backend NestJS KHÔNG có endpoint search/recommendation** — recommendation do ai-service (FastAPI `:8082`, prefix `/api/recommendations`) cung cấp; backend ↔ ai-service giao tiếp qua RabbitMQ (không HTTP-call lẫn nhau).
-- Hạ tầng có **Kong gateway (`gateway/kong.yml`, `:8000`)**: `/api` → `8081`, `/api/recommendations` → `8082`; hiện frontend trong code **chưa dùng gateway**, đang gọi thẳng `:8081` và **chưa có client nào gọi ai-service**.
+- **Backend NestJS CÓ endpoint search và recommendation**:
+  - `GET /api/movies/search` — tìm kiếm nâng cao (keyword, sort, genreIds, countryIds, khoảng năm) — xem `docs/BACKEND.md`.
+  - `GET /api/recommendations/similar/:id` — phim tương tự, backend proxy HTTP sang ai-service rồi map DB; FE gọi qua `recommendationApi.getSimilarMovies` → `axiosClient` (`frontend/src/apis/recommendation.api.ts:18-24`), dùng ở `SimilarMovies` (`frontend/src/components/movie/similar-movies.tsx:42-51`).
+  - `GET /api/recommendations/semantic-search` và `GET /api/recommendations/hybrid-search` — **stub** ở backend (trả `{status, message, data: []}`), FE đã có api/hook nhưng chưa dùng thực tế.
+  - Backend ↔ ai-service giao tiếp **2 kênh**: RabbitMQ (event) + HTTP (module recommendations).
+- Hạ tầng có **Kong gateway (`gateway/kong.yml`, `:8000`)**: `/api` → `8081`, `/api/recommendations` → `8082`; **hiện frontend gọi thẳng backend `:8081`**, chưa dùng gateway và chưa có client gọi trực tiếp ai-service `:8082`.
 - Port dev: **3002** — script `npm run dev` chạy `next dev -p 3002`; backend đã cho phép CORS với `http://localhost:3002`.
 - Ngôn ngữ giao diện: **tiếng Việt**; có dark mode (class-based qua `next-themes`).
-- ⚠ **`frontend/node_modules` chưa được cài** — phải chạy `npm install` trong `frontend/` trước khi `npm run dev` / `npm run build`.
+- **Onboarding sở thích (V15)**: `PreferenceOnboardingGate` mount trong `src/app/(main)/layout.tsx:4,11`; hiện dialog chọn thể loại cho user đã đăng nhập chưa có `preferenceData.genre`, lưu qua `PUT /api/users/me`, có nút bỏ qua lưu `localStorage` theo user (`preference-onboarding-gate.tsx:24-89`).
 
 ## Techstacks
 
@@ -65,7 +71,7 @@ frontend/
     │   ├── globals.css      # Design tokens Tailwind v4 (CSS-first): :root light, .dark, [data-theme=…], radius
     │   ├── not-found.tsx    # Trang 404
     │   ├── (main)/          # Route group cho USER
-    │   │   ├── layout.tsx   # RoleLayout → guest/USER: UserLayout, ADMIN: AdminLayout
+    │   │   ├── layout.tsx   # RoleLayout → guest/USER: UserLayout, ADMIN: AdminLayout; mount PreferenceOnboardingGate
     │   │   ├── (home)/page.tsx        # / — trang chủ THẬT (hero, MovieRow sections, genre/country)
     │   │   ├── movies/                # /movies (danh sách + filter) và /movies/[id] (chi tiết)
     │   │   ├── notification/page.tsx  # /notification (placeholder)
@@ -90,9 +96,10 @@ frontend/
     ├── apis/                # Tầng API — mỗi domain một file `export const xxxApi = {...}` dùng axiosClient
     │   ├── auth.api.ts      # login/register/refresh/getMe/logout/verify-email…
     │   ├── genre.api.ts     # CRUD genres (mẫu chuẩn cho các api mới)
-    │   ├── movie.api.ts     # List/chi tiết + create/update/delete (admin)
+    │   ├── movie.api.ts     # list/chi tiết, search (`GET /movies/search`), create/update/delete (admin)
     │   ├── country.api.ts / people.api.ts   # CRUD (admin)
     │   ├── rating.api.ts / comment.api.ts / interaction.api.ts  # Toggle + getAll/remove (trang admin)
+    │   ├── recommendation.api.ts # similar (`/recommendations/similar/:id`), semantic-search, hybrid-search
     │   ├── user.api.ts      # Quản lý tài khoản + getAllUsers({page,limit,keyword}) + updateUserRoles
     │   └── role.api.ts      # CRUD vai trò (GET không phân trang)
     │
@@ -104,6 +111,8 @@ frontend/
     │   │   ├── admin-crud.ts   # Factory CRUD admin: createCrudHooks (list+create/update/delete), useCrudPage (state orchestration: pagination, debounce 400ms, dialog), usePagedList/useDeleteOnly
     │   │   ├── admin.ts        # Bộ hooks admin theo domain (adminGenres/Countries/Peoples/Movies/Users/Roles) + interactions/ratings/comments read-only
     │   │   ├── admin-dashboard.ts # useAdminDashboard({days}) — gom 6 list API + memo thống kê dashboard + refresh()
+    │   │   ├── useMovie.ts     # useGetMovies (list), useSearchMovies + useLatest/TopRated/MostViewed/MostLiked (gọi /movies/search với sort)
+    │   │   ├── useRecommendation.ts # useGetSimilarMovies (đã dùng ở SimilarMovies), useSemanticSearch, useHybridRecommendations (api/hook có, chưa dùng UI)
     │   │   └── useInteraction.ts # useToggleInteraction (like, optimistic + invalidate), useMyFavorites/useMyFavoriteKeys (trạng thái nút card), useInteractionStats (like/comment/view realtime fallback),
     │   │                          # useMyHistory + useMyFavoritesPaged (phân trang, queryKey root riêng my-history/my-favorites-page)
     │   ├── useAuth.ts       # ⚠ Đang đọc mock AuthContext — sẽ dọn khi chuyển hẳn useAuthStore
@@ -127,6 +136,7 @@ frontend/
     │   ├── sidebar/         # nav-data.ts (NAV_SECTIONS + BOTTOM_NAV — nguồn route duy nhất cho sidebar/header dropdown/bottom nav),
     │   │                    # nav-main.tsx (render NavSection từ nav-data), nav-user.tsx (trigger sidebar, dùng chung UserMenuContent), user-sidebar, admin-sidebar
     │   ├── auth/            # RequireRole.tsx (phân quyền), RequireAuth.tsx (chỉ cần đăng nhập — guard trang cá nhân), RequireLoginDialog.tsx (hộp thoại yêu cầu đăng nhập khi guest bấm tương tác), InitAuth.tsx (bootstrap token khi F5)
+    │   ├── onboarding/      # PreferenceOnboardingGate (mount ở `(main)/layout.tsx`) + PreferenceOnboardingDialog (chọn thể loại sở thích, lưu `PUT /users/me`)
     │   ├── common/          # UI kit dùng chung: PageHeader, SectionHeader, EmptyState, ErrorState, DataPagination,
     │   │                    # PaginatedView, paginations/Pagination (PaginatedTable), ConfirmDialog, AppModal,
     │   │                    # SkeletonLoader, ThemeToggle; ErrorBoundary.tsx đã comment toàn bộ (không dùng)
@@ -136,7 +146,8 @@ frontend/
     │   ├── movie/           # Domain phim: MovieCard (hover overlay + actions), MovieRow (+MovieRowSkeleton, hàng ngang),
     │   │                    # MovieActions (1 nút Yêu thích = like; variant detail hiện số like realtime), MovieGrid (+MovieGridSkeleton), MovieFilters,
     │   │                    # MovieList, LatestMovies, MovieDetailView/Detail (chi tiết /movies/[id]), MovieRating (sao
-    │   │                    # realtime), MovieComments (phân cấp + typing realtime), MovieViewCount (realtime), SimilarMovies (placeholder),
+    │   │                    # realtime), MovieComments (phân cấp + typing realtime), MovieViewCount (realtime),
+    │   │                    # SimilarMovies (đã gọi useGetSimilarMovies → `/recommendations/similar/:id`; comment trong file còn ghi “placeholder” là stale),
     │   │                    # InteractionMovieList (dùng chung /my-history + /my-favorites: hàng poster + badge type + phân trang)
     │   ├── header/          # admin-header (logo Admin + QuickNavDropdown + nút về trang user + toggle theme + UserMenu)
     │   ├── dropdown/        # user-dropdown, notification-dropdown, streak-dropdown, dropdown-container
@@ -293,9 +304,10 @@ NEXT_PUBLIC_TINYMCE_API_KEY=<TinyMCE key>
 
 | Method | Endpoint | Auth | Query/Body | Trả về (`result`) |
 |---|---|---|---|---|
-| GET | `/api/movies` | Public | `{ page, limit, keyword }` (keyword ILIKE `title`/`titleVi`; **không hỗ trợ filter genre/country/sort**) | `movie[]` (join genres, country, peoples) + `pagination`, sort mặc định `createdAt DESC` |
+| GET | `/api/movies` | Public | `{ page, limit, keyword }` (keyword ILIKE `title`/`titleVi`; **không hỗ trợ filter genre/country/sort**) | `movie[]` (join genres, countries M2M, moviePeoples) + `pagination`, sort mặc định `createdAt DESC` |
+| GET | `/api/movies/search` | Public | `{ page=1, limit=10, keyword?, sort=releaseDate:DESC, genreIds?, countryIds?, releaseYearFrom?, releaseYearTo? }` | `movie[]` + `pagination`; chỉ trả phim đủ `title/titleVi/releaseDate/overview/overviewVi/posterPath/backdropPath`; `sort` ∈ `releaseDate,voteAverage,viewCount,likeCount,createdAt` |
 | GET | `/api/movies/:id` | Public | path `id` (**number**, bigint) | `movie` (kèm relations) |
-| POST | `/api/movies/:id/view` | Optional JWT | — | `{ viewCount }` — anti-spam 1 lần/user/movie, WS `movie-{id}-viewCount` |
+| POST | `/api/movies/:id/view` | Optional JWT | — | `{ viewCount, score, interaction: 'created'\|'updated'\|'none' }` — luôn tăng `viewCount`; user đăng nhập mới tạo/tăng `click`; WS `movie-{id}-viewCount` |
 | GET | `/api/genres` | Public | `{ page, limit, keyword }` | `genre[]` + `pagination` |
 | GET | `/api/countries` | Public | `{ page, limit, keyword }` | `country[]` + `pagination` |
 | GET | `/api/peoples` | Public | `{ page, limit, keyword }` | `people[]` + `pagination` |
@@ -307,9 +319,12 @@ NEXT_PUBLIC_TINYMCE_API_KEY=<TinyMCE key>
 | GET | `/api/interactions/stats/:movieId` | Public | — | `{ movieId, likeCount, commentCount, viewCount, ratingCount, voteAverage }` |
 | GET | `/api/interactions/my-history` | JWT | `{ page, limit }` | `interaction[]` (`type=click`) + `pagination` |
 | GET | `/api/interactions/my-favorites` | JWT | `{ page, limit }` | `interaction[]` (`type=like`) + `pagination` |
+| GET | `/api/recommendations/similar/:id` | Public | path `id` (number), query `topK?` (mặc định 10) | `movie[]` kèm `similarityScore`, `rank` + `pagination` (envelope chuẩn) |
+| GET | `/api/recommendations/semantic-search` | Public | `keyword?`, `topK?` | **stub** — `{status, message, data: []}` (không envelope) |
+| GET | `/api/recommendations/hybrid-search` | Public | `{ userId (bắt buộc), keyword?, topK?, page?, pageSize? }` | **stub** — `{status, message, data: []}` (không envelope) |
 | — | `/api/auth/*`, `/api/users`, `/api/roles` | — | — | Đã có api/hook (auth, user, role, genre) |
 
-- Endpoint recommendation/tìm kiếm ngữ nghĩa **chưa có ở backend** — ai-service cung cấp qua `/api/recommendations` (gateway `:8000` → `:8082`); cần chốt cách gọi trước khi làm (xem V11 Phase 4).
+- **Search/recommendation đã có ở backend**: `/api/movies/search` là search nâng cao thật (home dùng qua `useLatestMovies`/`useTopRatedMovies`/`useMostViewedMovies` → `useSearchMovies`, `frontend/src/hooks/tankstack/useMovie.ts:99-173`); `/api/recommendations/similar/:id` là proxy thật sang ai-service và đã dùng ở `SimilarMovies`. `semantic-search`/`hybrid-search` mới là stub — chưa nối UI thật (xem V11 Phase 4).
 - **Socket.IO cùng `:8081`** (CORS `origin: '*'`, không bắt buộc auth): server→client `movie-{id}-comment`, `movie-{id}-rating`, `movie-{id}-interaction`, `movie-{id}-viewCount`, `movie-{id}-typing`; client→server `typingComment` `{ movieId, isTyping, userFullName? }`. Trang chi tiết chỉ dùng **1 socket dùng chung** (`hooks/useMovieSocket.ts`), mỗi widget subscribe event của mình.
 - **Rate limit**: global **100 request/phút** cho mọi request (fixed-window theo IP) + override theo endpoint (`/auth/login` 5/phút, `/auth/refresh` 10/phút, `/auth/register` 5/phút…) — tránh spam refetch (React Query `staleTime` 5 phút, debounce input tìm kiếm).
 - ⚠ **`RolesGuard` chỉ được gắn ở `RolesController`** — các module movies/genres/countries/peoples/ratings/comments/users… có `@Roles(...)` nhưng **KHÔNG được enforce** ở backend; phân quyền admin hiện chủ yếu dựa vào phía client (`RequireRole`).
@@ -359,16 +374,17 @@ Ghi chú:
 ## Ủng hộ/known issues
 
 - ✅ **Các trang auth + `/profile` + `/setting/theme` đã hoạt động thật** với backend; envelope + refresh token đã chạy ổn định; Design tokens, sidebar, phân quyền (`RequireRole`, `RoleLayout`) đã sẵn sàng làm nền.
-- ⚠ **`frontend/node_modules` chưa cài** — phải chạy `npm install` trong `frontend/` trước khi dev/build (agent không tự cài).
+- ✅ **`frontend/node_modules` và `package-lock.json` đã có trong workspace** (kiểm tra 2026-11-04) — vẫn nên chạy `npm install` khi clone mới/đổi dependency.
 - ⚠ **Mock `AuthContext` còn song song** với `useAuthStore` (`src/contexts/AuthContext.tsx`, `src/hooks/useAuth.ts`, `AppContext`) — code mới chỉ dùng `useAuthStore`, dọn dần mock.
 - ⚠ **Folder `src/hooks/tankstack/` sai chính tả** (`tankstack` thay vì `tanstack`) — **giữ nguyên tên folder** để không phá import hiện hữu.
 - ⚠ **`react-router-dom`, `react-icons` không dùng trong App Router**; **`socket.io-client` đã dùng (Phase 2)**; **`recharts` đã dùng ở Dashboard admin (Phase 5)**.
 - ⚠ **`src/shared/utils/http.ts` là legacy (dùng `fetch`)** — không được dùng, chỉ dùng `axiosClient`.
-- **Nav group "Interaction" trong `nav-main.tsx`** đã sửa (Phase 5): gộp còn 1 mục "Tương tác" → `/admin/interaction` (4 route `/interaction/*` cũ đều không tồn tại).
+- **Nav group "Interaction"** nằm trong `components/sidebar/nav-data.ts` (không phải `nav-main.tsx`) — gộp còn 1 mục "Tương tác" → `/admin/interaction` (4 route `/interaction/*` cũ đều không tồn tại).
 - ✅ **Type `Pagination`** trong `api.types.ts` đã chuẩn hoá về `{ total, page, limit, totalPages }` khớp payload backend; `DataPagination` dùng chung cho mọi nơi hiển thị phân trang.
 - ⚠ **Route handler `src/app/api/*` chỉ là stub** trả JSON rỗng — không phải nơi gọi backend.
 - ✅ **`movie-filter.store.ts`** đã có state filter (keyword, genreId, countryId, sort, page, limit) + `setFilter/setPage/resetFilter`.
-- ⚠ **`GET /api/movies` chỉ hỗ trợ `page/limit/keyword`** — chưa có filter theo thể loại/quốc gia hay tham số `sort`; muốn filter theo thể loại/quốc gia cần backend bổ sung query param (đề xuất plan backend) hoặc lọc client-side trên trang hiện tại.
-- ⚠ **Không có endpoint recommendation/search ở backend** — recommendation nằm ở ai-service (`/api/recommendations`, qua gateway `:8000`); frontend cần chốt cách gọi và chờ ai-service fix lỗi 500 + CORS (V11 Phase 4).
+- ⚠ **`GET /api/movies` chỉ hỗ trợ `page/limit/keyword`** — trang `/movies` vẫn lọc/sắp xếp **client-side** trên trang hiện tại (`movie-list.tsx:64-89`). Backend đã có `GET /api/movies/search` (filter `genreIds/countryIds/releaseYearFrom/releaseYearTo`, sort server-side) nhưng **trang danh sách chưa chuyển sang dùng** — cần xác minh/đề xuất khi muốn filter toàn bộ dữ liệu.
+- ⚠ **Lệch shape quốc gia**: backend `MovieResponseDto` trả `countries: Country[]` (`movie-response.dto.ts:82-84`), nhưng type FE `Movie` khai báo `country?: Country` (`movie.types.ts:61`) và `movie-list.tsx:80` / `movie-detail.tsx:82-85` đọc `movie.country` → filter/hiển thị quốc gia có thể không chạy đúng; **cần xác minh runtime** và thống nhất `countries` vs `country`.
+- ⚠ **Recommendation**: `similar` đã dùng thật; `semantic-search`/`hybrid-search` ở backend còn stub, FE có api/hook (`recommendation.api.ts`, `useRecommendation.ts`) nhưng chưa nối UI. ai-service `/search` được cho là lỗi 500 (xem `docs/AI-SERVICE.md`) — cần xác minh runtime trước khi tích hợp.
 - ⚠ **`RolesGuard` không được enforce** ở hầu hết module backend — không dựa vào backend để bảo vệ trang admin; dùng `RequireRole(['ADMIN'])` ở client và cẩn trọng khi ẩn/hiện hành động quản trị.
 - ⚠ **`id` của movie/genre/country/people là number** (bigint) — route động `/movies/[id]` nhận string, phải parse sang number trước khi gọi API.
