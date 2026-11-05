@@ -1,4 +1,4 @@
-# V1 — Viết báo cáo mô hình Lọc cộng tác (CF_Model_Report.md)
+# V10 — Báo cáo mô hình Lọc cộng tác (CF_Model_Report.md)
 
 - **Trạng thái**: ✅ Hoàn thành
 - **Người thực hiện**: AI Agent (OpenCode)

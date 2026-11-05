@@ -72,15 +72,39 @@ describe('validateConfiguration', () => {
     }
   });
 
-  it('BUG tiềm ẩn: chuỗi "false" bị ép thành true (Boolean của chuỗi khác rỗng)', () => {
-    // enableImplicitConversion dùng Boolean(value); "false" là chuỗi khác rỗng
-    // nên MAIL_SECURE/ASYNC_MAIL_ENABLED trong .env đều thành true.
+  it('chuỗi "false"/"true" được parse đúng thành boolean (không dùng Boolean(value))', () => {
     const result = validateConfiguration(
-      validConfig({ MAIL_SECURE: 'false', ASYNC_MAIL_ENABLED: 'false' }),
+      validConfig({ MAIL_SECURE: 'false', ASYNC_MAIL_ENABLED: 'true' }),
     );
 
-    expect(result.MAIL_SECURE).toBe(true);
+    expect(result.MAIL_SECURE).toBe(false);
     expect(result.ASYNC_MAIL_ENABLED).toBe(true);
+  });
+
+  it('chấp nhận các biến thể boolean phổ biến (case-insensitive, 1/0)', () => {
+    for (const [raw, expected] of [
+      ['FALSE', false],
+      ['false', false],
+      ['0', false],
+      ['off', false],
+      ['TRUE', true],
+      ['true', true],
+      ['1', true],
+      ['on', true],
+    ] as const) {
+      const result = validateConfiguration(
+        validConfig({ MAIL_SECURE: raw, ASYNC_MAIL_ENABLED: raw }),
+      );
+
+      expect(result.MAIL_SECURE).toBe(expected);
+      expect(result.ASYNC_MAIL_ENABLED).toBe(expected);
+    }
+  });
+
+  it('chuỗi boolean không hợp lệ → ném lỗi IsBoolean khi khởi động', () => {
+    expect(() =>
+      validateConfiguration(validConfig({ MAIL_SECURE: 'maybe' })),
+    ).toThrow(/MAIL_SECURE has failed the following constraints: isBoolean/);
   });
 
   it('chuỗi rỗng ở field bắt buộc → ném lỗi IsNotEmpty', () => {

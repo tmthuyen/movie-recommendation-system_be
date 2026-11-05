@@ -3,6 +3,7 @@
 import { Pencil, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { EmptyState } from '@/components/common/EmptyState';
+import { MotionReveal } from '@/components/motion/motion-primitives';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -117,7 +118,7 @@ export function DataTable<T>({
   );
 
   return (
-    <div className={cn('w-full space-y-3', className)}>
+    <MotionReveal when="mount" className={cn('w-full space-y-3', className)}>
       {/* Bảng (md+) */}
       <div className="hidden overflow-x-auto rounded-xl border bg-card md:block">
         <Table>
@@ -166,7 +167,7 @@ export function DataTable<T>({
           </li>
         ))}
       </ul>
-    </div>
+    </MotionReveal>
   );
 }
 

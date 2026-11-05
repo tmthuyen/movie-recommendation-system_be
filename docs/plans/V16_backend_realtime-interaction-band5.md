@@ -1,8 +1,8 @@
 # V16 — Realtime tương tác qua WebSocket (REST chỉ cho mutation)
 
-> **File plan chính thức**: chính file này (`docs/plans/V16_realtime_interation.md`). Ghi chú cũ dẫn tới `V16_backend_realtime-interaction-band5.md` — file đó **không tồn tại** (đã sửa 2026-11-04).
+> **File plan chính thức**: chính file này (`docs/plans/V16_backend_realtime-interaction-band5.md`). Tên cũ `V16_realtime_interation.md` đã được chuẩn hoá ở V24 (2026-11-05).
 >
-> **Liên quan**: `docs/plans/V5-realtime-interactions.md` (plan cũ, chưa hoàn thiện realtime cho like/comment/click).
+> **Liên quan**: `docs/plans/V5_backend_realtime-interactions.md` (plan cũ, chưa hoàn thiện realtime cho like/comment/click).
 >
 > **Cập nhật theo phản hồi developer (2026-10-26)**:
 > - `score` = **độ tin cậy** của tín hiệu tương tác (không phải điểm thưởng hiển thị cho user).

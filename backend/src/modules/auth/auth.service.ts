@@ -217,7 +217,7 @@ export class AuthService {
       24 * 60 * 60,
     );
 
-    if (this.configService.get<string>('ASYNC_MAIL_ENABLED') === 'true') {
+    if (this.configService.get<boolean>('ASYNC_MAIL_ENABLED') === true) {
       this.userProducer.publishEmailVerificationRequested({
         userId: userId,
         email: email,

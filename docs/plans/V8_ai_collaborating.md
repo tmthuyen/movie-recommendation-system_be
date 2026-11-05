@@ -1,4 +1,4 @@
-# Thiết kế hệ thống lọc cộng tác và kết hợp hybrid (Collaborative + Content-based)
+# V8 — Thiết kế hệ thống lọc cộng tác và kết hợp hybrid
 
 - ALS model và semantic user_profile cho gợi ý hybrid và giải thích tương mình với evidences rõ ràng
 

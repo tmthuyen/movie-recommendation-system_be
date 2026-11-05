@@ -11,7 +11,7 @@
 
 > Chi tiết triển khai từng service ở các file riêng:
 >
-> - [plans/V1_backend-plan.md](./plans/V1_backend-plan.md) — Kế hoạch phát triển **backend** (NestJS)
+> - [plans/V1_backend_development-plan.md](./plans/V1_backend_development-plan.md) — Kế hoạch phát triển **backend** (NestJS)
 > - [plans/V7_ai-service-architecture.md](./plans/V7_ai-service-architecture.md) — Kiến trúc **ai-service** (Python/FastAPI)
 
 ---
@@ -214,5 +214,5 @@ Mapping bắt buộc: `movies.tmdb_id` (backend) ↔ `tmdb_id` (ai-service index
 | Chi tiết hiện trạng ai-service            | [AI-SERVICE.md](./AI-SERVICE.md)           |
 | Chi tiết hiện trạng frontend              | [FRONTEND.md](./FRONTEND.md)               |
 | Thiết kế DB thực tế                       | [DATABASE-DESIGN.md](./DATABASE-DESIGN.md) |
-| Kế hoạch backend (lịch sử)                | [plans/V1_backend-plan.md](./plans/V1_backend-plan.md) |
+| Kế hoạch backend (lịch sử)                | [plans/V1_backend_development-plan.md](./plans/V1_backend_development-plan.md) |
 | Kiến trúc ai-service (lịch sử)            | [plans/V7_ai-service-architecture.md](./plans/V7_ai-service-architecture.md) |

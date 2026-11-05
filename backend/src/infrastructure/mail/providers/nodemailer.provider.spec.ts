@@ -12,15 +12,16 @@ describe('NodemailerProvider', () => {
   let sendMailMock: jest.Mock;
   let createTransportMock: jest.Mock;
 
-  const makeConfig = (values: Record<string, string> = {}) =>
+  const makeConfig = (values: Record<string, string | number | boolean> = {}) =>
     ({
-      get: jest.fn((key: string, fallback?: string) =>
+      get: jest.fn((key: string, fallback?: string | number | boolean) =>
         key in values ? values[key] : fallback,
       ),
     }) as unknown as ConfigService;
 
-  const createProvider = (values: Record<string, string> = {}) =>
-    new NodemailerProvider(makeConfig(values));
+  const createProvider = (
+    values: Record<string, string | number | boolean> = {},
+  ) => new NodemailerProvider(makeConfig(values));
 
   beforeEach(() => {
     sendMailMock = jest.fn().mockResolvedValue({ messageId: '1' });
@@ -35,7 +36,7 @@ describe('NodemailerProvider', () => {
     createProvider({
       MAIL_HOST: 'smtp.gmail.com',
       MAIL_PORT: '2525',
-      MAIL_SECURE: 'true',
+      MAIL_SECURE: true,
       MAIL_USER: 'user@gmail.com',
       MAIL_PASS: 'secret',
     });
@@ -59,14 +60,20 @@ describe('NodemailerProvider', () => {
     });
   });
 
-  it('chỉ coi MAIL_SECURE === "true" là bật TLS (TRUE/1 đều false)', () => {
-    createProvider({ MAIL_SECURE: 'TRUE' });
-    createProvider({ MAIL_SECURE: '1' });
-    createProvider({ MAIL_SECURE: 'false' });
+  it('chỉ bật TLS khi MAIL_SECURE là boolean true', () => {
+    createProvider({ MAIL_SECURE: true });
+    createProvider({ MAIL_SECURE: false });
 
-    for (const call of createTransportMock.mock.calls) {
-      expect(call[0].secure).toBe(false);
-    }
+    expect(createTransportMock.mock.calls[0][0].secure).toBe(true);
+    expect(createTransportMock.mock.calls[1][0].secure).toBe(false);
+  });
+
+  it('MAIL_PORT dạng number cũng được dùng trực tiếp', () => {
+    createProvider({ MAIL_PORT: 465 });
+
+    expect(createTransportMock).toHaveBeenCalledWith(
+      expect.objectContaining({ port: 465 }),
+    );
   });
 
   it('sendMail gộp from từ MAIL_FROM với options và resolve', async () => {

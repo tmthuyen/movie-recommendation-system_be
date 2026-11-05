@@ -1,4 +1,4 @@
-# V6-message-queue: RabbitMQ Messaging Architecture Refactoring
+# V6 — RabbitMQ Messaging Architecture Refactoring
 
 ## 1. Tình trạng hiện tại (Current Flaws)
 - Cấu hình RabbitMQ ở backend (NestJS) và AI-service (Python) đang bị phân mảnh, chưa quy hoạch chuẩn theo Domain-Driven Design (DDD).

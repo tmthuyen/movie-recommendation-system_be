@@ -12,13 +12,13 @@ export class NodemailerProvider implements MailProvider {
   private transporter: nodemailer.Transporter;
 
   constructor(private configService: ConfigService) {
-    const portEnv = this.configService.get<string>('MAIL_PORT', '587');
-    const secureEnv = this.configService.get<string>('MAIL_SECURE', 'false');
+    const portEnv = this.configService.get<string | number>('MAIL_PORT', 587);
+    const secureEnv = this.configService.get<boolean>('MAIL_SECURE', false);
 
     this.transporter = nodemailer.createTransport({
       host: this.configService.get<string>('MAIL_HOST', '://gmail.com'),
-      port: parseInt(portEnv, 10),
-      secure: secureEnv === 'true',
+      port: typeof portEnv === 'number' ? portEnv : parseInt(portEnv, 10),
+      secure: secureEnv === true,
       auth: {
         user: this.configService.get<string>('MAIL_USER', ''),
         pass: this.configService.get<string>('MAIL_PASS', ''),

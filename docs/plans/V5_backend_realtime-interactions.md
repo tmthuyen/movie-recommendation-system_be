@@ -1,4 +1,4 @@
-# V5 Plan: Realtime Interactions & User Activity
+# V5 — Realtime Interactions & User Activity
 
 ## 1. Mục tiêu
 - Xây dựng hoàn chỉnh tính năng Real-time bằng WebSockets cho các tương tác người dùng.

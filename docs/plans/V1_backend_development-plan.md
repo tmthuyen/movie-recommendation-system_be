@@ -1,4 +1,4 @@
-# Kế hoạch phát triển — BACKEND (NestJS)
+# V1 — Kế hoạch phát triển Backend (NestJS)
 
 > File con của [README.md](./README.md). Tài liệu hiện trạng chi tiết: [docs/BACKEND.md](../BACKEND.md).
 

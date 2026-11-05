@@ -312,7 +312,10 @@ export class MoviesService {
     };
   }
 
-  /** search nâng cao */
+  /** search nâng cao
+   * @param query: MovieSearchRequestDto
+   * @returns ResultWithPagination<Movie>
+   */
   async search(
     query: MovieSearchRequestDto,
   ): Promise<ResultWithPagination<Movie>> {
@@ -446,6 +449,20 @@ export class MoviesService {
       result: data,
       pagination,
     };
+  }
+
+  /**
+   * Tìm nhiều phim theo mảng ID
+   * @param ids: number[]
+   * @returns Movie[]
+   */
+  async findByIds(ids: number[]): Promise<Movie[]> {
+    if (!ids || ids.length === 0) {
+      return [];
+    }
+
+    const movies = await this.repo.findAllByIds(ids);
+    return movies;
   }
 }
 

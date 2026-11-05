@@ -3,6 +3,7 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MovieCard } from './movie-card';
+import { MotionReveal } from '@/components/motion/motion-primitives';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
@@ -66,15 +67,16 @@ export function MovieRow({ movies, max = 12, className }: MovieRowProps) {
         )}
         role="list"
       >
-        {movies.slice(0, max).map((movie) => (
-          <div
+        {movies.slice(0, max).map((movie, index) => (
+          <MotionReveal
             key={movie.id}
+            index={index}
             data-card
             role="listitem"
             className="w-[calc(100%-6px)] shrink-0 snap-start sm:w-[calc(50%-8px)] md:w-[calc(33.333%-12px)] 2xl:w-[calc(25%-14px)]"
           >
             <MovieCard movie={movie} />
-          </div>
+          </MotionReveal>
         ))}
       </div>
 

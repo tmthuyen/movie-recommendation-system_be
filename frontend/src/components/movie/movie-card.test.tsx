@@ -100,4 +100,12 @@ describe('MovieCard', () => {
 
     expect(screen.getByRole('link', { name: 'Chưa có tiêu đề' })).toBeInTheDocument();
   });
+
+  it('dùng motion cho hover — không còn CSS transform trùng (tránh double transform)', () => {
+    render(<MovieCard movie={movieFixture} />);
+
+    const card = screen.getByRole('article');
+    expect(card.className).not.toMatch(/transition-all|hover:scale|hover:-translate-y/);
+    expect(card.className).toContain('transition-shadow');
+  });
 });

@@ -26,102 +26,138 @@ export interface IRecommendationsService {
 }
 @Injectable()
 export class RecommendationsService implements IRecommendationsService {
-  constructor(
-    @Inject(IMovieRepository)
-    private readonly movieRepository: IMovieRepository,
-    private readonly movieService: MoviesService,
-  ) {}
   private readonly logger = new Logger(RecommendationsService.name);
+  constructor(private readonly movieService: MoviesService) {}
 
   async getSimilarMovies(
     movieId: number,
     topK?: number,
   ): Promise<ResultWithPagination<SimilarMovieResponseDto>> {
-    // request to AI service
-    const res = await fetch(
-      `${AI_SERVICE_URL}/similar/${movieId}?topK=${topK || 10}`,
-    );
-
-    // AI service trả lỗi HTTP hoặc body không đúng schema → map về AppException
-    // (nếu không, ZodError sẽ nổi lên thành 500 thay vì 400).
-    let parsedResponse: SimilarFromAiServiceResponse;
-    try {
-      parsedResponse = SimilarFromAiServiceResponseSchema.parse(
-        await res.json(),
+    // check movie exists
+    const movie = await this.movieService.findOne(movieId);
+    if (!movie) {
+      throw new AppException(
+        HttpStatus.NOT_FOUND,
+        `Không tìm thấy phim với id ${movieId}`,
+        `Không tìm thấy phim với id ${movieId}`,
+        'MOVIE_NOT_FOUND',
       );
+    }
+
+    // request to AI service
+    try {
+      const res = await fetch(
+        `${AI_SERVICE_URL}/similar/${movieId}?topK=${topK || 10}`,
+      );
+
+      // AI service trả lỗi HTTP hoặc body không đúng schema → map về AppException
+      // (nếu không, ZodError sẽ nổi lên thành 500 thay vì 400).
+      let parsedResponse: SimilarFromAiServiceResponse;
+      try {
+        parsedResponse = SimilarFromAiServiceResponseSchema.parse(
+          await res.json(),
+        );
+      } catch (error) {
+        this.logger.error(
+          `Invalid response from AI service (status=${res.status}): ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        throw new AppException(
+          HttpStatus.BAD_REQUEST,
+          'Invalid response from AI service',
+          'The AI service did not return a valid response for similar movies.',
+          'AI_SERVICE_ERROR',
+        );
+      }
+
+      this.logger.log(`AI service response: ${JSON.stringify(parsedResponse)}`);
+
+      if (!parsedResponse || !parsedResponse.result) {
+        this.logger.error(
+          `Invalid response from AI service: ${JSON.stringify(parsedResponse)}`,
+        );
+        throw new AppException(
+          HttpStatus.BAD_REQUEST,
+          'Invalid response from AI service',
+          'The AI service did not return a valid response for similar movies.',
+          'AI_SERVICE_ERROR',
+        );
+      }
+
+      // find all by ids
+      const movieIds = parsedResponse.result.map(item => item.id);
+      const movieEntities = await this.movieService.findByIds(movieIds);
+
+      // Map để lưu movie theo id và kết quả từ AI service
+      const movieMap = new Map<number, Movie>();
+      for (const movieEntity of movieEntities) {
+        movieMap.set(movieEntity.id, movieEntity);
+      }
+
+      // map with db
+      const mappedData: (Partial<Movie> & {
+        similarityScore: number;
+        rank?: number;
+      })[] = [];
+
+      for (const item of parsedResponse.result) {
+        const movie = movieMap.get(item.id);
+        if (!movie) {
+          this.logger.warn(
+            `Movie with id ${item.id} not found in database, skipping.`,
+          );
+          continue;
+        }
+
+        const rank =
+          item.rank ||
+          (parsedResponse.pagination.currentPage - 1) *
+            parsedResponse.pagination.pageSize +
+            parsedResponse.result.indexOf(item) +
+            1;
+
+        mappedData.push({
+          ...movie,
+          similarityScore: item.similarityScore,
+          rank,
+        });
+      }
+
+      const result = plainToInstance(SimilarMovieResponseDto, mappedData, {
+        excludeExtraneousValues: true,
+      });
+      // return result
+
+      const resultWithPagi: ResultWithPagination<SimilarMovieResponseDto> = {
+        result,
+        pagination: {
+          page: parsedResponse.pagination.currentPage,
+          limit: parsedResponse.pagination.pageSize,
+          total: parsedResponse.pagination.totalItems,
+          totalPages: parsedResponse.pagination.totalPages,
+        },
+      };
+
+      return resultWithPagi;
     } catch (error) {
+      // Không throw lỗi chỉ log, trả về empty result
       this.logger.error(
-        `Invalid response from AI service (status=${res.status}): ${
+        `Error while calling AI service for similar movies: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
-      throw new AppException(
-        HttpStatus.BAD_REQUEST,
-        'Invalid response from AI service',
-        'The AI service did not return a valid response for similar movies.',
-        'AI_SERVICE_ERROR',
-      );
+
+      return {
+        result: [],
+        pagination: {
+          page: 1,
+          limit: topK || 10,
+          total: 0,
+          totalPages: 0,
+        },
+      };
     }
-
-    this.logger.log(`AI service response: ${JSON.stringify(parsedResponse)}`);
-
-    if (!parsedResponse || !parsedResponse.result) {
-      this.logger.error(
-        `Invalid response from AI service: ${JSON.stringify(parsedResponse)}`,
-      );
-      throw new AppException(
-        HttpStatus.BAD_REQUEST,
-        'Invalid response from AI service',
-        'The AI service did not return a valid response for similar movies.',
-        'AI_SERVICE_ERROR',
-      );
-    }
-
-    // map with db
-    const mappedData: (Partial<Movie> & {
-      similarityScore: number;
-      rank?: number;
-    })[] = [];
-
-    for (const item of parsedResponse.result) {
-      const movie = await this.movieRepository.findById(item.id);
-      if (!movie) {
-        this.logger.warn(
-          `Movie with id ${item.id} not found in database, skipping.`,
-        );
-        continue;
-      }
-
-      const rank =
-        item.rank ||
-        (parsedResponse.pagination.currentPage - 1) *
-          parsedResponse.pagination.pageSize +
-          parsedResponse.result.indexOf(item) +
-          1;
-
-      mappedData.push({
-        ...movie,
-        similarityScore: item.similarityScore,
-        rank,
-      });
-    }
-
-    const result = plainToInstance(SimilarMovieResponseDto, mappedData, {
-      excludeExtraneousValues: true,
-    });
-    // return result
-
-    const resultWithPagi: ResultWithPagination<SimilarMovieResponseDto> = {
-      result,
-      pagination: {
-        page: parsedResponse.pagination.currentPage,
-        limit: parsedResponse.pagination.pageSize,
-        total: parsedResponse.pagination.totalItems,
-        totalPages: parsedResponse.pagination.totalPages,
-      },
-    };
-
-    return resultWithPagi;
   }
 
   async semanticSearch(keyword: string, topK?: number): Promise<any> {}

@@ -1,4 +1,7 @@
+'use client';
+
 import { Inbox, type LucideIcon } from 'lucide-react';
+import { MotionReveal } from '@/components/motion/motion-primitives';
 import { cn } from '@/lib/utils';
 import type { ReactNode } from 'react';
 
@@ -20,7 +23,8 @@ export function EmptyState({
   className,
 }: EmptyStateProps) {
   return (
-    <div
+    <MotionReveal
+      when="mount"
       className={cn(
         'flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed p-10 text-center',
         className,
@@ -30,6 +34,6 @@ export function EmptyState({
       <p className="text-foreground font-medium">{title}</p>
       {description ? <p className="text-muted-foreground max-w-md text-sm">{description}</p> : null}
       {action}
-    </div>
+    </MotionReveal>
   );
 }

@@ -3,6 +3,7 @@
 import { Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
+import { MotionStagger } from '@/components/motion/motion-primitives';
 import { MovieRow } from '@/components/movie/movie-row';
 import { SectionHeader } from '@/components/common/SectionHeader';
 import useRecommendation from '@/hooks/tankstack/useRecommendation';
@@ -25,11 +26,11 @@ interface MovieGridProps {
 
 export function MovieColumn({ movies }: MovieGridProps) {
   return (
-    <div className="flex flex-col gap-3">
+    <MotionStagger when="in-view" className="flex flex-col gap-3">
       {movies.map((movie) => (
         <MovieCard key={movie.id} movie={movie} />
       ))}
-    </div>
+    </MotionStagger>
   );
 }
 

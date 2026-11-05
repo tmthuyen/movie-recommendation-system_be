@@ -1,3 +1,6 @@
+'use client';
+
+import { MotionReveal } from '@/components/motion/motion-primitives';
 import { cn } from '@/lib/utils';
 import type { ReactNode } from 'react';
 
@@ -9,15 +12,18 @@ interface SectionHeaderProps {
   className?: string;
 }
 
-/** Tiêu đề một mục trong trang (dùng chung, không tự viết lại markup). */
+/** Tiêu đề một mục trong trang. */
 export function SectionHeader({ title, description, action, className }: SectionHeaderProps) {
   return (
-    <div className={cn('flex flex-wrap items-end justify-between gap-3', className)}>
+    <MotionReveal
+      when="in-view"
+      className={cn('flex flex-wrap items-end justify-between gap-3', className)}
+    >
       <div className="space-y-1">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{title}</h2>
         {description ? <p className="text-gray-500 dark:text-gray-400">{description}</p> : null}
       </div>
       {action}
-    </div>
+    </MotionReveal>
   );
 }

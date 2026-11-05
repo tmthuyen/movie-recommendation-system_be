@@ -1,4 +1,4 @@
-# V12 — Backend Docs & AGENTS.md cập nhật
+# V12 — Cập nhật tài liệu Backend & AGENTS.md
 
 - **Trạng thái**: ✅ Hoàn thành
 - **Người thực hiện**: AI Agent (subagent)

@@ -31,7 +31,7 @@ Code đã thay đổi nhiều so với docs/plans. Đặc biệt:
    - `docs/FRONTEND.md`: "Backend không có endpoint search/recommendation".
 5. Plans lệch trạng thái/ngày:
    - V15 ghi "Đang thực hiện" nhưng code `PreferenceOnboardingGate` đã có và đã gắn vào `(main)/layout.tsx`.
-   - V16 dẫn `docs/plans/V16_backend_realtime-interaction-band5.md` nhưng file không tồn tại.
+   - V16 dẫn `docs/plans/V16_backend_realtime-interaction-band5.md` nhưng file không tồn tại (sau này V24 chuẩn hoá tên file V16 thành đúng tên này).
    - V14 còn ghi chú `admin.ts` dùng `eslint-disable` (đã được thay bằng `createPagedList`).
    - `PLAN_INDEX.md` đang lưu encoding ANSI, hiển thị lỗi tiếng Việt.
 
@@ -119,7 +119,7 @@ Code đã thay đổi nhiều so với docs/plans. Đặc biệt:
 | `docs/plans/V13_frontend_ui-reuse.md` | Sửa | Trạng thái → ✅ Hoàn thành (Phase 1–2 xong) |
 | `docs/plans/V14_cicd_ci-cd-setup-fix-workflows.md` | Sửa | Thêm "Ngày xác minh 2026-11-04"; ghi chú `admin.ts` **vẫn còn** `eslint-disable` có chủ thích cho factory `usePagedList` (đính chính hiểu nhầm `createPagedList`); cảnh báo `passWithNoTests` sẽ đổi ở V19 |
 | `docs/plans/V15_frontend_preference-onboarding-popup.md` | Sửa | Trạng thái → ✅ Hoàn thành; tick toàn bộ checklist |
-| `docs/plans/V16_realtime_interation.md` | Sửa | Bỏ pointer tới `V16_backend_realtime-interaction-band5.md` (không tồn tại) → trỏ chính file này |
+| `docs/plans/V16_backend_realtime-interaction-band5.md` | Sửa | Bỏ pointer tới file không tồn tại → trỏ chính file này; V24 sau đó đổi tên file V16 thành đúng tên này |
 | `docs/plans/PLAN_INDEX.md` | Rewrite | UTF-8, đủ row V17–V19, `next_index = 20` |
 | `docs/CODE_RULES.md` | Tạo (thuộc V18) | Rules xuyên service |
 | `docs/FRONTEND_RULES.md` | Cập nhật (V20) | Rules UI/motion được gộp vào `FRONTEND_RULES.md` (file UI riêng đã xoá) |

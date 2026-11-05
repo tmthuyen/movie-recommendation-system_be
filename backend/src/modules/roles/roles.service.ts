@@ -4,6 +4,7 @@ import { Role } from '@/modules/roles/entities/role.entity';
 import {
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -11,6 +12,8 @@ import { In, Repository } from 'typeorm';
 
 @Injectable()
 export class RolesService {
+  private readonly logger = new Logger(RolesService.name);
+
   constructor(@InjectRepository(Role) private roleRepo: Repository<Role>) {}
 
   async create(createRoleDto: CreateRoleDto) {
@@ -19,7 +22,11 @@ export class RolesService {
       throw new ConflictException('Exist role code');
     }
     const role = this.roleRepo.create(createRoleDto);
-    return await this.roleRepo.save(role);
+    const saved = await this.roleRepo.save(role);
+    this.logger.log(
+      `Tạo role thành công: roleId=${saved.id}, code=${saved.code}`,
+    );
+    return saved;
   }
 
   async findAll() {
@@ -29,7 +36,7 @@ export class RolesService {
   async findOne(id: number) {
     const role = await this.roleRepo.findOneBy({ id });
     if (!role) {
-      throw new Error(`Role with ID ${id} not found`);
+      throw new NotFoundException(`Role with ID ${id} not found`);
     }
     return role;
   }
@@ -47,15 +54,22 @@ export class RolesService {
     }
 
     Object.assign(role, updateRoleDto);
-    return await this.roleRepo.save(role);
+    const changedFields = Object.keys(updateRoleDto);
+    const saved = await this.roleRepo.save(role);
+    this.logger.log(
+      `Cập nhật role: roleId=${id}, fields=[${changedFields.join(',')}]`,
+    );
+    return saved;
   }
 
   async remove(id: number) {
     const role = await this.roleRepo.findOneBy({ id });
     if (!role) {
-      throw new Error(`Role with ID ${id} not found`);
+      throw new NotFoundException(`Role with ID ${id} not found`);
     }
-    return await this.roleRepo.remove(role);
+    const removed = await this.roleRepo.remove(role);
+    this.logger.log(`Xoá role: roleId=${id}`);
+    return removed;
   }
 
   async findAllByIds(ids: number[]): Promise<Role[]> {

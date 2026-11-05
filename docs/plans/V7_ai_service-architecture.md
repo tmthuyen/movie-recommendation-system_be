@@ -1,4 +1,4 @@
-# Kế hoạch Thiết kế Kiến trúc AI-Service (V7 - Hoàn chỉnh)
+# V7 — Thiết kế kiến trúc AI-Service
 
 Tài liệu này phác thảo chi tiết luồng dữ liệu (Data Flow) từ Backend truyền sang, cách quản lý lưu trữ, quy trình huấn luyện mô hình, và cách các dịch vụ AI kết hợp Lọc cộng tác (CF), Semantic Search, và Giải thích AI (Explainable AI).
 

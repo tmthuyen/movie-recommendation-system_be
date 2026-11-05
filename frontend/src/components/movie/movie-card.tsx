@@ -1,9 +1,11 @@
 'use client';
 
 import { Eye, Film, Star } from 'lucide-react';
+import { motion, useReducedMotion } from 'motion/react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { MovieActions } from './movie-actions';
+import { MOTION_DURATION, MOTION_EASE, cardVariants } from '@/lib/motion';
 import { Movie } from '@/shared/types/movie.types';
 import { getMovieTitle, getPosterUrl, getReleaseYear } from '@/shared/utils/movie';
 
@@ -23,6 +25,7 @@ interface MovieCardProps {
  *   chặn click xuyên xuống stretched link.
  */
 export function MovieCard({ movie, hideActions = false }: MovieCardProps) {
+  const reduceMotion = useReducedMotion();
   const poster = getPosterUrl(movie.backdropPath || movie.posterPath);
   const title = getMovieTitle(movie);
   const year = getReleaseYear(movie.releaseDate);
@@ -33,7 +36,12 @@ export function MovieCard({ movie, hideActions = false }: MovieCardProps) {
   const genres = (movie.genres ?? []).slice(0, 3);
 
   return (
-    <article className="group bg-card text-card-foreground focus-within:ring-ring relative flex flex-col overflow-hidden rounded-lg border shadow-sm transition-all duration-300 focus-within:ring-2 hover:-translate-y-1 hover:scale-105 hover:shadow-lg">
+    <motion.article
+      variants={cardVariants}
+      transition={{ duration: MOTION_DURATION, ease: MOTION_EASE }}
+      whileHover={reduceMotion ? undefined : { y: -4, scale: 1.02 }}
+      className="group bg-card text-card-foreground focus-within:ring-ring relative flex flex-col overflow-hidden rounded-lg border shadow-sm transition-shadow duration-300 focus-within:ring-2 hover:shadow-lg"
+    >
       <div className="bg-muted relative aspect-[6/3] w-full overflow-hidden">
         {poster ? (
           <>
@@ -113,6 +121,6 @@ export function MovieCard({ movie, hideActions = false }: MovieCardProps) {
         aria-label={title}
         className="focus-visible:ring-ring absolute inset-0 z-10 rounded-lg focus-visible:ring-2 focus-visible:outline-none"
       />
-    </article>
+    </motion.article>
   );
 }

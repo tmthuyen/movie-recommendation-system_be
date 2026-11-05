@@ -1,4 +1,4 @@
-# Phase V4: Core Domain APIs & User Interactions
+# V4 — Core Domain APIs & User Interactions
 
 Mục tiêu của Phase này là xây dựng hoàn thiện hệ thống API phục vụ nội dung chính (Movies, Genres, Peoples, Countries), hệ thống lưu trữ tĩnh (Storage Service S3/R2) và nền tảng theo dõi tương tác người dùng (Interactions) để chuẩn bị dữ liệu cho AI Recommendation.
 

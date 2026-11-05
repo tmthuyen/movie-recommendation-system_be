@@ -1,9 +1,10 @@
-import { Controller, Get, Inject, Param, Query } from '@nestjs/common';
+import { Controller, Get, Inject, Logger, Param, Query } from '@nestjs/common';
 import { IRecommendationsService } from './recommendations.service';
 import { HybridSearchQuery } from '@/modules/recommendations/dtos/hybrid-search-query.dto';
 
 @Controller('recommendations')
 export class RecommendationsController {
+  private readonly logger = new Logger(RecommendationsController.name);
   constructor(
     @Inject(IRecommendationsService)
     private readonly recommendationsService: IRecommendationsService,
@@ -15,6 +16,11 @@ export class RecommendationsController {
     @Param('id') movieId: number,
     @Query('topK') topK?: number,
   ) {
+    // receive log
+    this.logger.log(
+      `Received request for similar movies of movieId=${movieId} with topK=${topK}`,
+    );
+
     const res = await this.recommendationsService.getSimilarMovies(
       Number(movieId),
       Number(topK),
@@ -23,8 +29,7 @@ export class RecommendationsController {
     return {
       success: true,
       statusCode: 200,
-      message:
-        'This endpoint is a placeholder for similar movies recommendation.',
+      message: 'Danh sách phim tương tự đã được lấy thành công.',
       result: res.result,
       pagination: res.pagination,
     };

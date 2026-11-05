@@ -1,6 +1,7 @@
 'use client';
 
 import { AlertTriangle, RefreshCcw } from 'lucide-react';
+import { MotionReveal } from '@/components/motion/motion-primitives';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { ReactNode } from 'react';
@@ -26,7 +27,8 @@ export function ErrorState({
   className,
 }: ErrorStateProps) {
   return (
-    <div
+    <MotionReveal
+      when="mount"
       role="alert"
       className={cn(
         'flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed p-10 text-center',
@@ -43,6 +45,6 @@ export function ErrorState({
       ) : (
         action
       )}
-    </div>
+    </MotionReveal>
   );
 }

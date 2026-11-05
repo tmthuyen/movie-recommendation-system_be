@@ -1,4 +1,9 @@
-import { plainToInstance } from 'class-transformer';
+import {
+  plainToInstance,
+  Transform,
+  TransformFnParams,
+  Type,
+} from 'class-transformer';
 import {
   IsBoolean,
   IsNotEmpty,
@@ -8,9 +13,34 @@ import {
   validateSync,
 } from 'class-validator';
 
+/**
+ * Chuyển giá trị env (chuỗi) sang boolean đúng nghĩa.
+ *
+ * Không dùng `enableImplicitConversion` cho boolean: class-transformer dùng
+ * `Boolean(value)` nên chuỗi `"false"` (khác rỗng) bị đổi thành `true`.
+ * Hàm này chỉ chấp nhận các giá trị đã biết; giá trị lạ được giữ nguyên để
+ * `@IsBoolean()` báo lỗi cấu hình thay vì âm thầm bật/tắt sai.
+ */
+const toBoolean = ({ value }: TransformFnParams): unknown => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'on'].includes(normalized)) {
+      return true;
+    }
+    if (['false', '0', 'no', 'off'].includes(normalized)) {
+      return false;
+    }
+  }
+  return value;
+};
+
 export class EnvironmentVariables {
   @IsNotEmpty()
   @IsNumber()
+  @Type(() => Number)
   APP_PORT: number;
 
   @IsNotEmpty()
@@ -27,6 +57,7 @@ export class EnvironmentVariables {
 
   @IsNotEmpty()
   @IsNumber()
+  @Type(() => Number)
   DB_PORT: number;
 
   @IsNotEmpty()
@@ -57,6 +88,7 @@ export class EnvironmentVariables {
   REDIS_HOST: string;
 
   @IsNumber()
+  @Type(() => Number)
   REDIS_PORT: number;
 
   @IsOptional()
@@ -69,16 +101,17 @@ export class EnvironmentVariables {
 
   @IsOptional()
   @IsBoolean()
+  @Transform(toBoolean)
   ASYNC_MAIL_ENABLED: boolean;
 
   /**
    * MAIL_PROVIDER=smtp # smtp, sendgrid, aes
-MAIL_HOST=smtp.gmail.com
-MAIL_PORT=587
-MAIL_SECURE=false
-MAIL_USER=tranthuyen2222@gmail.com
-MAIL_PASS=mwnkkzbvvbfriyha
-MAIL_FROM=tranthuyen2222@gmail.com
+    MAIL_HOST=smtp.gmail.com
+    MAIL_PORT=587
+    MAIL_SECURE=false
+    MAIL_USER=tranthuyen2222@gmail.com
+    MAIL_PASS=mwnkkzbvvbfriyha
+    MAIL_FROM=tranthuyen2222@gmail.com
    */
   @IsNotEmpty()
   @IsString()
@@ -90,10 +123,12 @@ MAIL_FROM=tranthuyen2222@gmail.com
 
   @IsNotEmpty()
   @IsNumber()
+  @Type(() => Number)
   MAIL_PORT: number;
 
   @IsNotEmpty()
   @IsBoolean()
+  @Transform(toBoolean)
   MAIL_SECURE: boolean;
 
   @IsNotEmpty()
@@ -135,9 +170,7 @@ MAIL_FROM=tranthuyen2222@gmail.com
 }
 
 export const validateConfiguration = (config: Record<string, unknown>) => {
-  const validateConfig = plainToInstance(EnvironmentVariables, config, {
-    enableImplicitConversion: true,
-  });
+  const validateConfig = plainToInstance(EnvironmentVariables, config);
 
   const errors = validateSync(validateConfig, { skipMissingProperties: false });
 

@@ -140,6 +140,7 @@ frontend/
     │   ├── common/          # UI kit dùng chung: PageHeader, SectionHeader, EmptyState, ErrorState, DataPagination,
     │   │                    # PaginatedView, paginations/Pagination (PaginatedTable), ConfirmDialog, AppModal,
     │   │                    # SkeletonLoader, ThemeToggle; ErrorBoundary.tsx đã comment toàn bộ (không dùng)
+    │   ├── motion/          # Motion primitives dùng chung: MotionReveal (Pattern B), MotionStagger + MotionItem (Pattern A)
     │   ├── admin/           # Kit CRUD admin 1 điểm render: data-table.tsx (DataTable<T> bảng md+ / card mobile + CrudTableSkeleton + extraActions),
     │   │                    # form-dialog.tsx (CrudFormDialog: RHF+zod, field text/textarea/select/multiselect + useCrudFormValues),
     │   │                    # crud-toolbar.tsx, delete-dialog.tsx (CrudDeleteDialog bọc ConfirmDialog), assign-roles-dialog.tsx
@@ -162,6 +163,7 @@ frontend/
     │
     ├── lib/
     │   ├── axiosClient.ts   # Axios instance + interceptor (xem mục Kết nối API)
+    │   ├── motion.ts        # Token/variant motion dùng chung (duration, stagger, cardVariants, listVariants…)
     │   ├── ReactQueryProvider.tsx # Provider cho @tanstack/react-query
     │   └── utils.ts         # Hàm cn() (clsx + tailwind-merge)
     │
@@ -370,6 +372,19 @@ Ghi chú:
 - `DataPagination` là nơi duy nhất render control phân trang; cả `PaginatedView` (client) và `PaginatedTable` (server) đều tái sử dụng nó.
 - `PaginatedTable` trước đây đọc sai envelope (`data.data.pagination.totalItems`); đã sửa về `result` + `pagination { total, page, limit, totalPages }` (khớp `FRONTEND_RULES` §1).
 - `ErrorBoundary.tsx` đã bị comment toàn bộ trong repo (không dùng) — không nằm trong UI kit.
+
+## Motion dùng chung (`src/lib/motion.ts` + `src/components/motion`)
+
+Chi tiết quy tắc: [`FRONTEND_RULES.md` §6](./FRONTEND_RULES.md#6-motion--animation-card-). Package: **`motion`** (import `motion/react`).
+
+| File/Component | Vai trò |
+|---|---|
+| `lib/motion.ts` | Token/variant dùng chung: `MOTION_DURATION`, `MOTION_DURATION_FAST`, `MOTION_STAGGER`, `MOTION_MAX_DELAY`, `MOTION_EASE`, `MOTION_TRANSITION`, `cardVariants`, `listVariants`, `fadeUpVariants`, `fadeVariants`, `revealDelay()` |
+| `MotionStagger` | Pattern A — parent stagger cho grid/list (`when="mount"` mặc định, `when="in-view"` cho list dài). Con là `MovieCard` hoặc `MotionItem` |
+| `MotionReveal` | Pattern B — fade-up cho card lẻ/carousel, delay theo `index` (giới hạn `MOTION_MAX_DELAY`), `when="mount" \| "in-view"` |
+| `MotionItem` | Item con cho `MotionStagger` khi không phải `MovieCard` |
+
+Đã áp dụng: `MovieCard` (entrance + hover elevation), `MovieGrid`/`MovieColumn` (stagger), `MovieRow` (Pattern B), `PageHeader`/`SectionHeader`/`EmptyState`/`ErrorState`/`DataTable` (fade-up nhẹ). Tất cả tôn trọng `prefers-reduced-motion` qua `useReducedMotion()`.
 
 ## Ủng hộ/known issues
 

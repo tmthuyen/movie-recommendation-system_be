@@ -1,4 +1,4 @@
-# V15 — preference onboarding popup (cold-start user)
+# V15 — Preference onboarding popup (cold-start user)
 
 ## Thông tin chung
 - **Trạng thái**: ✅ Hoàn thành (xác minh 2026-11-04)

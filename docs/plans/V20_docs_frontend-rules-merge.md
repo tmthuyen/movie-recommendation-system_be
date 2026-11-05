@@ -1,4 +1,4 @@
-# V20 — Gộp 2 file rules frontend thành 1 (`FRONTEND_RULES.md`)
+# V20 — Gộp 2 file rules frontend thành 1 (FRONTEND_RULES.md)
 
 ## Thông tin chung
 

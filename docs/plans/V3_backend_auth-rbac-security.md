@@ -1,4 +1,4 @@
-# V3 Backend Plan: Auth, User, RBAC & Security
+# V3 — Auth, User, RBAC & Security
 
 Tài liệu này mô tả chi tiết kế hoạch triển khai các tính năng cốt lõi tiếp theo cho Backend NestJS, bao gồm xác thực (Auth), quản lý người dùng (User), phân quyền (RBAC) và bảo mật, bám sát theo các quy tắc trong `BACKEND_RULES.md`.
 

@@ -94,9 +94,12 @@ describe('RolesService', () => {
       expect(repo.findOneBy).toHaveBeenCalledWith({ id: 1 });
     });
 
-    it('findOne ném lỗi "Role with ID x not found" khi không tồn tại', async () => {
+    it('findOne ném NotFoundException khi role không tồn tại', async () => {
       repo.findOneBy.mockResolvedValue(null);
 
+      await expect(service.findOne(5)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
       await expect(service.findOne(5)).rejects.toThrow(
         'Role with ID 5 not found',
       );
@@ -158,9 +161,10 @@ describe('RolesService', () => {
   });
 
   describe('remove', () => {
-    it('role không tồn tại → ném lỗi "Role with ID x not found"', async () => {
+    it('role không tồn tại → ném NotFoundException', async () => {
       repo.findOneBy.mockResolvedValue(null);
 
+      await expect(service.remove(9)).rejects.toBeInstanceOf(NotFoundException);
       await expect(service.remove(9)).rejects.toThrow(
         'Role with ID 9 not found',
       );

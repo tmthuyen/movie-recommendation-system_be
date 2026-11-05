@@ -1,3 +1,6 @@
+'use client';
+
+import { MotionStagger } from '@/components/motion/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Movie } from '@/shared/types/movie.types';
 import { MovieCard } from './movie-card';
@@ -8,11 +11,14 @@ interface MovieGridProps {
 
 export function MovieGrid({ movies }: MovieGridProps) {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 md:gap-4">
+    <MotionStagger
+      when="mount"
+      className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 md:gap-4"
+    >
       {movies.map((movie) => (
         <MovieCard key={movie.id} movie={movie} />
       ))}
-    </div>
+    </MotionStagger>
   );
 }
 

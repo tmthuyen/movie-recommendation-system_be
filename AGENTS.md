@@ -62,7 +62,7 @@ Dưới đây là quy ước chung cơ bản. Chi tiết các quy ước code (R
     - `{task_name}`: tên task dạng slug (lowercase, dùng dấu `-` thay khoảng trắng), mô tả ngắn gọn công việc.
     - Ví dụ: `V0_init-plan.md`, `V1_cicd_ci-cd-split-workflows.md`, `V2_backend_retrieval-target-validation.md`, `V3_backend_retrieval-api.md`
   - Tiêu đề trong file: `# V{index} — <mô tả>`
-  - Phải ghi đầy đủ: trạng thái, người thực hiện & thời gian thực hiện, các module được sửa hoặc liên quan, phạm vi (theo mẫu `docs/plans/V1_backend-plan.md`).
+  - Phải ghi đầy đủ: trạng thái, người thực hiện & thời gian thực hiện, các module được sửa hoặc liên quan, phạm vi (theo mẫu `docs/plans/V1_backend_development-plan.md`).
   - Khi tạo plan mới, agent **phải cập nhật `docs/plans/PLAN_INDEX.md`** để ghi lại mapping file ↔ index ↔ scope ↔ mô tả và tính toán `next_index = max(index)+1`.
   - Khi phát hiện sai số thứ tự (index trùng lặp, thiếu liên tục), cần đề xuất sắp xếp lại tên file theo thứ tự hợp lý, **chỉ thực hiện rename sau khi có xác nhận từ người dùng** và đồng thời cập nhật `PLAN_INDEX.md` tương ứng.
 

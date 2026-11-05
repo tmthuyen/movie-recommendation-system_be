@@ -139,18 +139,21 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 - Dùng package **`motion`** (kế thừa Framer Motion), import từ `motion/react`. **Không** cài/dùng song song `framer-motion`; không trộn `motion` với `react-spring`/`gsap` cho card.
 - Phạm vi ngoại lệ so với "không thêm lib animation nặng": **chỉ card/list entrance + hover elevation**. Micro-interaction (fade tooltip, màu nút, skeleton shimmer) dùng CSS/`tw-animate-css`. Không dùng `motion` cho toàn bộ layout/trang.
-- ⚠️ Hiện trạng: `motion` **chưa có** trong `frontend/package.json` / `node_modules`. Cài khi được dev duyệt (dependency mới):
+- ✅ Hiện trạng: `motion@14` đã có trong `frontend/package.json` / `node_modules` (V23). Cài lại khi clone mới:
 
 ```bash
 cd frontend
-npm i motion
+npm i
 ```
 
-- Chưa được duyệt → dùng fallback CSS (mục 6.7) và ghi lại quyết định.
+- Hệ motion dùng chung:
+  - `frontend/src/lib/motion.ts` — token/variant (`MOTION_DURATION`, `MOTION_STAGGER`, `MOTION_MAX_DELAY`, `MOTION_EASE`, `cardVariants`, `listVariants`, `fadeUpVariants`, `fadeVariants`, `revealDelay`).
+  - `frontend/src/components/motion/motion-primitives.tsx` — `MotionReveal` (Pattern B), `MotionStagger` + `MotionItem` (Pattern A), đã xử lý reduced motion.
+- Không còn cần fallback CSS; fallback ở mục 6.7 chỉ giữ làm tham chiếu lịch sử.
 
-### 6.3 Motion token dùng chung 🟡
+### 6.3 Motion token dùng chung ✅
 
-Khi implement, tạo `frontend/src/lib/motion.ts` để tránh mỗi card một kiểu:
+Đã tạo `frontend/src/lib/motion.ts` để tránh mỗi card một kiểu (rút gọn; export thực tế xem file):
 
 ```ts
 import type { Variants } from 'motion/react';
@@ -350,6 +353,29 @@ Stagger bằng CSS: `style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }
 - Import dùng alias `@/…`, không dùng đường dẫn tương đối dài (`../../..`).
 - Giữ nguyên tên folder `src/hooks/tankstack/` (typo lịch sử) — không rename.
 
+### 11.1 Comment & JSDoc
+
+- **Được phép** viết JSDoc ngắn cho function/component/hook để tra cứu nhanh: chức năng, `@param`, `@returns`.
+- **Không** viết block comment đầu file/đầu component để giải thích quy ước, lý do thiết kế, lịch sử chỉnh sửa, so sánh với cách làm khác hoặc mô tả "hiện trạng".
+- Comment nội dòng chỉ dùng khi logic thực sự khó hiểu; không kể lại code đang làm gì.
+- Không giữ comment mô tả code cũ đã xóa, không viết comment trò chuyện/góp ý trong code.
+
+```tsx
+// ĐÚNG — đủ để biết hàm làm gì và nhận/trả gì
+/** Trả về delay (giây) theo thứ tự item, tối đa 0.3s. */
+export function revealDelay(index = 0): number { ... }
+
+/** Card phim; `hideActions` ẩn cụm nút tương tác. */
+export function MovieCard({ movie, hideActions = false }: MovieCardProps) { ... }
+
+// SAI — giải thích dài, lịch sử, so sánh
+/**
+ * Trước đây card dùng CSS hover, nay chuyển sang motion để đồng bộ...
+ * Quy ước: xem rules §6...
+ */
+export function MovieCard() { ... }
+```
+
 ## 12. Cấm (tuyệt đối)
 
 - **Không commit/push git** khi chưa được yêu cầu rõ ràng.
@@ -384,13 +410,13 @@ Stagger bằng CSS: `style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }
 
 | # | Hiện trạng | Mức | Follow-up |
 |---|---|---|---|
-| 1 | `movie-card.tsx` **chưa có motion**, chỉ CSS hover (`hover:-translate-y-1 hover:scale-105 transition-all`) + overlay fade | ⚠️ | Thêm `motion.article` + variants theo mục 6.4 |
-| 2 | `motion` chưa có trong `package.json`/`node_modules` | ⚠️ | Cài `motion` sau khi dev duyệt; chưa cài thì dùng fallback CSS (mục 6.7) |
+| 1 | `movie-card.tsx` đã có motion entrance (`motion.article` + `cardVariants`) và hover elevation (`whileHover`), không còn CSS transform trùng | ✅ | Giữ nguyên pattern; chỉnh thông số trong `src/lib/motion.ts` nếu cần |
+| 2 | `motion@14` đã có trong `package.json`/`node_modules` | ✅ | Chạy `npm i` sau khi clone |
 | 3 | `movie-grid.tsx` mobile `grid-cols-1` (lệch yêu cầu ≥2 cột) | ⚠️ | Đổi `grid-cols-2`, desktop 4–6 cột |
-| 4 | `similar-movies.tsx` render list dọc, không stagger | ⚠️ | Bọc motion parent hoặc Pattern B |
-| 5 | `movie-row.tsx` carousel chưa stagger | ⚠️ | Pattern B với delay theo index |
+| 4 | `similar-movies.tsx` (`MovieColumn`) đã bọc `MotionStagger when="in-view"` | ✅ | Giữ `when="in-view"` cho list dọc dài |
+| 5 | `movie-row.tsx` carousel đã stagger bằng `MotionReveal` (Pattern B, delay theo index) | ✅ | Giữ delay giới hạn bởi `MOTION_MAX_DELAY` |
 | 6 | Poster card dùng `aspect-[6/3]`, rule yêu cầu `aspect-[2/3]` | ⚠️ | **Dev chốt tỉ lệ**; nếu đổi phải cập nhật skeleton + `sizes` |
-| 7 | Chưa có `src/lib/motion.ts` (token motion dùng chung) | 🟡 | Tạo khi implement animation |
+| 7 | Đã có `src/lib/motion.ts` (token/variant dùng chung) + `src/components/motion/motion-primitives.tsx` | ✅ | Tái sử dụng, không tự viết motion mới trong từng component |
 | 8 | `MovieActions` đang bị comment trong card | ⚠️ | Quyết định bật lại; đảm bảo `z-20` + không lồng trong stretched link |
-| 9 | CSS `transition-all` trên card dễ animate cả layout property | ⚠️ | Đổi sang `transition-shadow`/`transition-colors` khi thêm motion |
-| 10 | Frontend đã có test (V19: 28 file/232 test) | ✅ | Giữ coverage ≥60% (xem `CODE_RULES.md` §3.8) |
+| 9 | Card đã đổi sang `transition-shadow` (không còn `transition-all`) | ✅ | Không quay lại `transition-all` trên element có motion |
+| 10 | Frontend đã có test (V23: 32 file/246 test, coverage 69.46%) | ✅ | Giữ coverage ≥60% (xem `CODE_RULES.md` §3.8) |
