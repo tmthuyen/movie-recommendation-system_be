@@ -1,23 +1,25 @@
 import { AppException } from '@/common/custom-exception/app-exception';
 import { HttpStatus } from '@nestjs/common';
 import { RecommendationsService } from './recommendations.service';
-import { IMovieRepository } from '@/modules/movies/movies.repository';
 import { MoviesService } from '@/modules/movies/movies.service';
 
 describe('RecommendationsService', () => {
   let service: RecommendationsService;
-  let movieRepository: { findById: jest.Mock };
+  let movieService: { findOne: jest.Mock; findByIds: jest.Mock };
 
   const buildAiResponse = (overrides: Record<string, unknown> = {}) => ({
+    success: true,
+    statusCode: 200,
+    message: 'ok',
     result: [
       { id: 1, title: 'Phim A', similarityScore: 0.92, rank: 1 },
       { id: 2, title: 'Phim B', similarityScore: 0.81 },
     ],
     pagination: {
-      currentPage: 1,
-      pageSize: 10,
-      totalItems: 2,
+      total: 2,
       totalPages: 1,
+      page: 1,
+      limit: 10,
     },
     ...overrides,
   });
@@ -33,21 +35,23 @@ describe('RecommendationsService', () => {
   };
 
   beforeEach(() => {
-    movieRepository = {
-      findById: jest.fn((id: number) =>
-        Promise.resolve(
-          id === 1
-            ? { id: 1, title: 'Phim A', genres: [], countries: [] }
-            : id === 2
-              ? { id: 2, title: 'Phim B', genres: [], countries: [] }
-              : null,
-        ),
+    const movies: Record<number, { id: number; title: string }> = {
+      1: { id: 1, title: 'Phim A' },
+      2: { id: 2, title: 'Phim B' },
+    };
+
+    movieService = {
+      // Phim nguồn luôn tồn tại (service throw NotFound nếu không).
+      findOne: jest.fn((id: number) =>
+        Promise.resolve(movies[id] ?? { id, title: `Phim ${id}` }),
+      ),
+      findByIds: jest.fn((ids: number[]) =>
+        Promise.resolve(ids.map(id => movies[id]).filter(Boolean)),
       ),
     };
 
     service = new RecommendationsService(
-      movieRepository as unknown as IMovieRepository,
-      {} as MoviesService,
+      movieService as unknown as MoviesService,
     );
   });
 
@@ -104,10 +108,10 @@ describe('RecommendationsService', () => {
             { id: 999, title: 'Không có trong DB', similarityScore: 0.8 },
           ],
           pagination: {
-            currentPage: 1,
-            pageSize: 10,
-            totalItems: 2,
+            total: 2,
             totalPages: 1,
+            page: 1,
+            limit: 10,
           },
         }),
       );
@@ -126,17 +130,17 @@ describe('RecommendationsService', () => {
             { id: 1, title: 'Phim A', similarityScore: 0.6 },
           ],
           pagination: {
-            currentPage: 2,
-            pageSize: 5,
-            totalItems: 12,
+            total: 12,
             totalPages: 3,
+            page: 2,
+            limit: 5,
           },
         }),
       );
 
       const res = await service.getSimilarMovies(1);
 
-      // (currentPage - 1) * pageSize + index + 1
+      // (page - 1) * limit + index + 1
       expect(res.result[0].rank).toBe(6);
       expect(res.result[1].rank).toBe(7);
     });

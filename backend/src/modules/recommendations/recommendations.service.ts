@@ -112,8 +112,8 @@ export class RecommendationsService implements IRecommendationsService {
 
         const rank =
           item.rank ||
-          (parsedResponse.pagination.currentPage - 1) *
-            parsedResponse.pagination.pageSize +
+          (parsedResponse.pagination.page - 1) *
+            parsedResponse.pagination.limit +
             parsedResponse.result.indexOf(item) +
             1;
 
@@ -129,19 +129,26 @@ export class RecommendationsService implements IRecommendationsService {
       });
       // return result
 
+      // Envelope backend dùng cùng tên field với ai-service → map 1:1.
       const resultWithPagi: ResultWithPagination<SimilarMovieResponseDto> = {
         result,
         pagination: {
-          page: parsedResponse.pagination.currentPage,
-          limit: parsedResponse.pagination.pageSize,
-          total: parsedResponse.pagination.totalItems,
+          page: parsedResponse.pagination.page,
+          limit: parsedResponse.pagination.limit,
+          total: parsedResponse.pagination.total,
           totalPages: parsedResponse.pagination.totalPages,
         },
       };
 
       return resultWithPagi;
     } catch (error) {
-      // Không throw lỗi chỉ log, trả về empty result
+      // Lỗi nghiệp vụ (movie không tồn tại, AI trả sai schema) phải nổi lên
+      // để client biết — không nuốt thành success rỗng.
+      if (error instanceof AppException) {
+        throw error;
+      }
+
+      // Lỗi mạng/không xác định: log và trả empty result.
       this.logger.error(
         `Error while calling AI service for similar movies: ${
           error instanceof Error ? error.message : String(error)

@@ -4,7 +4,7 @@ from typing import TypeVar
 
 from fastapi import Request
 
-from .schemas import ApiResponse, Pagination
+from .schemas import ApiResponse, PaginatedResponse, Pagination
 
 T = TypeVar("T")
 
@@ -29,8 +29,11 @@ def paginated(
     page: int,
     limit: int,
     message: str = "Danh sách kết quả",
-) -> ApiResponse[T]:
-    """Trả về phân trang
+) -> PaginatedResponse[T]:
+    """Trả về phân trang (kèm ``pagination``).
+
+    ``PaginatedResponse`` là lớp con của ``ApiResponse`` có thêm field
+    ``pagination`` — dùng ``ApiResponse`` sẽ làm mất pagination khi serialize.
 
     Args:
         data (T): Dữ liệu với generic T
@@ -40,9 +43,9 @@ def paginated(
         message (str, optional): thông báo trả về. Defaults to "Danh sách kết quả".
 
     Returns:
-        ApiResponse[T]: _description_
+        PaginatedResponse[T]: envelope kèm pagination
     """
-    return ApiResponse[T](
+    return PaginatedResponse[T](
         success=True,
         statusCode=200,
         message=message,

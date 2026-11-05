@@ -1,8 +1,7 @@
 # EXPERIMENT TRACKING – NHẬT KÝ VÀ BÁO CÁO THỰC NGHIỆM TỔNG HỢP
 
-**Đề tài:** Ứng dụng mô hình ngôn ngữ vào hệ thống khuyến nghị phim  
-**GVHD:** TS. Trần Trung Tín  
-**Sinh viên:** Phan Nguyễn Quốc Thắng (52300063) — Trần Minh Thuyên (52300070)  
+**Đề tài:** Ứng dụng mô hình ngôn ngữ vào hệ thống khuyến nghị phim
+
 **Kho dữ liệu chuẩn:** 14.815 bộ phim tiếng Việt (SHA-256 fingerprint: `f47867b05751151a612854f7ed924feb0e0faff42d5e67197ebb0fe423d40c61`)  
 **Cập nhật lần cuối:** 02/11/2026 (Hoàn tất P1 – Đối chuẩn Hybrid Retrieval BM25 + E5-Base RRF & Ground Truth V3)
 

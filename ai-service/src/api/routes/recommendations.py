@@ -85,7 +85,7 @@ async def semantic_search(
 async def get_similar_movies(
     movie_id: int,
     app_request: Request,
-    topK: int = Query(default=10, ge=1, le=50, description="So phim tuong tu can tim"),
+    topK: int = Query(default=10, ge=1, le=100, description="So phim tuong tu can tim"),
 ) -> PaginatedResponse[list[SimilarMoviesResponse]]:
     svc = await _get_recommend_service(app_request)
     try:
@@ -141,7 +141,7 @@ async def get_similar_movies_rerank(
         le=200,
         description="Alias cho candidateK",
     ),
-) -> dict:
+) -> PaginatedResponse[list[dict]]:
     """Goi y danh sach phim tuong tu kem Genre-aware Reranking (off | soft | strict) - Endpoint moi (chuan camelCase)."""
     limit = topK if topK is not None else top_k
     weight = genreWeight if genreWeight is not None else genre_weight
@@ -168,7 +168,9 @@ async def get_similar_movies_rerank(
 
 
 @router.get("/search")
-async def search(request: SearchRequest, app_request: Request) -> dict:
+async def search(
+    request: SearchRequest, app_request: Request
+) -> PaginatedResponse[list[dict]]:
     """API Search tong hop ho tro ca Semantic Search va cac mo hinh tim kiem khac."""
     svc = await _get_recommend_service(app_request)
     if request.model in ("semantic", "main", "tfidf"):
@@ -200,7 +202,7 @@ async def hybrid_search(
     request: Annotated[HybridRequest, Query()],
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
     app_request: Request,
-) -> dict:
+) -> PaginatedResponse[list[dict]]:
     """search API"""
     logger.info("hybrid search API called")
     logger.info(f"hybrid search req: {request}")
@@ -241,7 +243,7 @@ async def hybrid_search_debug(
     userId: str,
     app_request: Request,
     topK: int = 10,
-) -> dict:
+) -> PaginatedResponse[list[dict]]:
     """Debug API: Lấy Hybrid Recommendation cho bất kỳ User ID nào (không cần token JWT)"""
     logger.info(f"hybrid debug search API called for user: {userId}")
 

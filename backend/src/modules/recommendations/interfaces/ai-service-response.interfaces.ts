@@ -1,10 +1,11 @@
 import { z } from 'zod';
 
+/** Pagination của ai-service — khớp `api/schemas.py::Pagination`. */
 export interface PaginationAiService {
-  currentPage: number;
-  pageSize: number;
-  totalItems: number;
+  total: number;
   totalPages: number;
+  page: number;
+  limit: number;
 }
 
 export interface SimilarFromAiServiceResponse {
@@ -28,10 +29,10 @@ export const SimilarFromAiServiceResponseSchema = z.object({
     }),
   ),
   pagination: z.object({
-    currentPage: z.number(),
-    pageSize: z.number(),
-    totalItems: z.number(),
+    total: z.number(),
     totalPages: z.number(),
+    page: z.number(),
+    limit: z.number(),
   }),
 });
 
