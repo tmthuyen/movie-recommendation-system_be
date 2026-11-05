@@ -56,11 +56,23 @@ class TestMemoryVectorBackend:
     def test_close_is_noop(self):
         run(MemoryVectorBackend().close())
 
+    def test_count_returns_number_of_items(self):
+        backend = MemoryVectorBackend()
+        run(backend.upsert(1, [1.0], {}))
+        run(backend.upsert(2, [0.0], {}))
+
+        assert run(backend.count()) == 2
+        assert backend.location == "memory"
+
 
 class FakeChromaCollection:
     def __init__(self):
         self.query_kwargs = None
         self.get_result = {"ids": []}
+        self.count_value = 0
+
+    def count(self):
+        return self.count_value
 
     def query(self, **kwargs):
         self.query_kwargs = kwargs
@@ -122,7 +134,9 @@ class TestChromaHelpers:
         collection = FakeChromaCollection()
         backend = make_chroma_backend(collection)
 
-        backend._sync_query([1.0], top_k=1, where={"genre": "action"}, collection_name="movies")
+        backend._sync_query(
+            [1.0], top_k=1, where={"genre": "action"}, collection_name="movies"
+        )
 
         assert collection.query_kwargs["where"] == {"genre": "action"}
 
@@ -152,9 +166,9 @@ class TestChromaHelpers:
         }
         backend = make_chroma_backend(collection)
 
-        assert backend._sync_get_by_id(1, collection_name="movies")["vector"] == pytest.approx(
-            [0.1, 0.2]
-        )
+        assert backend._sync_get_by_id(1, collection_name="movies")[
+            "vector"
+        ] == pytest.approx([0.1, 0.2])
 
     def test_sync_get_by_id_missing_returns_none(self):
         backend = make_chroma_backend(FakeChromaCollection())
@@ -173,6 +187,14 @@ class TestChromaHelpers:
 
         assert result["vector"] is None
         assert result["payload"] == {"a": 1}
+
+    def test_sync_count_returns_collection_count(self):
+        collection = FakeChromaCollection()
+        collection.count_value = 7
+        backend = make_chroma_backend(collection)
+
+        assert backend._sync_count(collection_name="movies") == 7
+        assert run(backend.count(collection_name="movies")) == 7
 
 
 class TestVectorStoreFacade:
@@ -203,6 +225,68 @@ class TestVectorStoreFacade:
         assert results[0]["id"] == 1
         assert results[0]["payload"] == {"a": 1}
         run(store.close())
+
+    def test_collection_counts_for_memory_store(self):
+        settings = SimpleNamespace(
+            vector_db_provider="memory",
+            vector_db_enabled=True,
+            vector_collection="movies",
+            vector_user_cf_collection="user_cf_vectors",
+            vector_movie_cf_collection="movie_cf_vectors",
+            vector_user_profile_collection="user_profile_vectors",
+        )
+        store = VectorStore(settings)
+        run(store.start())
+        run(store.upsert(1, [1.0], {}))
+
+        counts = run(store.collection_counts())
+
+        assert counts == {
+            "movies": 1,
+            "user_cf_vectors": 1,
+            "movie_cf_vectors": 1,
+            "user_profile_vectors": 1,
+        }
+        assert store.location == "memory"
+
+    def test_collection_counts_marks_failed_collections_as_none(self):
+        settings = SimpleNamespace(
+            vector_db_provider="memory",
+            vector_db_enabled=True,
+            vector_collection="movies",
+            vector_user_cf_collection="user_cf_vectors",
+            vector_movie_cf_collection="movie_cf_vectors",
+            vector_user_profile_collection="user_profile_vectors",
+        )
+        store = VectorStore(settings)
+
+        class FailingBackend:
+            async def count(self, collection_name=None):
+                raise RuntimeError("boom")
+
+        store.backend = FailingBackend()
+
+        assert run(store.collection_counts()) == {
+            "movies": None,
+            "user_cf_vectors": None,
+            "movie_cf_vectors": None,
+            "user_profile_vectors": None,
+        }
+
+    def test_disabled_store_has_no_counts_or_location(self):
+        store = VectorStore(
+            SimpleNamespace(
+                vector_db_provider="memory",
+                vector_db_enabled=False,
+                vector_collection="movies",
+                vector_user_cf_collection="user_cf_vectors",
+                vector_movie_cf_collection="movie_cf_vectors",
+                vector_user_profile_collection="user_profile_vectors",
+            )
+        )
+
+        assert run(store.collection_counts()) == {}
+        assert store.location is None
 
 
 class TestTrainingScheduler:

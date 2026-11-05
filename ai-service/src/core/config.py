@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -66,7 +67,8 @@ class Settings(BaseSettings):
 
     vector_db_enabled: bool = True
 
-    # ChromaDB — persistent storage directory (relative to ai-service working dir)
+    # ChromaDB — persistent storage directory.
+    # Relative paths resolve from the ai-service/ directory, not the process CWD.
     chroma_persist_dir: str = "./data/chroma_db"
 
     # SBERT model used for embedding (also referenced by build_vector_db.py)
@@ -96,6 +98,14 @@ class Settings(BaseSettings):
         return [
             origin.strip() for origin in self.cors_origins.split(",") if origin.strip()
         ]
+
+    @property
+    def chroma_persist_path(self) -> Path:
+        """Resolve Chroma storage from ai-service/, independent of process CWD."""
+        path = Path(self.chroma_persist_dir).expanduser()
+        if path.is_absolute():
+            return path.resolve()
+        return (Path(__file__).resolve().parents[2] / path).resolve()
 
 
 @lru_cache

@@ -1,3 +1,4 @@
+import asyncio
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -12,6 +13,7 @@ from api.middleware import setup_middleware
 from api.routes import health, recommendations
 from core.config import get_settings
 from core.integrations import TrainingScheduler, VectorStore
+from core.vector_health import log_vector_db_health
 from infra.messaging.consumers.interaction_event_handler import InteractionEventHandler
 from infra.messaging.consumers.movie_event_handler import MovieEventHandler
 from infra.messaging.interaction_queue import InteractionQueue
@@ -42,6 +44,7 @@ async def lifespan(application: FastAPI):
     # 1. Khoi tao VectorStore (ChromaDB)
     vector_store = VectorStore(settings)
     await vector_store.start()
+    vector_db_health = await log_vector_db_health(vector_store, settings)
 
     # 2. Khoi tao RecommendService (xu ly semantic search va vector CRUD)
     recommend_svc = RecommendService(
@@ -83,6 +86,7 @@ async def lifespan(application: FastAPI):
 
     # Luu vao app.state de cac route co the truy cap neu can
     application.state.vector_store = vector_store
+    application.state.vector_db_health = vector_db_health
     application.state.recommend_service = recommend_svc
     application.state.message_queue = mq
     application.state.interaction_queue = interaction_mq
@@ -93,7 +97,11 @@ async def lifespan(application: FastAPI):
 
     # Shutdown nguoc lai
     stop_event.set()
-    await metrics_thread.join(timeout=2)
+    await asyncio.to_thread(
+        metrics_thread.join,
+        timeout=2,
+    )
+
     await training_scheduler.close()
     await redis_store.close()
     await interaction_mq.close()

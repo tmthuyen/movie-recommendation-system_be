@@ -59,7 +59,7 @@ class FakeThread:
     def start(self) -> None:
         self.started = True
 
-    async def join(self, timeout=None) -> None:
+    def join(self, timeout=None) -> None:
         self.joined_with = timeout
 
 
@@ -83,6 +83,15 @@ def lifespan_env(monkeypatch, tmp_path):
         return klass, instance
 
     vector_cls, vector_store = install("VectorStore", "vector_store")
+    vector_store.collection_counts = AsyncMock(
+        return_value={
+            "movies": 2,
+            "user_cf_vectors": 1,
+            "movie_cf_vectors": 1,
+            "user_profile_vectors": 1,
+        }
+    )
+    vector_store.location = "memory"
     recommend_cls, recommend_svc = install("RecommendService", "recommend_service")
     movie_handler_cls, movie_handler = install(
         "MovieEventHandler", "movie_event_handler"
@@ -206,9 +215,7 @@ class TestLifespan:
             training_scheduler=lifespan_env.scheduler,
         )
         lifespan_env.mq_cls.assert_called_once_with(server.settings)
-        lifespan_env.mq.set_handler.assert_called_once_with(
-            lifespan_env.movie_handler
-        )
+        lifespan_env.mq.set_handler.assert_called_once_with(lifespan_env.movie_handler)
         lifespan_env.interaction_mq_cls.assert_called_once_with(server.settings)
         lifespan_env.interaction_mq.set_handler.assert_called_once_with(
             lifespan_env.interaction_handler
@@ -223,6 +230,22 @@ class TestLifespan:
         lifespan_env.mq.start.assert_awaited_once_with()
         lifespan_env.interaction_mq.start.assert_awaited_once_with()
         lifespan_env.redis_store.start.assert_awaited_once_with()
+
+    def test_checks_vector_db_counts_on_startup(self, lifespan_env):
+        app = run_lifespan(FastAPI())
+
+        lifespan_env.vector_store.collection_counts.assert_awaited_once_with()
+        assert app.state.vector_db_health == {
+            "provider": server.settings.vector_db_provider,
+            "location": "memory",
+            "collections": {
+                "movies": 2,
+                "user_cf_vectors": 1,
+                "movie_cf_vectors": 1,
+                "user_profile_vectors": 1,
+            },
+            "moviesIndexed": True,
+        }
 
     def test_starts_metrics_thread_as_daemon(self, lifespan_env):
         run_lifespan(FastAPI())
@@ -263,9 +286,7 @@ class TestLifespan:
     def test_creates_training_model_directory(self, lifespan_env):
         run_lifespan(FastAPI())
 
-        assert (
-            lifespan_env.tmp_path / "data" / "training" / "models"
-        ).is_dir()
+        assert (lifespan_env.tmp_path / "data" / "training" / "models").is_dir()
 
     def test_does_not_create_real_metrics_thread(self, lifespan_env):
         """Đảm bảo test không khởi động thread thật: mọi thread đều là FakeThread."""
@@ -457,6 +478,7 @@ class TestAuthOnServerApp:
         assert response.json()["result"] == {
             "status": "up",
             "infrastructure": {"pid": 1},
+            "vector_db": None,
         }
 
 
@@ -495,9 +517,7 @@ class TestAppConfiguration:
         assert response.headers["access-control-allow-credentials"] == "true"
 
     def test_cors_does_not_allow_unknown_origin(self, client):
-        response = client.get(
-            "/api/metrics", headers={"Origin": "http://evil.example"}
-        )
+        response = client.get("/api/metrics", headers={"Origin": "http://evil.example"})
 
         assert response.status_code == 200
         assert "access-control-allow-origin" not in response.headers

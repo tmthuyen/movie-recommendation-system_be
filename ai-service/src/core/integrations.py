@@ -53,6 +53,15 @@ class VectorBackend(ABC):
     ) -> dict | None:
         return None
 
+    async def count(self, collection_name: str | None = None) -> int:
+        """Return the number of stored vectors in a collection."""
+        raise NotImplementedError
+
+    @property
+    def location(self) -> str | None:
+        """Human-readable storage location, when the backend has one."""
+        return None
+
     @abstractmethod
     async def close(self) -> None:
         raise NotImplementedError
@@ -97,6 +106,13 @@ class MemoryVectorBackend(VectorBackend):
         results.sort(key=lambda x: x["score"], reverse=True)
         return results[:top_k]
 
+    async def count(self, collection_name: str | None = None) -> int:
+        return len(self.items)
+
+    @property
+    def location(self) -> str | None:
+        return "memory"
+
     async def close(self) -> None:
         return None
 
@@ -132,6 +148,9 @@ class RedisVectorBackend(VectorBackend):
             "RedisVectorBackend does not support ANN query; returning empty list."
         )
         return []
+
+    async def count(self, collection_name: str | None = None) -> int:
+        raise NotImplementedError("RedisVectorBackend does not support count")
 
     async def close(self) -> None:
         if self.client:
@@ -189,6 +208,19 @@ class QdrantVectorBackend(VectorBackend):
         )
         return [{"id": h.id, "score": h.score, "payload": h.payload} for h in hits]
 
+    async def count(self, collection_name: str | None = None) -> int:
+        if self.client is None:
+            raise RuntimeError("Qdrant vector backend has not started")
+        result = await self.client.count(
+            collection_name=collection_name or self.settings.vector_collection,
+            exact=True,
+        )
+        return int(result.count)
+
+    @property
+    def location(self) -> str | None:
+        return self.settings.vector_db_url
+
     async def close(self) -> None:
         if self.client:
             await self.client.close()
@@ -216,10 +248,16 @@ class ChromaVectorBackend(VectorBackend):
 
     # ── lifecycle ────────────────────────────────────────────────────────────
 
+    def _persist_dir(self) -> str:
+        path = getattr(self.settings, "chroma_persist_path", None)
+        if path is None:
+            path = self.settings.chroma_persist_dir
+        return str(path)
+
     def _sync_start(self) -> None:
         import chromadb  # lazy so app starts even if chromadb is not installed
 
-        self._client = chromadb.PersistentClient(path=self.settings.chroma_persist_dir)
+        self._client = chromadb.PersistentClient(path=self._persist_dir())
         # Initialize default collection
         self._get_collection(self.settings.vector_collection)
 
@@ -228,7 +266,7 @@ class ChromaVectorBackend(VectorBackend):
         self._get_collection(self.settings.vector_movie_cf_collection)
         self._get_collection(self.settings.vector_user_profile_collection)
 
-        logger.info("ChromaDB ready  persist_dir=%s", self.settings.chroma_persist_dir)
+        logger.info("ChromaDB ready  persist_dir=%s", self._persist_dir())
 
     def _get_collection(self, name: str):
         if self._client is None:
@@ -349,6 +387,19 @@ class ChromaVectorBackend(VectorBackend):
     ) -> dict | None:
         return await asyncio.to_thread(self._sync_get_by_id, movie_id, collection_name)
 
+    def _sync_count(self, collection_name: str | None = None) -> int:
+        collection = self._get_collection(
+            collection_name or self.settings.vector_collection
+        )
+        return int(collection.count())
+
+    async def count(self, collection_name: str | None = None) -> int:
+        return await asyncio.to_thread(self._sync_count, collection_name)
+
+    @property
+    def location(self) -> str | None:
+        return self._persist_dir()
+
     def get_collection_count(self, collection_name: str | None = None) -> int:
         """Synchronous helper — safe to call from one-off scripts."""
         collection = self._get_collection(
@@ -423,6 +474,32 @@ class VectorStore:
         if not self.settings.vector_db_enabled:
             return None
         return await self.backend.get_by_id(movie_id, collection_name)
+
+    @property
+    def location(self) -> str | None:
+        if not self.settings.vector_db_enabled:
+            return None
+        return self.backend.location
+
+    async def collection_counts(self) -> dict[str, int | None]:
+        """Count the movie and hybrid collections configured for this store."""
+        if not self.settings.vector_db_enabled:
+            return {}
+
+        names = [
+            getattr(self.settings, "vector_collection", None),
+            getattr(self.settings, "vector_user_cf_collection", None),
+            getattr(self.settings, "vector_movie_cf_collection", None),
+            getattr(self.settings, "vector_user_profile_collection", None),
+        ]
+        counts: dict[str, int | None] = {}
+        for name in dict.fromkeys(n for n in names if n):
+            try:
+                counts[name] = await self.backend.count(name)
+            except Exception as exc:
+                logger.warning("Cannot count vector collection %s: %s", name, exc)
+                counts[name] = None
+        return counts
 
     async def close(self) -> None:
         if self.settings.vector_db_enabled:

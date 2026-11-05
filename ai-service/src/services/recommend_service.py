@@ -86,11 +86,18 @@ class RecommendService:
         self, movie_id: int, top_k: int = 10
     ) -> list[dict[str, Any]]:
         """Semantic Search: Gợi ý phim tương tự dựa trên movieId và vector similarity"""
-        target = await self._vs.get_by_id(movie_id)
+        target = await self._vs.get_by_id(movie_id=movie_id)
         if not target or not target.get("vector"):
+            logger.warning(
+                f"Khong tim thay vector cho movieId={movie_id}: target={target}"
+            )
             raise ValueError(f"Khong tim thay vector cho movieId={movie_id}")
         raw_results = await self._vs.query(vector=target["vector"], top_k=top_k + 1)
         filtered = [item for item in raw_results if item.get("id") != movie_id][:top_k]
+
+        logger.info(
+            f"Found {len(filtered)} similar movies for movieId={movie_id} (Top-{top_k})"
+        )
         return [_format_item(item) for item in filtered]
 
     async def similar_movies_rerank(

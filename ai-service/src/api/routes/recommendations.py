@@ -3,7 +3,15 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, requests, status
 
 from api.dependencies.auth import get_current_user
-from api.schemas import CurrentUser, HybridRequest, SearchRequest, SimilarMoviesResponse
+from api.schemas import (
+    ApiResponse,
+    CurrentUser,
+    HybridRequest,
+    PaginatedResponse,
+    SearchRequest,
+    SimilarMoviesResponse,
+    SuccessResponse,
+)
 from core.config import get_settings
 from core.integrations import VectorStore
 from services.embedding_service import embedding_service
@@ -43,7 +51,7 @@ async def _get_recommend_service(request: Request) -> RecommendService:
     return svc
 
 
-@router.get("/semantic-search")
+@router.get("/semantic-search", response_model=PaginatedResponse[list[dict]])
 async def semantic_search(
     app_request: Request,
     keyword: str = Query(
@@ -52,15 +60,15 @@ async def semantic_search(
     topK: int = Query(
         default=10, ge=1, le=100, description="So luong phim goi y can tra ve"
     ),
-) -> dict:
+) -> PaginatedResponse[list[dict]]:
     """Tim kiem phim theo y dinh tu nhien (Semantic Search) su dung Sentence-BERT va ChromaDB."""
     svc = await _get_recommend_service(app_request)
     data = await svc.semantic_search(query=keyword, top_k=topK)
     return paginated(
         data=data,
-        total_items=len(data),
+        total=len(data),
         page=1,
-        page_size=topK,
+        limit=topK,
         message=f"Tim kiem ngu nghia thanh cong cho tu khoa '{keyword}'",
     )
 
@@ -71,12 +79,14 @@ async def semantic_search(
 #     return paginated([], 0, request.page, request.limit, "Recommendations generated")
 
 
-@router.get("/similar/{movie_id}")
+@router.get(
+    "/similar/{movie_id}", response_model=PaginatedResponse[list[SimilarMoviesResponse]]
+)
 async def get_similar_movies(
     movie_id: int,
     app_request: Request,
     topK: int = Query(default=10, ge=1, le=50, description="So phim tuong tu can tim"),
-) -> dict:
+) -> PaginatedResponse[list[SimilarMoviesResponse]]:
     svc = await _get_recommend_service(app_request)
     try:
         data: list[SimilarMoviesResponse] = await svc.similar_movies(
@@ -86,15 +96,15 @@ async def get_similar_movies(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     return paginated(
         data=data,
-        total_items=len(data),
+        total=len(data),
         page=1,
-        page_size=topK,
+        limit=topK,
         message=f"Goi y {len(data)} phim tuong tu voi movie_id={movie_id}",
     )
 
 
 @router.get("/similar-rerank/{movie_id}")
-@router.get("/similar/{movie_id}/rerank")
+# @router.get("/similar/{movie_id}/rerank")
 async def get_similar_movies_rerank(
     movie_id: int,
     app_request: Request,
@@ -150,9 +160,9 @@ async def get_similar_movies_rerank(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     return paginated(
         data=data,
-        total_items=len(data),
+        total=len(data),
         page=1,
-        page_size=limit,
+        limit=limit,
         message=f"Goi y {len(data)} phim tuong tu voi movie_id={movie_id} (mode={mode})",
     )
 
@@ -165,9 +175,9 @@ async def search(request: SearchRequest, app_request: Request) -> dict:
         data = await svc.semantic_search(query=request.query, top_k=request.pageSize)
         return paginated(
             data=data,
-            total_items=len(data),
+            total=len(data),
             page=request.page,
-            page_size=request.pageSize,
+            limit=request.pageSize,
             message="Semantic search completed",
         )
     return paginated(
@@ -206,17 +216,17 @@ async def hybrid_search(
     svc = await _get_recommend_service(app_request)
     data = await svc.hybrid_recommendation(user_uuid=request.userId, top_k=request.topK)
 
-    total_items = len(data)
-    if total_items == 0:
+    total = len(data)
+    if total == 0:
         message = f"Không tìm thấy gợi ý cho userId={request.userId}"
     else:
-        message = f"Gợi ý {total_items} phim cho userId={request.userId} thành công"
+        message = f"Gợi ý {total} phim cho userId={request.userId} thành công"
 
     return paginated(
         data,
-        total_items=total_items,
+        total=total,
         page=request.page,
-        page_size=request.pageSize,
+        limit=request.pageSize,
         message=message,
     )
 

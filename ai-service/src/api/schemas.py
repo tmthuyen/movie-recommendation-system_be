@@ -20,10 +20,10 @@ class CurrentUser(BaseModel):
 
 
 class Pagination(BaseModel):
-    totalItems: int
+    total: int
     totalPages: int
-    currentPage: int
-    pageSize: int
+    page: int
+    limit: int
 
 
 class ApiResponse(BaseModel, Generic[DataT]):
@@ -31,10 +31,28 @@ class ApiResponse(BaseModel, Generic[DataT]):
     statusCode: int
     message: str
     result: DataT | None = None
-    errorCode: str | None = None
+
+
+# success response
+class SuccessResponse(ApiResponse[DataT]):
+    success: bool = True
+    statusCode: int = 200
+    result: DataT | None = None
+
+
+class PaginatedResponse(ApiResponse[DataT]):
+    success: bool = True
+    statusCode: int = 200
+    result: DataT | None = None
     pagination: Pagination | None = None
+
+
+# Err response
+class ErrorResponse(ApiResponse[None]):
+    success: bool = False
+    statusCode: int
+    errorCode: str
     timestamp: str | None = None
-    path: str | None = None
 
 
 # Similar & Semantic Search Movies Response

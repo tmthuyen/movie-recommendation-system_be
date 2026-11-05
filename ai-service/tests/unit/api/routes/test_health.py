@@ -9,7 +9,7 @@ Dựng một ``FastAPI()`` nhỏ + ``include_router`` (không import app thật 
 """
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import FastAPI
@@ -69,7 +69,11 @@ class TestHealthEndpoint:
             "success": True,
             "statusCode": 200,
             "message": "Health check successful",
-            "result": {"status": "up", "infrastructure": INFRA},
+            "result": {
+                "status": "up",
+                "infrastructure": INFRA,
+                "vector_db": None,
+            },
         }
 
     def test_forwards_infrastructure_payload_verbatim(self, client, monkeypatch):
@@ -86,6 +90,55 @@ class TestHealthEndpoint:
         client.get(f"{PREFIX}/health")
 
         check_infra.assert_called_once_with()
+
+    def test_includes_vector_db_counts_when_store_is_available(
+        self, app, client, monkeypatch
+    ):
+        monkeypatch.setattr(health_module, "check_infra", lambda: dict(INFRA))
+        app.state.vector_store = SimpleNamespace(
+            settings=SimpleNamespace(
+                vector_db_provider="chroma",
+                vector_collection="movies",
+            ),
+            collection_counts=AsyncMock(
+                return_value={
+                    "movies": 12,
+                    "user_cf_vectors": 3,
+                    "movie_cf_vectors": 4,
+                    "user_profile_vectors": 5,
+                }
+            ),
+            location="C:/data/chroma_db",
+        )
+
+        result = client.get(f"{PREFIX}/health").json()["result"]
+
+        assert result["vector_db"] == {
+            "provider": "chroma",
+            "collections": {
+                "movies": 12,
+                "user_cf_vectors": 3,
+                "movie_cf_vectors": 4,
+                "user_profile_vectors": 5,
+            },
+            "moviesIndexed": True,
+        }
+
+    def test_vector_db_failure_does_not_break_health(self, app, client, monkeypatch):
+        monkeypatch.setattr(health_module, "check_infra", lambda: dict(INFRA))
+        app.state.vector_store = SimpleNamespace(
+            settings=SimpleNamespace(
+                vector_db_provider="chroma",
+                vector_collection="movies",
+            ),
+            collection_counts=AsyncMock(side_effect=RuntimeError("boom")),
+            location="C:/data/chroma_db",
+        )
+
+        response = client.get(f"{PREFIX}/health")
+
+        assert response.status_code == 200
+        assert response.json()["result"]["vector_db"] is None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -107,7 +160,7 @@ class TestTracingEndpoint:
         assert response.json() == {
             "success": True,
             "statusCode": 200,
-            "message": "Success",
+            "message": "Lấy dữ liệu thành công",
             "result": payload,
         }
 
@@ -134,12 +187,8 @@ class TestTracingEndpoint:
 
 
 class TestTestAuthEndpoint:
-    def test_returns_authenticated_user(
-        self, app, client, current_user, monkeypatch
-    ):
-        app.dependency_overrides[health_module.get_current_user] = (
-            lambda: current_user
-        )
+    def test_returns_authenticated_user(self, app, client, current_user, monkeypatch):
+        app.dependency_overrides[health_module.get_current_user] = lambda: current_user
 
         response = client.get(f"{PREFIX}/test-auth")
 
@@ -147,7 +196,7 @@ class TestTestAuthEndpoint:
         assert response.json() == {
             "success": True,
             "statusCode": 200,
-            "message": "Success",
+            "message": "Lấy dữ liệu thành công",
             "result": {
                 "sub": "user-7",
                 "email": "user7@example.com",
@@ -164,9 +213,7 @@ class TestTestAuthEndpoint:
         assert response.json() == {"detail": "Chưa đăng nhập"}
         assert response.headers["WWW-Authenticate"] == "Bearer"
 
-    def test_dependency_override_is_used_instead_of_request_state(
-        self, app, client
-    ):
+    def test_dependency_override_is_used_instead_of_request_state(self, app, client):
         app.dependency_overrides[health_module.get_current_user] = lambda: CurrentUser(
             sub="override-user",
             email="override@example.com",
@@ -188,9 +235,7 @@ class TestTestAuthEndpoint:
 
 class TestHealthRouter:
     def test_registers_all_public_routes_as_get(self):
-        routes = {
-            route.path: route.methods for route in health_module.router.routes
-        }
+        routes = {route.path: route.methods for route in health_module.router.routes}
 
         assert routes == {
             "/health": {"GET"},

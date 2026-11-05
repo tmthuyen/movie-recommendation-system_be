@@ -13,9 +13,12 @@ Ghi chú: mọi ``Settings`` trong test được tạo với ``_env_file=None`` 
 ``cache_clear()`` trước/sau mỗi test.
 """
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
+from src.core import config as config_module
 from src.core.config import Settings, get_settings
 
 
@@ -87,6 +90,20 @@ class TestSettings:
         settings = _settings()
 
         assert settings.embedding_model_name == "paraphrase-multilingual-MiniLM-L12-v2"
+
+    def test_chroma_persist_path_resolves_relative_to_ai_service(self):
+        settings = _settings()
+        expected = (
+            Path(config_module.__file__).resolve().parents[2] / "data" / "chroma_db"
+        )
+
+        assert settings.chroma_persist_path == expected
+
+    def test_chroma_persist_path_keeps_absolute_directory(self, tmp_path):
+        target = tmp_path / "chroma"
+        settings = _settings(chroma_persist_dir=str(target))
+
+        assert settings.chroma_persist_path == target.resolve()
 
     def test_training_schedule_defaults(self):
         settings = _settings()
