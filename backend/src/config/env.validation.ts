@@ -167,6 +167,17 @@ export class EnvironmentVariables {
   @IsNotEmpty()
   @IsString()
   S3_PUBLIC_URL: string;
+
+  // --- CACHE (optional, có default trong code) ---
+  @IsOptional()
+  @IsBoolean()
+  @Transform(toBoolean)
+  CACHE_ENABLED: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  RECOMMENDATION_WINDOW: number;
 }
 
 export const validateConfiguration = (config: Record<string, unknown>) => {

@@ -76,6 +76,7 @@ export interface MovieQuery {
   limit?: number;
   keyword?: string;
   genreIds?: number[];
+  countryIds?: number[];
   sort?: string; // ví dụ: `releaseDate:DESC,voteAverage:ASC`
   releaseYearFrom?: number;
   releaseYearTo?: number;

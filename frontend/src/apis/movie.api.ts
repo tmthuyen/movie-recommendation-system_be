@@ -2,6 +2,8 @@ import { ApiPaginatedResponse, ApiResponse } from '@/shared/types/api.types';
 import { Movie, MovieDetail, MovieQuery } from '@/shared/types/movie.types';
 import axiosClient from '../lib/axiosClient';
 
+import qs from 'qs';
+
 /**
  * Input tạo/cập nhật phim — khớp `CreateMovieDto` của backend
  * (`UpdateMovieDto` = Partial). Id dạng string ở client (bigint).
@@ -74,7 +76,8 @@ export const movieApi = {
       sort: 'releaseDate:DESC',
     },
   ): Promise<ApiPaginatedResponse<Movie[]>> => {
-    const { data } = await axiosClient.get('/movies/search', { params });
+    const queryString = qs.stringify(params, { arrayFormat: 'repeat' });
+    const { data } = await axiosClient.get(`/movies/search?${queryString}`);
     return data;
   },
 };

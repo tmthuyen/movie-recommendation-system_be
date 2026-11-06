@@ -1,5 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
+import { ICacheService } from '@/infrastructure/cache/redis-cache.service';
+import { CacheKeys, CacheTtl } from '@/infrastructure/cache/cache.keys';
+import { InteractionStatsCacheSchema } from '@/infrastructure/cache/cache.schemas';
 
 /** Thống kê tương tác hiển thị ở trang chi tiết phim. */
 export interface MovieInteractionStats {
@@ -21,16 +24,38 @@ interface MovieInteractionStatsRow {
 /**
  * Truy vấn tổng hợp số liệu tương tác của một phim trong **một** câu SQL
  * (tránh N+1 và tránh phụ thuộc chéo giữa các module).
+ *
+ * Cache TTL ngắn (60s) cho luồng đọc thường; khi được gọi trong transaction
+ * (`manager` được truyền) thì **bỏ qua cache** vì dữ liệu phải thấy thay đổi
+ * chưa commit.
  */
 @Injectable()
 export class MovieInteractionStatsService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    @Inject(ICacheService) private readonly cache: ICacheService,
+  ) {}
 
   async getStats(
     movieId: number,
     manager?: EntityManager,
   ): Promise<MovieInteractionStats> {
-    const ds = manager || this.dataSource;
+    if (manager) {
+      return this.queryStats(movieId, manager);
+    }
+
+    return this.cache.getOrLoad<MovieInteractionStats>({
+      key: CacheKeys.interaction.stats(movieId),
+      schema: InteractionStatsCacheSchema,
+      ttlSeconds: CacheTtl.interactionStats,
+      loader: () => this.queryStats(movieId, this.dataSource),
+    });
+  }
+
+  private async queryStats(
+    movieId: number,
+    ds: DataSource | EntityManager,
+  ): Promise<MovieInteractionStats> {
     const rows = await ds.query<MovieInteractionStatsRow[]>(
       `SELECT
          COALESCE((

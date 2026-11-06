@@ -14,6 +14,7 @@ import useGenre from '@/hooks/tankstack/useGenre';
 import useCountry from '@/hooks/tankstack/useCountry';
 import { getMovieTitle, getPosterUrl, getReleaseYear } from '@/shared/utils/movie';
 import { useAuthStore } from '@/stores/auth.store';
+import { EmptyState } from '@/components/common/EmptyState';
 
 function HeroCarouselSkeleton() {
   return (
@@ -172,18 +173,42 @@ function GenreSection() {
   );
 }
 
+const countryCommon = [
+  { id: 409, viName: 'Phim Mỹ' },
+  // { id: 216, viName: 'Trung Quốc' },
+];
+
 function CountrySection() {
   const { data: countries, isLoading } = useCountry.useGetCountries();
 
+  const countryWithMovies = countryCommon.map((c) => {
+    const { data: movies, isLoading: isMoviesLoading } = useMovie.useSearchMovies({
+      page: 1,
+      limit: 12,
+      countryIds: [c.id],
+      sort: 'viewCount:DESC',
+    });
+
+    return {
+      ...c,
+      movies: movies?.movies ?? [],
+      isLoading: isMoviesLoading,
+    };
+  });
+
   if (isLoading) {
     return (
-      <section className="space-y-4">
-        <SectionHeader title="Phim theo quốc gia" />
-        <div className="flex flex-wrap gap-2">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-9 w-20 rounded-full" />
-          ))}
-        </div>
+      <section className="flex flex-col gap-4 space-y-4">
+        {countryCommon.map((item) => (
+          <div key={item.id} className="">
+            <SectionHeader title={item.viName} />
+            <div className="flex gap-2">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-9 w-20 rounded-full" />
+              ))}
+            </div>
+          </div>
+        ))}
       </section>
     );
   }
@@ -193,30 +218,58 @@ function CountrySection() {
   }
 
   return (
-    <section className="space-y-4">
-      <SectionHeader title="Phim theo quốc gia" />
-      <div className="flex flex-wrap gap-2">
-        {countries.slice(0, 10).map((country: any) => (
-          <Link
-            key={country.id}
-            href={`/movies?country=${country.id}`}
-            className="bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded-full border px-4 py-2 text-sm font-medium transition-colors"
-          >
-            {country.name}
-          </Link>
-        ))}
-      </div>
+    <section className="flex flex-col gap-4 space-y-4">
+      {countryWithMovies.map((item) => {
+        if (item.isLoading) {
+          return (
+            <div key={item.id} className="space-y-4">
+              <SectionHeader title={item.viName} />
+              <div className="flex flex-wrap gap-2">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Skeleton key={i} className="h-9 w-20 rounded-full" />
+                ))}
+              </div>
+            </div>
+          );
+        }
+
+        // check movies
+        if (!item.movies || item.movies.length === 0) {
+          return (
+            <div key={item.id} className="space-y-4">
+              <SectionHeader title={item.viName} />
+              <EmptyState
+                title="Chưa có phim nào"
+                description="Hệ thống chưa có phim để hiển thị."
+              />
+            </div>
+          );
+        }
+
+        return (
+          <div key={item.id} className="space-y-4">
+            <SectionHeader
+              title={item.viName}
+              action={
+                <Link
+                  href={`/movies?countryIds=${item.id}`}
+                  className="text-primary inline-flex shrink-0 items-center gap-1 text-sm font-medium hover:underline"
+                >
+                  Xem tất cả <ArrowRight className="size-4" />
+                </Link>
+              }
+            />
+            <MovieRow movies={item.movies.slice(0, 12)} max={12} />
+          </div>
+        );
+      })}
     </section>
   );
 }
 
 export default function HomePage() {
-  const { data: moviesData, isLoading: isMoviesLoading } = useMovie.useGetMovies({
-    page: 1,
-    limit: 24,
-  });
-  const movies = moviesData?.movies ?? [];
   const { isAuthenticated, user } = useAuthStore();
+  const isForYouLoading = false; // TODO: implement for you loading state
 
   // const { topRated, mostViewed, newest } = useMemo(() => {
   //   const sortedByRating = [...movies].sort((a, b) => (b.voteAverage ?? 0) - (a.voteAverage ?? 0));
@@ -256,7 +309,7 @@ export default function HomePage() {
 
   return (
     <div className="animate-fade-in w-full space-y-10 pb-10">
-      {isMoviesLoading ? (
+      {isTopRatedLoading || isMostViewedLoading || isNewestLoading ? (
         <HeroCarouselSkeleton />
       ) : (
         <section className="from-primary/10 via-primary/5 to-background relative overflow-hidden rounded-2xl border bg-gradient-to-br">
@@ -339,7 +392,7 @@ export default function HomePage() {
           description="Gợi ý dựa trên sở thích và hoạt động gần đây"
           href="/recommendations"
           movies={newest.slice(0, 6)}
-          isLoading={isMoviesLoading}
+          isLoading={isForYouLoading}
         />
       )}
 
@@ -348,7 +401,7 @@ export default function HomePage() {
         description="Những bộ phim vừa được cập nhật"
         href="/movies?sort=newest"
         movies={newest}
-        isLoading={isMoviesLoading}
+        isLoading={isNewestLoading}
       />
 
       <MovieRowSection
@@ -356,7 +409,7 @@ export default function HomePage() {
         description="Những bộ phim được yêu thích nhất hệ thống"
         href="/movies?sort=popular"
         movies={mostViewed}
-        isLoading={isMoviesLoading}
+        isLoading={isMostViewedLoading}
       />
 
       <MovieRowSection
@@ -364,7 +417,7 @@ export default function HomePage() {
         description="Những tác phẩm điện ảnh xuất sắc"
         href="/movies?sort=rating"
         movies={topRated}
-        isLoading={isMoviesLoading}
+        isLoading={isTopRatedLoading}
       />
 
       <GenreSection />

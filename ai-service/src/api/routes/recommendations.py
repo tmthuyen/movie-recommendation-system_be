@@ -92,6 +92,10 @@ async def get_similar_movies(
         data: list[SimilarMoviesResponse] = await svc.similar_movies(
             movie_id=movie_id, top_k=topK
         )
+
+        if data[0].get("rank") is None:
+            logger.warning(f"Chưa có rank similar movies cho movie_id={movie_id}")
+
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     return paginated(

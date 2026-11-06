@@ -130,11 +130,11 @@ describe('buildGenreDistribution', () => {
       movie({
         id: 1,
         genres: [
-          { id: 'g1', name: 'Hành động' },
-          { id: 'g2', name: 'Kinh dị' },
+          { id: 1, name: 'Hành động' },
+          { id: 2, name: 'Kinh dị' },
         ],
       }),
-      movie({ id: 2, genres: [{ id: 'g1', name: 'Hành động' }] }),
+      movie({ id: 2, genres: [{ id: 1, name: 'Hành động' }] }),
       movie({ id: 3, genres: [] }),
     ];
 
@@ -203,9 +203,7 @@ describe('buildTopRatedMovies', () => {
       rating({ id: 3, rating: 4, movie: movie({ id: 2, titleVi: 'B' }) }),
     ];
 
-    expect(buildTopRatedMovies(ratings, 10, 2)).toEqual([
-      { label: 'A', value: 4, votes: 2 },
-    ]);
+    expect(buildTopRatedMovies(ratings, 10, 2)).toEqual([{ label: 'A', value: 4, votes: 2 }]);
   });
 
   it('bỏ qua rating không join được movie', () => {
@@ -238,7 +236,13 @@ describe('buildTopActiveUsers', () => {
 describe('buildDataQualityIssues', () => {
   it('đếm đúng từng loại dữ liệu thiếu', () => {
     const movies = [
-      movie({ id: 1, posterPath: '/p.jpg', overview: 'x', genres: [{ id: 'g', name: 'G' }], country: {} as Movie['country'] }),
+      movie({
+        id: 1,
+        posterPath: '/p.jpg',
+        overview: 'x',
+        genres: [{ id: 1, name: 'G' }],
+        country: {} as Movie['country'],
+      }),
       movie({ id: 2 }),
     ];
 
@@ -262,11 +266,7 @@ describe('filterWithinDays', () => {
   it('lọc theo ngưỡng thời gian và loại record thiếu createdAt', () => {
     const recent = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const old = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const items = [
-      { createdAt: recent },
-      { createdAt: old },
-      { createdAt: undefined },
-    ];
+    const items = [{ createdAt: recent }, { createdAt: old }, { createdAt: undefined }];
 
     expect(filterWithinDays(items, 7)).toEqual([{ createdAt: recent }]);
   });

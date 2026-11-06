@@ -345,6 +345,35 @@ Module đã được đăng ký trong `AppModule` (`app.module.ts:42,118`) và i
 |---|---|---|---|
 | GET | `/api/health` | Public | format **Terminus** của `@nestjs/terminus` — **KHÔNG envelope** `{status, info: {database: {...}}, error...}` — chỉ ping database |
 
+## Cache (Redis) — V25
+
+Tầng cache nằm ở `src/infrastructure/cache/`; service nghiệp vụ inject interface `ICacheService`
+(token `Symbol('ICacheService')` khai báo cùng file `redis-cache.service.ts`), implementation `RedisCacheService`.
+Redis dùng chung với session/blacklist/rate-limit.
+
+**Quy ước key**: `cache:<domain>:...`, dựng 100% qua `CacheKeys` (`src/infrastructure/cache/cache.keys.ts`).
+`page`/`limit` giữ dạng đọc được, filter được hash sha1 12 ký tự.
+
+| Domain | Key | TTL | Invalidate |
+|---|---|---|---|
+| movie detail | `cache:movie:{id}` | 60s | `DEL` sau update/delete |
+| movie list | `cache:movie:list:v{v}:p{p}:l{l}[:f{hash}]` | 180s (keyword 60s) | `INCR cache:movie:ver:list` khi create/update/delete |
+| movie search | `cache:movie:search:v{v}:p{p}:l{l}:f{hash}` | 180s (keyword 60s) | như trên |
+| genre list | `cache:genre:list:v{v}:p{p}:l{l}:f{hash}` | 3600s | `INCR cache:genre:ver:list` khi CRUD |
+| country list | `cache:country:list:v{v}:p{p}:l{l}:f{hash}` | 3600s | `INCR cache:country:ver:list` khi CRUD |
+| interaction stats | `cache:interaction:stats:{movieId}` | 60s | TTL (WS đã cập nhật UI) |
+| recommendation similar | `cache:recommendation:similar:{movieId}:k{window}:v{ver}` | 900s | `INCR cache:recommendation:ver:similar:{id}` |
+
+Ghi chú:
+- Chỉ cache list ở `page <= 3`. Comments/ratings/peoples/roles **không** cache.
+- `GET /api/recommendations/similar/:id` lấy **1 lần** `topK = RECOMMENDATION_WINDOW` (mặc định 100) từ
+  ai-service, cache mảng `[{id, score, rank}]`, sau đó cắt theo `topK` client yêu cầu. Hit cache → **không**
+  gọi ai-service.
+- `incrementViewCount` và `update/remove` đọc DB trực tiếp (`findOneFresh`) để tránh lost-update từ cache.
+- **Không dùng** `KEYS`/`SCAN`; invalidation bằng version counter (O(1), an toàn multi-instance).
+- Fail-open: Redis lỗi → API đi thẳng DB/ai-service. Dữ liệu đọc lên phải qua Zod; sai → xoá key + coi như miss.
+- Biến môi trường: `CACHE_ENABLED` (mặc định `true`), `RECOMMENDATION_WINDOW` (mặc định `100`).
+
 ## WebSocket events
 
 Socket.IO server chạy **cùng cổng 8081**, CORS `origin: '*'` (`src/modules/events/events.gateway.ts`). Không bắt buộc authenticate khi kết nối.

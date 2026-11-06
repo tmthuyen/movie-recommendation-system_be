@@ -1,37 +1,13 @@
 'use client';
 
 import { Sparkles } from 'lucide-react';
-import Link from 'next/link';
-import { Badge } from '@/components/ui/badge';
-import { MotionStagger } from '@/components/motion/motion-primitives';
-import { MovieRow } from '@/components/movie/movie-row';
-import { SectionHeader } from '@/components/common/SectionHeader';
-import useRecommendation from '@/hooks/tankstack/useRecommendation';
-import { MovieGrid } from '@/components/movie/movie-grid';
-import { Movie } from '@/shared/types/movie.types';
-import { MovieCard } from '@/components/movie/movie-card';
 
+import useRecommendation from '@/hooks/tankstack/useRecommendation';
+import { MovieColumn } from '@/components/movie/movie-column';
 interface SimilarMoviesProps {
   movieId: number;
   /** Thể loại của phim hiện tại — dùng để gợi ý link khám phá cùng thể loại. */
   genres?: { id: number | string; name: string }[];
-}
-
-/**
- * Movie Column infinite scroll
- */
-interface MovieGridProps {
-  movies: Movie[];
-}
-
-export function MovieColumn({ movies }: MovieGridProps) {
-  return (
-    <MotionStagger when="in-view" className="flex flex-col gap-3">
-      {movies.map((movie) => (
-        <MovieCard key={movie.id} movie={movie} />
-      ))}
-    </MotionStagger>
-  );
 }
 
 /**

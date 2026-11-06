@@ -466,7 +466,11 @@ class VectorStore:
     ) -> list[dict[str, Any]]:
         if not self.settings.vector_db_enabled:
             return []
-        return await self.backend.query(vector, top_k, where, collection_name)
+
+        # Sắp xếp theo rank với score giảm dần
+        results = await self.backend.query(vector, top_k, where, collection_name)
+        results.sort(key=lambda x: x.get("score", 0), reverse=True)
+        return results
 
     async def get_by_id(
         self, movie_id: int, collection_name: str | None = None

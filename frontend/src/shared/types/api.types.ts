@@ -72,7 +72,7 @@ export interface User extends BaseDto {
 
 // genres
 export interface Genre {
-  id: string;
+  id: number;
   name: string;
   /** Tên tiếng Anh (backend `CreateGenreDto.enName`). */
   enName?: string;

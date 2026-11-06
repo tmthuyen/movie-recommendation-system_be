@@ -1,10 +1,13 @@
 import { AppException } from '@/common/custom-exception/app-exception';
 import { HttpStatus } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { RecommendationsService } from './recommendations.service';
 import { MoviesService } from '@/modules/movies/movies.service';
+import { FakeCacheService } from '@/infrastructure/cache/testing/fake-cache.service';
 
 describe('RecommendationsService', () => {
   let service: RecommendationsService;
+  let cache: FakeCacheService;
   let movieService: { findOne: jest.Mock; findByIds: jest.Mock };
 
   const buildAiResponse = (overrides: Record<string, unknown> = {}) => ({
@@ -41,7 +44,6 @@ describe('RecommendationsService', () => {
     };
 
     movieService = {
-      // Phim nguồn luôn tồn tại (service throw NotFound nếu không).
       findOne: jest.fn((id: number) =>
         Promise.resolve(movies[id] ?? { id, title: `Phim ${id}` }),
       ),
@@ -50,8 +52,12 @@ describe('RecommendationsService', () => {
       ),
     };
 
+    cache = new FakeCacheService();
+
     service = new RecommendationsService(
       movieService as unknown as MoviesService,
+      cache,
+      { get: () => '100' } as unknown as ConfigService,
     );
   });
 
@@ -60,7 +66,7 @@ describe('RecommendationsService', () => {
   });
 
   describe('getSimilarMovies — happy path', () => {
-    it('map movie từ DB + giữ similarityScore và pagination của ai-service', async () => {
+    it('map movie từ DB, trả score/rank theo snapshot', async () => {
       mockFetchJson(buildAiResponse());
 
       const res = await service.getSimilarMovies(1);
@@ -77,42 +83,61 @@ describe('RecommendationsService', () => {
         similarityScore: 0.92,
         rank: 1,
       });
-      expect(res.result[1]).toMatchObject({ id: 2, similarityScore: 0.81 });
+      expect(res.result[1]).toMatchObject({
+        id: 2,
+        similarityScore: 0.81,
+        rank: 2,
+      });
     });
 
-    it('gọi đúng URL ai-service với topK mặc định = 10', async () => {
+    it('gọi ai-service với topK = window (100)', async () => {
       const fetchMock = mockFetchJson(buildAiResponse());
 
       await service.getSimilarMovies(7);
 
       const calledUrl = fetchMock.mock.calls[0][0] as string;
       expect(calledUrl).toContain('/similar/7');
-      expect(calledUrl).toContain('topK=10');
+      expect(calledUrl).toContain('topK=100');
     });
 
-    it('dùng topK do client truyền vào', async () => {
+    it('topK của client chỉ cắt từ snapshot, không đổi window gọi AI', async () => {
       const fetchMock = mockFetchJson(buildAiResponse());
 
-      await service.getSimilarMovies(7, 3);
+      const res = await service.getSimilarMovies(1, 1);
 
-      expect(fetchMock.mock.calls[0][0] as string).toContain('topK=3');
+      expect(fetchMock.mock.calls[0][0] as string).toContain('topK=100');
+      expect(res.result).toHaveLength(1);
+      expect(res.pagination.limit).toBe(1);
+    });
+
+    it('lần 2 dùng cache: không gọi ai-service lần nữa', async () => {
+      const fetchMock = mockFetchJson(buildAiResponse());
+
+      await service.getSimilarMovies(1);
+      await service.getSimilarMovies(1);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('version tăng (phim đổi) → cache miss, gọi ai-service lại', async () => {
+      const fetchMock = mockFetchJson(buildAiResponse());
+
+      await service.getSimilarMovies(1);
+      await cache.incr('cache:recommendation:ver:similar:1');
+      await service.getSimilarMovies(1);
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
   });
 
-  describe('getSimilarMovies — biên', () => {
-    it('bỏ qua movie không tồn tại trong DB (không throw)', async () => {
+  describe('getSimilarMovies — chuẩn hoá dữ liệu', () => {
+    it('bỏ movie không tồn tại trong DB (không throw)', async () => {
       mockFetchJson(
         buildAiResponse({
           result: [
             { id: 1, title: 'Phim A', similarityScore: 0.9, rank: 1 },
             { id: 999, title: 'Không có trong DB', similarityScore: 0.8 },
           ],
-          pagination: {
-            total: 2,
-            totalPages: 1,
-            page: 1,
-            limit: 10,
-          },
         }),
       );
 
@@ -122,39 +147,21 @@ describe('RecommendationsService', () => {
       expect(res.result[0].id).toBe(1);
     });
 
-    it('tính rank theo công thức khi ai-service không trả rank', async () => {
+    it('chuẩn hoá rank 1..n và bỏ id trùng', async () => {
       mockFetchJson(
         buildAiResponse({
           result: [
-            { id: 2, title: 'Phim B', similarityScore: 0.7 },
-            { id: 1, title: 'Phim A', similarityScore: 0.6 },
+            { id: 1, title: 'Phim A', similarityScore: 0.9, rank: 42 },
+            { id: 1, title: 'Phim A', similarityScore: 0.9, rank: 7 },
+            { id: 2, title: 'Phim B', similarityScore: 0.8 },
           ],
-          pagination: {
-            total: 12,
-            totalPages: 3,
-            page: 2,
-            limit: 5,
-          },
         }),
       );
 
       const res = await service.getSimilarMovies(1);
 
-      // (page - 1) * limit + index + 1
-      expect(res.result[0].rank).toBe(6);
-      expect(res.result[1].rank).toBe(7);
-    });
-
-    it('giữ nguyên rank do ai-service trả về', async () => {
-      mockFetchJson(
-        buildAiResponse({
-          result: [{ id: 1, title: 'Phim A', similarityScore: 0.9, rank: 42 }],
-        }),
-      );
-
-      const res = await service.getSimilarMovies(1);
-
-      expect(res.result[0].rank).toBe(42);
+      expect(res.result.map(item => item.rank)).toEqual([1, 2]);
+      expect(res.pagination.total).toBe(2);
     });
   });
 

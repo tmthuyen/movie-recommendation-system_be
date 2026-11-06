@@ -266,9 +266,7 @@ class TestSetupMiddleware:
         client = build_client()
         expired = make_token(exp=int(time.time()) - 60)
 
-        response = client.get(
-            "/whoami", headers={"Authorization": f"Bearer {expired}"}
-        )
+        response = client.get("/whoami", headers={"Authorization": f"Bearer {expired}"})
 
         assert response.status_code == 401
         assert response.json() == {
@@ -319,9 +317,7 @@ class TestSetupMiddleware:
     def test_malformed_authorization_header_returns_401(self):
         client = build_client()
 
-        response = client.get(
-            "/public", headers={"Authorization": "BearerOnlyToken"}
-        )
+        response = client.get("/public", headers={"Authorization": "BearerOnlyToken"})
 
         assert response.status_code == 401
         assert response.json()["errorCode"] == "INVALID_AUTHORIZATION"
@@ -384,4 +380,3 @@ class TestSetupMiddleware:
         logged = [call for call in info.calls if isinstance(call, str)]
         assert any("[Request ID]: req-42" in message for message in logged)
         assert any("[Kong ID]: kong-42" in message for message in logged)
-        assert any("Request processed in" in message for message in logged)

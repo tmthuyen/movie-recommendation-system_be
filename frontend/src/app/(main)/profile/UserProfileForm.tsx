@@ -138,16 +138,16 @@ export const InputMultiSelectDemo = ({ field, fieldState, genres }: InputMultiSe
       if (!field.value || field.value.length === 0) return false;
       return field.value.some((selectedGenre) => selectedGenre === genre.name);
     })
-    .map((genre) => genre.id);
+    .map((genre) => String(genre.id));
   const genreOptions = genres.map((genre) => ({
-    value: genre.id,
+    value: String(genre.id),
     label: genre.name,
   }));
 
   const mapValueToName = (selectedValues: string[] | undefined) => {
     if (!selectedValues || selectedValues.length === 0) return [];
     return selectedValues.map((value) => {
-      const genre: Genre | undefined = genres.find((g) => g.id === value);
+      const genre: Genre | undefined = genres.find((g) => String(g.id) === value);
       return genre ? genre.name : '';
     });
   };

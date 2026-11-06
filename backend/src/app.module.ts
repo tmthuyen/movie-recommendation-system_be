@@ -22,6 +22,7 @@ import { validateConfiguration } from '@/config/env.validation';
 import { loggerConfig } from '@/config/logger.config';
 import { RateLimitModule } from './common/rate-limit/rate-limit.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
+import { CacheModule } from './infrastructure/cache/cache.module';
 import { MailModule } from './infrastructure/mail/mail.module';
 import { MessagingModule } from './infrastructure/messaging/messaging.module';
 import { CommentsModule } from './modules/comments/comments.module';
@@ -96,6 +97,7 @@ import { RecommendationsModule } from './modules/recommendations/recommendations
 
     // infra modules
     RedisModule,
+    CacheModule,
     RateLimitModule,
     MailModule,
     MessagingModule,

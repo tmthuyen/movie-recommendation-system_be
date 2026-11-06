@@ -50,7 +50,11 @@ def setup_middleware(app: FastAPI) -> None:
         response = await call_next(request)
         process_time = time.perf_counter() - start_time
         response.headers["X-Process-Time"] = str(process_time)
-        logger.info(f"[{req_id}] Request processed in {process_time} seconds")
+
+        method = request.method
+        path = request.url.path
+
+        logger.info(f"[{trace_id}] {method} - {path} - {process_time:.2f}s")
 
         return response
 

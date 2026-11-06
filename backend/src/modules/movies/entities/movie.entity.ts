@@ -17,31 +17,15 @@ import { Genre } from '@/modules/genres/entities/genre.entity';
 import { BaseAuditEntity } from '@/common/audits/baseaudit.entity';
 import { Interaction } from '@/modules/interactions/entities/interaction.entity';
 
-/*
-tmdb_id,title_vi,overview_vi,genres,release_date,poster_path,adult,backdrop_path,
-belongs_to_collection,budget,homepage,imdb_id,origin_country,original_language,
-original_title,overview,popularity,production_companies,production_countries,
-revenue,runtime,softcore,spoken_languages,status,tagline,title,video,vote_average,
-vote_count,movieId,is_ai_translated,overview_vi_word_count
-131232.0,Due amici,"Bạn bè hai tuổi, Nunzio và Pino, có chung một căn hộ ở Turn. Nunzio làm việc trong một nhà máy nhưng được khởi động bởi căn bệnh của mình. Pino, mặt khác, là một người đàn ông và anh ta luôn luôn là một người đàn ông và anh ta luôn luôn là bởi công việc của mình. Nunzio sẽ rất muốn biết những gì bạn bè của mình đang làm cho một cuộc sống nhưng sẽ không cho anh ta biết neo dành thời gian miễn phí của mình thời gian tốt nhất của mình trong vắng mặt bạn bè của mình. anh ta có thể kết thúc trong tình yêu với Maria, một di chuyển, một tình trạng sức khỏe của mình ...",
-"[{'id': 18, 'name': 'Phim Chính Kịch'}]",2002-03-20,/ja7a0XvTUIQ6w1YdvbtytdC1lTF.jpg,False,
-/r1boovecPQAZo6vQBLZ4NVeRT2g.jpg,,0,,tt0333373,['IT'],it,Due amici,"Two Sicilian friends, Nunzio and Pino, share the same apartment in Turin. Nunzio works in a factory but is laid off because of his illness. Pino, on the other hand, is a mysterious man and he is always traveling because of his work. Nunzio would very much like to know what his friend is doing for a living but Pino will not tell him. Nunzio spends his free time the best he can in his friend's absences. He ends up falling in love with Maria, a commercial employee, whereas his health condition deteriorates...",1.021,[],"[{'iso_3166_1': 'IT', 'name': 'Italy'}]",0,86,False,"[{'english_name': 'Italian', 'iso_639_1': 'it', 'name': 'Italiano'}]",Released,,Due amici,False,5.4,7,723,True,126
-
-backdrop_path
-homepage
-imdb_id
-origin_country
-original_language
-budget
-revenue
-status
-video
-is_ai_translated
-*/
-
 @Entity('movies')
 export class Movie extends BaseAuditEntity {
-  @PrimaryGeneratedColumn({ name: 'id', type: 'bigint' })
+  /** Note about bigint type: bigint column type, used in SQL databases, doesn't fit into the regular number type and maps property to a string instead.
+   * TypeORM url: https://typeorm.io/docs/entity/entities/
+   */
+  @PrimaryGeneratedColumn({
+    name: 'id',
+    type: 'bigint',
+  })
   id: number;
 
   @Index('IDX_MOVIES_TMDB_ID')

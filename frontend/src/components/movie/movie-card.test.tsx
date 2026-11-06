@@ -29,8 +29,8 @@ const movieFixture: Movie = {
   viewCount: 1234,
   likeCount: 10,
   genres: [
-    { id: 'g1', name: 'Hành động' },
-    { id: 'g2', name: 'Khoa học' },
+    { id: 1, name: 'Hành động' },
+    { id: 2, name: 'Khoa học' },
   ],
 };
 
@@ -51,10 +51,7 @@ describe('MovieCard', () => {
 
     // Card ưu tiên backdropPath (ảnh ngang) trước posterPath.
     const image = screen.getByRole('img', { name: 'Dune: Hành Tinh Cát' });
-    expect(image).toHaveAttribute(
-      'src',
-      'https://image.tmdb.org/t/p/w500/dune-backdrop.jpg',
-    );
+    expect(image).toHaveAttribute('src', 'https://image.tmdb.org/t/p/w500/dune-backdrop.jpg');
   });
 
   it('hiển thị điểm đánh giá đã làm tròn 1 chữ số', () => {
@@ -80,9 +77,7 @@ describe('MovieCard', () => {
 
   it('không render ảnh khi phim không có poster/backdrop', () => {
     render(
-      <MovieCard
-        movie={{ ...movieFixture, posterPath: undefined, backdropPath: undefined }}
-      />,
+      <MovieCard movie={{ ...movieFixture, posterPath: undefined, backdropPath: undefined }} />,
     );
 
     expect(screen.queryByRole('img')).not.toBeInTheDocument();

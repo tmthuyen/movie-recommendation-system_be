@@ -12,7 +12,7 @@ export interface SimilarFromAiServiceResponse {
   result: {
     id: number;
     similarityScore: number;
-    rank?: number;
+    rank?: number | null;
     title: string;
   }[];
   pagination: PaginationAiService;
@@ -24,7 +24,7 @@ export const SimilarFromAiServiceResponseSchema = z.object({
     z.object({
       id: z.number(),
       similarityScore: z.number(),
-      rank: z.number().optional(),
+      rank: z.number().nullish(),
       title: z.string(),
     }),
   ),

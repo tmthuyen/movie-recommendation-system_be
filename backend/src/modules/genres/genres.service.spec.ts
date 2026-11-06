@@ -1,10 +1,12 @@
 import { NotFoundException } from '@nestjs/common';
 import { GenresService } from './genres.service';
 import { IGenreRepository } from './genres.repository';
+import { FakeCacheService } from '@/infrastructure/cache/testing/fake-cache.service';
 
 describe('GenresService', () => {
   let service: GenresService;
   let repo: Record<string, jest.Mock>;
+  let cache: FakeCacheService;
 
   beforeEach(() => {
     repo = {
@@ -15,7 +17,8 @@ describe('GenresService', () => {
       remove: jest.fn(),
     };
 
-    service = new GenresService(repo as unknown as IGenreRepository);
+    cache = new FakeCacheService();
+    service = new GenresService(repo as unknown as IGenreRepository, cache);
     jest.spyOn(service['logger'], 'log').mockImplementation(() => undefined);
   });
 

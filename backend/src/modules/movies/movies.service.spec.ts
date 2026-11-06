@@ -11,9 +11,11 @@ import {
   InteractionType,
 } from '@/modules/interactions/entities/interaction.entity';
 import { Movie } from './entities/movie.entity';
+import { FakeCacheService } from '@/infrastructure/cache/testing/fake-cache.service';
 
 describe('MoviesService', () => {
   let service: MoviesService;
+  let cache: FakeCacheService;
   let repo: {
     findAll: jest.Mock;
     findById: jest.Mock;
@@ -101,6 +103,8 @@ describe('MoviesService', () => {
       }),
     };
 
+    cache = new FakeCacheService();
+
     service = new MoviesService(
       repo as unknown as IMovieRepository,
       dataSource as unknown as DataSource,
@@ -108,6 +112,7 @@ describe('MoviesService', () => {
       eventsGateway as unknown as EventsGateway,
       interactionProducer as unknown as InteractionProducer,
       statsService as unknown as MovieInteractionStatsService,
+      cache,
     );
 
     jest.spyOn(service['logger'], 'log').mockImplementation(() => undefined);
@@ -126,11 +131,57 @@ describe('MoviesService', () => {
     });
 
     it('findAll uỷ quyền cho repository', async () => {
-      repo.findAll.mockResolvedValue({ data: [], meta: {} });
+      repo.findAll.mockResolvedValue({
+        data: [],
+        page: 1,
+        limit: 10,
+        total: 0,
+        totalPages: 0,
+      });
 
       await service.findAll({ page: 1, limit: 10 });
 
       expect(repo.findAll).toHaveBeenCalledWith({ page: 1, limit: 10 });
+    });
+
+    it('findOne đọc cache: gọi lại không query DB lần 2', async () => {
+      repo.findById.mockResolvedValue({ id: 5, title: 'Phim A' });
+
+      await service.findOne(5);
+      await service.findOne(5);
+
+      expect(repo.findById).toHaveBeenCalledTimes(1);
+    });
+
+    it('findAll trang > 3 thì không cache', async () => {
+      repo.findAll.mockResolvedValue({
+        data: [],
+        page: 4,
+        limit: 10,
+        total: 40,
+        totalPages: 4,
+      });
+
+      await service.findAll({ page: 4, limit: 10 });
+      await service.findAll({ page: 4, limit: 10 });
+
+      expect(repo.findAll).toHaveBeenCalledTimes(2);
+      expect(cache.setCalls).toHaveLength(0);
+    });
+  });
+
+  describe('invalidate cache', () => {
+    it('update xoá detail + tăng version list/recommendation', async () => {
+      repo.findById.mockResolvedValue({ id: 7, title: 'A' });
+      repo.update.mockResolvedValue({ id: 7, title: 'B' });
+
+      await service.update(7, { title: 'B' });
+
+      expect(cache.delCalls).toContain('cache:movie:7');
+      expect(await cache.getCounter('cache:movie:ver:list')).toBe(1);
+      expect(await cache.getCounter('cache:recommendation:ver:similar:7')).toBe(
+        1,
+      );
     });
   });
 

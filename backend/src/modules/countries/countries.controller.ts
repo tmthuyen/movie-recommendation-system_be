@@ -106,7 +106,7 @@ export class CountriesController {
 
       statusCode: 200,
 
-      message: 'Success',
+      message: 'Xoá quốc gia thành công',
 
       result,
     };

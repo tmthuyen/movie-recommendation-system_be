@@ -144,6 +144,16 @@ class TestFormatItem:
             "genreNames": [],
         }
 
+    def test_includes_rank_when_provided(self):
+        formatted = _format_item({"id": 1, "score": 0.5, "rank": 3})
+
+        assert formatted["rank"] == 3
+
+    def test_omits_rank_when_missing(self):
+        formatted = _format_item({"id": 1, "score": 0.5})
+
+        assert "rank" not in formatted
+
     def test_nan_vietnamese_title_falls_back_to_english_title(self):
         formatted = _format_item(
             {"id": 1, "score": 0.5, "payload": {"title": "Alien", "title_vi": "nan"}}

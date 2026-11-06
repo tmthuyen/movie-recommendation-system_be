@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { movieApi } from './movie.api';
+import qs from 'qs';
 
 const mocks = vi.hoisted(() => ({
   client: {
@@ -17,7 +18,9 @@ vi.mock('@/lib/axiosClient', () => ({
   parseAxiosError: vi.fn(),
 }));
 
-const envelope = (result: unknown) => ({ data: { success: true, statusCode: 200, message: 'OK', result } });
+const envelope = (result: unknown) => ({
+  data: { success: true, statusCode: 200, message: 'OK', result },
+});
 
 describe('movieApi', () => {
   beforeEach(() => {
@@ -85,9 +88,12 @@ describe('movieApi', () => {
 
     await movieApi.search({ page: 1, limit: 10, sort: 'releaseDate:DESC' });
 
-    expect(mocks.client.get).toHaveBeenCalledWith('/movies/search', {
-      params: { page: 1, limit: 10, sort: 'releaseDate:DESC' },
-    });
+    const queryString = qs.stringify(
+      { page: 1, limit: 10, sort: 'releaseDate:DESC' },
+      { arrayFormat: 'repeat' },
+    );
+
+    expect(mocks.client.get).toHaveBeenCalledWith(`/movies/search?${queryString}`);
   });
 
   it('lan truyền lỗi axios cho caller', async () => {

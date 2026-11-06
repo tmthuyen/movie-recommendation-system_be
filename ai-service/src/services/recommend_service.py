@@ -52,6 +52,8 @@ def _format_item(item: dict[str, Any]) -> dict[str, Any]:
         "genres": meta.get("genres"),
         "genreNames": sorted(extract_genres(meta.get("genres"))),
     }
+    if item.get("rank") is not None:
+        result["rank"] = item["rank"]
     if "raw_cosine_score" in item:
         result["rankingScore"] = round(float(item["score"]), 4)
         if item.get("genre_similarity") is not None:
@@ -95,10 +97,19 @@ class RecommendService:
         raw_results = await self._vs.query(vector=target["vector"], top_k=top_k + 1)
         filtered = [item for item in raw_results if item.get("id") != movie_id][:top_k]
 
+        # rank với score giảm dần
+        filtered.sort(key=lambda x: x.get("score", 0), reverse=True)
+        for idx, item in enumerate(filtered):
+            item["rank"] = idx + 1  # rank bắt đầu từ 1
+
+        # format
+        formatted_results = [_format_item(item) for item in filtered]
+
         logger.info(
             f"Found {len(filtered)} similar movies for movieId={movie_id} (Top-{top_k})"
         )
-        return [_format_item(item) for item in filtered]
+
+        return formatted_results
 
     async def similar_movies_rerank(
         self,

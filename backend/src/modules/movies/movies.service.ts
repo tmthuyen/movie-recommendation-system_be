@@ -23,7 +23,22 @@ import {
 import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
 import { MovieInteractionStatsService } from '@/modules/interactions/movie-interaction-stats.service';
 import { MovieSearchRequestDto } from '@/modules/movies/dto/movie-search-request.dto';
-import { ResultWithPagination } from '@/common/dtos/paginated-result.interface';
+import {
+  PaginatedResult,
+  ResultWithPagination,
+} from '@/common/dtos/paginated-result.interface';
+import { ICacheService } from '@/infrastructure/cache/redis-cache.service';
+import {
+  CacheKeys,
+  CacheTtl,
+  MAX_CACHED_PAGE,
+} from '@/infrastructure/cache/cache.keys';
+import {
+  MovieDetailCacheSchema,
+  MovieListCacheSchema,
+  MovieSearchCacheSchema,
+} from '@/infrastructure/cache/cache.schemas';
+import { parseIdUtils } from '@/common/utlils/parseIdUtils';
 
 @Injectable()
 export class MoviesService {
@@ -44,6 +59,7 @@ export class MoviesService {
     private readonly eventsGateway: EventsGateway,
     private readonly interactionProducer: InteractionProducer,
     private readonly statsService: MovieInteractionStatsService,
+    @Inject(ICacheService) private readonly cache: ICacheService,
   ) {}
 
   private mapDtoToEntity(dto: any) {
@@ -147,14 +163,48 @@ export class MoviesService {
       this.movieProducer.publishMovieCreated(payload);
     }
 
+    // Làm mới version danh sách phim.
+    await this.cache.incr(CacheKeys.movie.listVersion());
+
     return saved;
   }
 
-  async findAll(paginationDto: PaginationDto) {
-    return await this.repo.findAll(paginationDto);
+  async findAll(paginationDto: PaginationDto): Promise<PaginatedResult<Movie>> {
+    const { page = 1, limit = 10, keyword } = paginationDto;
+
+    // Chỉ cache trang <= MAX_CACHED_PAGE.
+    if (page > MAX_CACHED_PAGE) {
+      return this.repo.findAll(paginationDto);
+    }
+
+    const version = await this.cache.getCounter(CacheKeys.movie.listVersion());
+    const key = CacheKeys.movie.list(
+      version,
+      page,
+      limit,
+      keyword ? { keyword } : undefined,
+    );
+    const ttl = keyword ? CacheTtl.movieKeyword : CacheTtl.movieList;
+
+    return this.cache.getOrLoad<PaginatedResult<Movie>>({
+      key,
+      schema: MovieListCacheSchema,
+      ttlSeconds: ttl,
+      loader: async () => {
+        const rs = await this.repo.findAll(paginationDto);
+        return {
+          ...rs,
+          data: rs.data.map(movie => ({
+            ...movie,
+            id: parseIdUtils.toSafeNumberId(movie.id),
+          })),
+        };
+      },
+    });
   }
 
-  async findOne(id: number) {
+  /** Đọc phim trực tiếp từ DB (bỏ qua cache). */
+  private async findOneFresh(id: number): Promise<Movie> {
     const movie = await this.repo.findById(id);
     if (!movie) {
       throw new NotFoundException(`Không tìm thấy phim với ID ${id}`);
@@ -162,8 +212,20 @@ export class MoviesService {
     return movie;
   }
 
+  async findOne(id: number): Promise<Movie> {
+    return this.cache.getOrLoad<Movie>({
+      key: CacheKeys.movie.detail(id),
+      schema: MovieDetailCacheSchema,
+      ttlSeconds: CacheTtl.movieDetail,
+      loader: async () => {
+        const movie = await this.findOneFresh(id);
+        return { ...movie, id: parseIdUtils.toSafeNumberId(movie.id) };
+      },
+    });
+  }
+
   async update(id: number, updateMovieDto: UpdateMovieDto) {
-    const movie = await this.findOne(id); // Check exists
+    const movie = await this.findOneFresh(id); // Kiểm tra tồn tại (đọc DB)
     await this.validateRelations(updateMovieDto);
     const entity = this.mapDtoToEntity(updateMovieDto);
 
@@ -204,20 +266,32 @@ export class MoviesService {
       }
     }
 
+    await this.invalidateAfterMovieChange(id);
+
     return updated;
   }
 
   async remove(id: number) {
-    const movie = await this.findOne(id); // Check exists
+    const movie = await this.findOneFresh(id); // Kiểm tra tồn tại (đọc DB)
     await this.repo.remove(movie.id);
 
     this.movieProducer.publishMovieDeleted({ movieId: id });
 
+    await this.invalidateAfterMovieChange(id);
+
     return { success: true };
   }
 
+  /** Xoá cache chi tiết phim và tăng version list/recommendation. */
+  private async invalidateAfterMovieChange(movieId: number): Promise<void> {
+    await this.cache.del(CacheKeys.movie.detail(movieId));
+    await this.cache.incr(CacheKeys.movie.listVersion());
+    await this.cache.incr(CacheKeys.recommendation.similarVersion(movieId));
+  }
+
   async incrementViewCount(id: number, userId?: string) {
-    const movie = await this.findOne(id);
+    // Đọc DB trực tiếp cho luồng tăng view.
+    const movie = await this.findOneFresh(id);
 
     const {
       score,
@@ -317,6 +391,44 @@ export class MoviesService {
    * @returns ResultWithPagination<Movie>
    */
   async search(
+    query: MovieSearchRequestDto,
+  ): Promise<ResultWithPagination<Movie>> {
+    const { page = 1, limit = 10, keyword } = query;
+
+    if (page > MAX_CACHED_PAGE) {
+      return this.searchFromDb(query);
+    }
+
+    const version = await this.cache.getCounter(CacheKeys.movie.listVersion());
+    const key = CacheKeys.movie.search(version, page, limit, {
+      keyword: keyword?.trim() || undefined,
+      sort: query.sort ?? 'releaseDate:DESC',
+      genreIds: query.genreIds,
+      countryIds: query.countryIds,
+      releaseYearFrom: query.releaseYearFrom,
+      releaseYearTo: query.releaseYearTo,
+    });
+    const ttl = keyword?.trim() ? CacheTtl.movieKeyword : CacheTtl.movieList;
+
+    return this.cache.getOrLoad<ResultWithPagination<Movie>>({
+      key,
+      schema: MovieSearchCacheSchema,
+      ttlSeconds: ttl,
+      loader: async () => {
+        const rs = await this.searchFromDb(query);
+
+        return {
+          ...rs,
+          result: rs.result.map(movie => ({
+            ...movie,
+            id: parseIdUtils.toSafeNumberId(movie.id),
+          })),
+        };
+      },
+    });
+  }
+
+  private async searchFromDb(
     query: MovieSearchRequestDto,
   ): Promise<ResultWithPagination<Movie>> {
     const {
@@ -435,7 +547,7 @@ export class MoviesService {
 
     queryBuilder.skip(skip).take(limit);
 
-    this.logger.log(`Executing search query: ${queryBuilder.getSql()}`);
+    // this.logger.log(`Executing search query: ${queryBuilder.getSql()}`);
 
     const [data, total] = await queryBuilder.getManyAndCount();
 

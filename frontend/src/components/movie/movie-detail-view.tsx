@@ -9,12 +9,7 @@ import useMovie from '@/hooks/tankstack/useMovie';
 import { MovieComments } from './movie-comments';
 import { MovieDetail } from './movie-detail';
 import { MovieRating } from './movie-rating';
-import { SimilarMovies } from './similar-movies';
-
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Movie } from '@/shared/types/movie.types';
-import { HorizontalScroller } from '@/components/common/CarouselCustom';
+import { MovieDetailTabs } from '@/components/movie/movie-detail-tabs';
 
 function DetailSkeleton() {
   return (
@@ -128,59 +123,9 @@ export function MovieDetailView({ id }: { id: number }) {
         </div>
 
         <div className="flex w-full flex-col gap-6 sm:w-1/3">
-          {/* <SimilarMovies movieId={movie.id} genres={movie.genres} /> */}
           <MovieDetailTabs movie={movie} />
         </div>
       </div>
     </div>
-  );
-}
-
-export function MovieDetailTabs({ movie }: { movie: Movie }) {
-  const tabs = [
-    {
-      value: 'similarity',
-      label: 'Phim tương tự',
-      contentComponent: <SimilarMovies movieId={movie.id} genres={movie.genres} />,
-    },
-    {
-      value: 'forYou',
-      label: 'Dành cho bạn',
-      contentComponent: <p>Chưa phát triển</p>,
-    },
-    {
-      value: 'topRated',
-      label: 'Top Rated',
-      contentComponent: <p>Chưa phát triển</p>,
-    },
-    {
-      value: 'trending',
-      label: 'Trending',
-      contentComponent: <p>Chưa phát triển</p>,
-    },
-    {
-      value: 'sameGenre',
-      label: 'Cùng thể loại',
-      contentComponent: <p>Chưa phát triển</p>,
-    },
-  ];
-  return (
-    <Tabs defaultValue="similarity" className="w-full min-w-0">
-      <HorizontalScroller gap={8}>
-        <TabsList className="h-auto w-max justify-start bg-transparent p-0">
-          {tabs.map((tab) => (
-            <TabsTrigger key={tab.value} value={tab.value} className="shrink-0 cursor-pointer">
-              {tab.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </HorizontalScroller>
-
-      {tabs.map((tab) => (
-        <TabsContent key={tab.value} value={tab.value}>
-          {tab.contentComponent}
-        </TabsContent>
-      ))}
-    </Tabs>
   );
 }

@@ -104,7 +104,7 @@ export function PreferenceOnboardingDialog({
               </div>
             ) : (
               <div className="flex flex-wrap gap-2">
-                {genres.map((genre: { id: string; name: string }) => {
+                {genres.map((genre) => {
                   const isSelected = selectedGenres.includes(genre.name);
                   return (
                     <button
