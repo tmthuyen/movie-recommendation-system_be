@@ -42,7 +42,8 @@ Bảng theo dõi danh sách plan trong `docs/plans/`. Dùng để xác định `
 | 22 | V22_backend_email-role-error-fixes.md | backend | email-role-error-fixes | Sửa email boolean + RoleService trả 404 | ✅ Hoàn thành 2026-11-05 |
 | 23 | V23_frontend_motion-system.md | frontend | motion-system | Motion system dùng chung cho card/component/trang | ✅ Hoàn thành 2026-11-05 |
 | 24 | V24_docs_plan-standardization.md | docs | plan-standardization | Chuẩn hoá tên file plan, heading và PLAN_INDEX | ✅ Hoàn thành 2026-11-05 |
-| 25 | V25_backend_cache-layer.md | backend | cache-layer | Cache Redis: movie/genre/country/interaction/recommendation | 🟡 Đang triển khai; load-more (cursor) tách sang V26 |
+| 25 | V25_backend_cache-layer.md | backend | cache-layer | Cache Redis: movie/genre/country/interaction/recommendation | 🟡 Đang triển khai; load-more (cursor) tách sang V27 |
+| 26 | V26_frontend_movie-search-filter.md | frontend | movie-search-filter | Search + filter phim từ DB, URL sync, UI responsive/modern | ✅ Hoàn thành 2026-11-07 (slider năm + toolbar grid; draft + nút "Áp dụng" — không auto-call API; QA responsive thủ công) |
 
 ## Ghi chú legacy
 
@@ -53,11 +54,11 @@ Bảng theo dõi danh sách plan trong `docs/plans/`. Dùng để xác định `
 
 ## Cách tính next_index
 
-`max(index) = 25` → `next_index = 26`
+`max(index) = 26` → `next_index = 27`
 
 ## next_index
 
-`26`
+`27`
 
 ## Cách xác định index khi tạo plan mới
 

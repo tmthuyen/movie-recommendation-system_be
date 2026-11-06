@@ -37,14 +37,16 @@ export interface InputMultiSelectDisplayText {
   clear: string;
   close: string;
   search: string;
+  empty?: string;
 }
 
-const displayText = {
+const displayText: InputMultiSelectDisplayText = {
   placeholder: 'Select...',
   selectAll: 'Select All',
   clear: 'Clear',
   close: 'Close',
   search: 'Search',
+  empty: 'No results found.',
 };
 
 export const InputMultiSelect: React.FC<{
@@ -57,6 +59,8 @@ export const InputMultiSelect: React.FC<{
   className?: string;
   style?: React.CSSProperties;
   displayTextProps?: InputMultiSelectDisplayText;
+  /** Text hiển thị khi không có lựa chọn nào khớp tìm kiếm. */
+  emptyText?: string;
   children: (v: InputMultiSelectProvided) => React.ReactNode;
 }> = ({
   options,
@@ -67,6 +71,7 @@ export const InputMultiSelect: React.FC<{
   truncateCount = 3,
   disabled = false,
   className,
+  emptyText,
   children,
   ...restProps
 }) => {
@@ -97,10 +102,14 @@ export const InputMultiSelect: React.FC<{
   };
 
   React.useEffect(() => {
-    if (isPopoverOpen && JSON.stringify(value) !== JSON.stringify(selectedValue)) {
-      setSelectedValue(value);
-    }
-  }, [isPopoverOpen]);
+    // Đồng bộ khi value thay đổi từ bên ngoài (reset, back/forward, ...).
+    // So sánh nội dung để tránh setState vô hạn khi parent truyền array mới mỗi render.
+    setSelectedValue((prev) =>
+      prev.length === value.length && prev.every((item, index) => item === value[index])
+        ? prev
+        : value,
+    );
+  }, [value]);
 
   return (
     <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
@@ -128,7 +137,9 @@ export const InputMultiSelect: React.FC<{
         <Command>
           <CommandInput placeholder={displayTextProps?.search || displayText.search} />
           <CommandList className="max-h-[unset] overflow-y-hidden">
-            <CommandEmpty>No results found.</CommandEmpty>
+            <CommandEmpty>
+              {emptyText || displayTextProps?.empty || 'No results found.'}
+            </CommandEmpty>
             <CommandGroup>
               <CommandItem key="all" onSelect={toggleAll} className="cursor-pointer">
                 <div
@@ -202,121 +213,136 @@ export const InputMultiSelect: React.FC<{
 };
 InputMultiSelect.displayName = 'MultiSelect';
 
+type InputMultiSelectTriggerProps = InputMultiSelectProvided & {
+  className?: string;
+  children?: (v: SelectOption) => React.ReactNode;
+  style?: React.CSSProperties;
+  /** Giữ trigger trên 1 hàng; badge dài sẽ truncate thay vì xuống dòng. */
+  singleLine?: boolean;
+  'aria-label'?: string;
+  title?: string;
+};
+
 export const InputMultiSelectTrigger = React.forwardRef<
   HTMLButtonElement,
-  InputMultiSelectProvided & {
-    className?: string;
-    children?: (v: SelectOption) => React.ReactNode;
-    style?: React.CSSProperties;
-      }
-      >(
-      (
-        {
-          options,
-          // onValueChange,
-          placeholder,
-          truncateCount,
-          disabled,
-          selectedValue,
-          // setSelectedValue,
-          // isPopoverOpen,
-          setIsPopoverOpen,
-          onOptionSelect,
-          onClearAllOptions,
-          className,
-          style,
-          children,
-        },
-        ref,
-      ) => {
-        const onTogglePopover = () => {
-          setIsPopoverOpen((prev) => !prev);
-        };
+  InputMultiSelectTriggerProps
+>((props, ref) => {
+  const {
+    options,
+    placeholder,
+    truncateCount,
+    disabled,
+    selectedValue,
+    isPopoverOpen,
+    setIsPopoverOpen,
+    onOptionSelect,
+    onClearAllOptions,
+    className,
+    style,
+    children,
+    singleLine = false,
+    title,
+  } = props;
+  const ariaLabel = props['aria-label'];
 
-        return (
-          <Button
-            ref={ref}
-            onClick={onTogglePopover}
-            variant="outline"
-            type="button"
-            disabled={disabled}
+  const onTogglePopover = () => {
+    setIsPopoverOpen((prev) => !prev);
+  };
+
+  return (
+    <Button
+      ref={ref}
+      onClick={onTogglePopover}
+      variant="outline"
+      type="button"
+      disabled={disabled}
+      aria-label={ariaLabel}
+      title={title}
+      aria-haspopup="listbox"
+      aria-expanded={isPopoverOpen}
+      className={cn(
+        'flex h-auto min-h-11 w-full items-center justify-between p-1 [&_svg]:pointer-events-auto',
+        'hover:bg-transparent',
+        disabled && '[&_svg]:pointer-events-none',
+        singleLine && 'flex-nowrap overflow-hidden',
+        className,
+      )}
+      style={style}
+    >
+      {selectedValue.length > 0 ? (
+        <div
+          className={cn('flex w-full items-center justify-between', singleLine && 'min-w-0 gap-1')}
+        >
+          <div
             className={cn(
-              'flex h-auto min-h-11 w-full items-center justify-between p-1 [&_svg]:pointer-events-auto',
-              'hover:bg-transparent',
-              disabled && '[&_svg]:pointer-events-none',
-              className,
+              'flex items-center px-1',
+              singleLine ? 'min-w-0 flex-1 flex-nowrap overflow-hidden' : 'flex-wrap',
             )}
-            style={style}
           >
-            {selectedValue.length > 0 ? (
-              <div className="flex w-full items-center justify-between">
-                <div className="flex flex-wrap items-center px-1">
-                  {selectedValue.slice(0, truncateCount).map((value, index) => {
-                    const option = options.find((o) => o.value === value);
+            {selectedValue.slice(0, truncateCount).map((value, index) => {
+              const option = options.find((o) => o.value === value);
 
-                    if (!option) {
-                      return <div key={`${index}-${value}`}></div>;
-                    }
+              if (!option) {
+                return <div key={`${index}-${value}`}></div>;
+              }
 
-                    if (children) {
-                      return <div key={`${index}-${value}`}>{children(option)}</div>;
-                    }
+              if (children) {
+                return (
+                  <div key={`${index}-${value}`} className={cn(singleLine && 'min-w-0 shrink')}>
+                    {children(option)}
+                  </div>
+                );
+              }
 
-                    return (
-                      <Badge
-                        key={`${index}-${value}`}
-                        className={cn(
-                          'bg-muted text-foreground hover:bg-muted mr-1 flex cursor-default items-center border-transparent',
-                        )}
-                      >
-                        {option?.icon && <option.icon className="mr-1 h-3.5 w-3.5" />}
-                        {option?.label}
-                        {/* <X
-                      className="text-muted-foreground hover:text-foreground ml-1 h-3.5 w-3.5 cursor-pointer bg-red-200"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOptionSelect(value);
-                        console.log('Cleared option:', value);
-                      }}
-                    /> */}
-                        <span
-                          className="text-muted-foreground hover:text-destructive ml-1 h-4 w-4 cursor-pointer"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onOptionSelect(value);
-                          }}
-                        >
-                      X
-                        </span>
-                      </Badge>
-                    );
-                  })}
-                  {selectedValue.length > truncateCount && (
-                    <div className={cn('text-muted-foreground cursor-default py-1 pl-1.5')}>
-                      {`+${selectedValue.length - truncateCount}`}
-                    </div>
+              return (
+                <Badge
+                  key={`${index}-${value}`}
+                  className={cn(
+                    'bg-muted text-foreground hover:bg-muted mr-1 flex cursor-default items-center border-transparent',
+                    singleLine && 'min-w-0 shrink',
                   )}
-                </div>
-                <div className="flex items-center justify-between">
-                  <X
-                    className="text-muted-foreground mx-2 h-4 cursor-pointer"
+                >
+                  {option?.icon && <option.icon className="mr-1 h-3.5 w-3.5 shrink-0" />}
+                  <span className={cn('min-w-0', singleLine && 'truncate')}>{option?.label}</span>
+                  <span
+                    className="text-muted-foreground hover:text-destructive ml-1 h-4 w-4 shrink-0 cursor-pointer"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onClearAllOptions();
+                      onOptionSelect(value);
                     }}
-                  />
-                  <Separator orientation="vertical" className="flex h-full min-h-6" />
-                  <ChevronDown className="text-muted-foreground mx-2 h-4 cursor-pointer" />
-                </div>
-              </div>
-            ) : (
-              <div className="mx-auto flex w-full items-center justify-between">
-                <span className="text-muted-foreground mx-3 text-sm">{placeholder}</span>
-                <ChevronDown className="text-muted-foreground mx-2 h-4 cursor-pointer" />
+                  >
+                    X
+                  </span>
+                </Badge>
+              );
+            })}
+            {selectedValue.length > truncateCount && (
+              <div className={cn('text-muted-foreground shrink-0 cursor-default py-1 pl-1.5')}>
+                {`+${selectedValue.length - truncateCount}`}
               </div>
             )}
-          </Button>
-        );
-      },
-      );
+          </div>
+          <div className="flex shrink-0 items-center justify-between">
+            <X
+              className="text-muted-foreground mx-2 h-4 cursor-pointer"
+              onClick={(e) => {
+                e.stopPropagation();
+                onClearAllOptions();
+              }}
+            />
+            <Separator orientation="vertical" className="flex h-full min-h-6" />
+            <ChevronDown className="text-muted-foreground mx-2 h-4 cursor-pointer" />
+          </div>
+        </div>
+      ) : (
+        <div className="mx-auto flex w-full min-w-0 items-center justify-between">
+          <span className={cn('text-muted-foreground mx-3 text-sm', singleLine && 'truncate')}>
+            {placeholder}
+          </span>
+          <ChevronDown className="text-muted-foreground mx-2 h-4 shrink-0 cursor-pointer" />
+        </div>
+      )}
+    </Button>
+  );
+});
 InputMultiSelectTrigger.displayName = 'InputMultiSelectTrigger';

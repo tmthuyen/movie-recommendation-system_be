@@ -96,7 +96,6 @@ import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import dateTimeUtils from '@/shared/utils/formatting';
 import { Separator } from '@/components/ui/separator';
-import { authApi } from '@/apis/auth.api';
 import useAuthApi from '@/hooks/tankstack/useAuthApi';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
