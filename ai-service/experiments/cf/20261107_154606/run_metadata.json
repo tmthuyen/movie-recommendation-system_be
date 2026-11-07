@@ -1,0 +1,33 @@
+{
+  "run_id": "20261107_154606",
+  "task": "implicit_interaction_topk_recommendation",
+  "interaction_definition": "observed user-item record = positive interaction",
+  "rating_used": false,
+  "split": "per_user_leave_two_out",
+  "negative_sampler": "uniform",
+  "num_negatives_per_positive": 4,
+  "validation_protocol": "full_candidate_ranking",
+  "test_protocol": "full_candidate_ranking",
+  "top_k": [
+    10,
+    20,
+    30,
+    50
+  ],
+  "primary_metric": "NDCG@10",
+  "num_users": 13140,
+  "num_items": 2557,
+  "train_interactions": 671078,
+  "validation_interactions": 13140,
+  "test_interactions": 13140,
+  "train_candidate_items": 2537,
+  "test_candidate_items": 2545,
+  "device": "cpu",
+  "best_epochs": {
+    "BPR-MF": 15,
+    "GMF": 2,
+    "MLP-NCF": 2,
+    "NeuMF": 15
+  },
+  "als_best_iterations": 20
+}
