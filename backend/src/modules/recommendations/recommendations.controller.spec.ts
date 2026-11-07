@@ -6,6 +6,7 @@ describe('RecommendationsController', () => {
   let controller: RecommendationsController;
   let recommendationsService: {
     getSimilarMovies: jest.Mock;
+    getSimilarMoviesByCursor: jest.Mock;
     semanticSearch: jest.Mock;
     hybridSearch: jest.Mock;
   };
@@ -13,6 +14,7 @@ describe('RecommendationsController', () => {
   beforeEach(async () => {
     recommendationsService = {
       getSimilarMovies: jest.fn(),
+      getSimilarMoviesByCursor: jest.fn(),
       semanticSearch: jest.fn(),
       hybridSearch: jest.fn(),
     };
@@ -62,6 +64,59 @@ describe('RecommendationsController', () => {
       12,
       NaN,
     );
+  });
+
+  it('GET /similar/:id/cursor trả envelope + pagination cursor', async () => {
+    recommendationsService.getSimilarMoviesByCursor.mockResolvedValue({
+      result: [{ id: 5, title: 'Phim', similarityScore: 0.9, rank: 1 }],
+      pagination: {
+        limit: 12,
+        total: 20,
+        hasMore: true,
+        nextCursor: 'cursor-2',
+      },
+    });
+
+    const res = await controller.getSimilarMoviesByCursor(5, {
+      cursor: 'cursor-1',
+      limit: 12,
+    });
+
+    expect(
+      recommendationsService.getSimilarMoviesByCursor,
+    ).toHaveBeenCalledWith(5, { cursor: 'cursor-1', limit: 12 });
+    expect(res).toEqual({
+      success: true,
+      statusCode: 200,
+      message: expect.any(String),
+      result: [{ id: 5, title: 'Phim', similarityScore: 0.9, rank: 1 }],
+      pagination: {
+        limit: 12,
+        total: 20,
+        hasMore: true,
+        nextCursor: 'cursor-2',
+      },
+    });
+  });
+
+  it('GET /similar/:id/cursor ép kiểu path id sang number', async () => {
+    recommendationsService.getSimilarMoviesByCursor.mockResolvedValue({
+      result: [],
+      pagination: {
+        limit: 12,
+        total: 0,
+        hasMore: false,
+        nextCursor: null,
+      },
+    });
+
+    await controller.getSimilarMoviesByCursor('12' as unknown as number, {
+      limit: 12,
+    });
+
+    expect(
+      recommendationsService.getSimilarMoviesByCursor,
+    ).toHaveBeenCalledWith(12, { limit: 12 });
   });
 
   it('GET /semantic-search hiện là stub trả {status,message,data:[]} (không envelope)', () => {

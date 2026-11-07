@@ -11,7 +11,8 @@
 - Giao tiếp **trực tiếp** với backend NestJS tại `http://localhost:8081/api` từ trình duyệt (không qua tầng BFF), thông qua `axiosClient` ở `frontend/src/lib/axiosClient.ts` với `withCredentials=true` (refresh token nằm trong httpOnly cookie của backend).
 - **Backend NestJS CÓ endpoint search và recommendation**:
   - `GET /api/movies/search` — tìm kiếm nâng cao (keyword, sort, genreIds, countryIds, khoảng năm) — xem `docs/BACKEND.md`.
-  - `GET /api/recommendations/similar/:id` — phim tương tự, backend proxy HTTP sang ai-service rồi map DB; FE gọi qua `recommendationApi.getSimilarMovies` → `axiosClient` (`frontend/src/apis/recommendation.api.ts:18-24`), dùng ở `SimilarMovies` (`frontend/src/components/movie/similar-movies.tsx:42-51`).
+  - `GET /api/recommendations/similar/:id` — phim tương tự, backend proxy HTTP sang ai-service rồi map DB; FE gọi qua `recommendationApi.getSimilarMovies` → `axiosClient` (`frontend/src/apis/recommendation.api.ts`).
+  - `GET /api/recommendations/similar/:id/cursor` — load-more phim tương tự bằng cursor; FE dùng `getSimilarMoviesCursor` + `useGetSimilarMoviesInfinite` (`useInfiniteQuery`) và UI `SimilarMoviesInfinite` (infinite scroll).
   - `GET /api/recommendations/semantic-search` và `GET /api/recommendations/hybrid-search` — **stub** ở backend (trả `{status, message, data: []}`), FE đã có api/hook nhưng chưa dùng thực tế.
   - Backend ↔ ai-service giao tiếp **2 kênh**: RabbitMQ (event) + HTTP (module recommendations).
 - Hạ tầng có **Kong gateway (`gateway/kong.yml`, `:8000`)**: `/api` → `8081`, `/api/recommendations` → `8082`; **hiện frontend gọi thẳng backend `:8081`**, chưa dùng gateway và chưa có client gọi trực tiếp ai-service `:8082`.
@@ -99,7 +100,7 @@ frontend/
     │   ├── movie.api.ts     # list/chi tiết, search (`GET /movies/search`), create/update/delete (admin)
     │   ├── country.api.ts / people.api.ts   # CRUD (admin)
     │   ├── rating.api.ts / comment.api.ts / interaction.api.ts  # Toggle + getAll/remove (trang admin)
-    │   ├── recommendation.api.ts # similar (`/recommendations/similar/:id`), semantic-search, hybrid-search
+    │   ├── recommendation.api.ts # similar (`/similar/:id`, `/similar/:id/cursor`), semantic-search, hybrid-search
     │   ├── user.api.ts      # Quản lý tài khoản + getAllUsers({page,limit,keyword}) + updateUserRoles
     │   └── role.api.ts      # CRUD vai trò (GET không phân trang)
     │
@@ -112,7 +113,7 @@ frontend/
     │   │   ├── admin.ts        # Bộ hooks admin theo domain (adminGenres/Countries/Peoples/Movies/Users/Roles) + interactions/ratings/comments read-only
     │   │   ├── admin-dashboard.ts # useAdminDashboard({days}) — gom 6 list API + memo thống kê dashboard + refresh()
     │   │   ├── useMovie.ts     # useGetMovies (list), useSearchMovies + useLatest/TopRated/MostViewed/MostLiked (gọi /movies/search với sort)
-    │   │   ├── useRecommendation.ts # useGetSimilarMovies (đã dùng ở SimilarMovies), useSemanticSearch, useHybridRecommendations (api/hook có, chưa dùng UI)
+    │   │   ├── useRecommendation.ts # useGetSimilarMovies, useGetSimilarMoviesInfinite, useSemanticSearch, useHybridRecommendations
     │   │   └── useInteraction.ts # useToggleInteraction (like, optimistic + invalidate), useMyFavorites/useMyFavoriteKeys (trạng thái nút card), useInteractionStats (like/comment/view realtime fallback),
     │   │                          # useMyHistory + useMyFavoritesPaged (phân trang, queryKey root riêng my-history/my-favorites-page)
     │   ├── useAuth.ts       # ⚠ Đang đọc mock AuthContext — sẽ dọn khi chuyển hẳn useAuthStore
@@ -148,7 +149,8 @@ frontend/
     │   │                    # MovieActions (1 nút Yêu thích = like; variant detail hiện số like realtime), MovieGrid (+MovieGridSkeleton), MovieFilters,
     │   │                    # MovieList, LatestMovies, MovieDetailView/Detail (chi tiết /movies/[id]), MovieRating (sao
     │   │                    # realtime), MovieComments (phân cấp + typing realtime), MovieViewCount (realtime),
-    │   │                    # SimilarMovies (đã gọi useGetSimilarMovies → `/recommendations/similar/:id`; comment trong file còn ghi “placeholder” là stale),
+    │   │                    # SimilarMoviesInfinite (infinite scroll `/recommendations/similar/:id/cursor`, dùng ColumnInfiniteScroll),
+    │   │                    # SimilarMovies (topK cũ, giữ để tương thích),
     │   │                    # InteractionMovieList (dùng chung /my-history + /my-favorites: hàng poster + badge type + phân trang)
     │   ├── header/          # admin-header (logo Admin + QuickNavDropdown + nút về trang user + toggle theme + UserMenu)
     │   ├── dropdown/        # user-dropdown, notification-dropdown, streak-dropdown, dropdown-container
@@ -322,11 +324,12 @@ NEXT_PUBLIC_TINYMCE_API_KEY=<TinyMCE key>
 | GET | `/api/interactions/my-history` | JWT | `{ page, limit }` | `interaction[]` (`type=click`) + `pagination` |
 | GET | `/api/interactions/my-favorites` | JWT | `{ page, limit }` | `interaction[]` (`type=like`) + `pagination` |
 | GET | `/api/recommendations/similar/:id` | Public | path `id` (number), query `topK?` (mặc định 10) | `movie[]` kèm `similarityScore`, `rank` + `pagination` (envelope chuẩn) |
+| GET | `/api/recommendations/similar/:id/cursor` | Public | path `id`, query `cursor?`, `limit?` (mặc định 12, max 50) | `movie[]` + `pagination = {limit,total,hasMore,nextCursor}`; dùng cho infinite scroll |
 | GET | `/api/recommendations/semantic-search` | Public | `keyword?`, `topK?` | **stub** — `{status, message, data: []}` (không envelope) |
 | GET | `/api/recommendations/hybrid-search` | Public | `{ userId (bắt buộc), keyword?, topK?, page?, pageSize? }` | **stub** — `{status, message, data: []}` (không envelope) |
 | — | `/api/auth/*`, `/api/users`, `/api/roles` | — | — | Đã có api/hook (auth, user, role, genre) |
 
-- **Search/recommendation đã có ở backend**: `/api/movies/search` là search nâng cao thật (home dùng qua `useLatestMovies`/`useTopRatedMovies`/`useMostViewedMovies` → `useSearchMovies`, `frontend/src/hooks/tankstack/useMovie.ts:99-173`); `/api/recommendations/similar/:id` là proxy thật sang ai-service và đã dùng ở `SimilarMovies`. `semantic-search`/`hybrid-search` mới là stub — chưa nối UI thật (xem V11 Phase 4).
+- **Search/recommendation đã có ở backend**: `/api/movies/search` là search nâng cao thật (home dùng qua `useLatestMovies`/`useTopRatedMovies`/`useMostViewedMovies` → `useSearchMovies`, `frontend/src/hooks/tankstack/useMovie.ts:99-173`); `/api/recommendations/similar/:id` và `/api/recommendations/similar/:id/cursor` là proxy thật sang ai-service, đã dùng ở `SimilarMoviesInfinite` (infinite scroll). `semantic-search`/`hybrid-search` mới là stub — chưa nối UI thật (xem V11 Phase 4).
 - **Socket.IO cùng `:8081`** (CORS `origin: '*'`, không bắt buộc auth): server→client `movie-{id}-comment`, `movie-{id}-rating`, `movie-{id}-interaction`, `movie-{id}-viewCount`, `movie-{id}-typing`; client→server `typingComment` `{ movieId, isTyping, userFullName? }`. Trang chi tiết chỉ dùng **1 socket dùng chung** (`hooks/useMovieSocket.ts`), mỗi widget subscribe event của mình.
 - **Rate limit**: global **100 request/phút** cho mọi request (fixed-window theo IP) + override theo endpoint (`/auth/login` 5/phút, `/auth/refresh` 10/phút, `/auth/register` 5/phút…) — tránh spam refetch (React Query `staleTime` 5 phút, debounce input tìm kiếm).
 - ⚠ **`RolesGuard` chỉ được gắn ở `RolesController`** — các module movies/genres/countries/peoples/ratings/comments/users… có `@Roles(...)` nhưng **KHÔNG được enforce** ở backend; phân quyền admin hiện chủ yếu dựa vào phía client (`RequireRole`).
@@ -400,6 +403,6 @@ Chi tiết quy tắc: [`FRONTEND_RULES.md` §6](./FRONTEND_RULES.md#6-motion--an
 - ✅ **`movie-filter.store.ts`** đã có state filter (keyword, genreId, countryId, sort, page, limit) + `setFilter/setPage/resetFilter`.
 - ⚠ **`GET /api/movies` chỉ hỗ trợ `page/limit/keyword`** — trang `/movies` vẫn lọc/sắp xếp **client-side** trên trang hiện tại (`movie-list.tsx:64-89`). Backend đã có `GET /api/movies/search` (filter `genreIds/countryIds/releaseYearFrom/releaseYearTo`, sort server-side) nhưng **trang danh sách chưa chuyển sang dùng** — cần xác minh/đề xuất khi muốn filter toàn bộ dữ liệu.
 - ⚠ **Lệch shape quốc gia**: backend `MovieResponseDto` trả `countries: Country[]` (`movie-response.dto.ts:82-84`), nhưng type FE `Movie` khai báo `country?: Country` (`movie.types.ts:61`) và `movie-list.tsx:80` / `movie-detail.tsx:82-85` đọc `movie.country` → filter/hiển thị quốc gia có thể không chạy đúng; **cần xác minh runtime** và thống nhất `countries` vs `country`.
-- ⚠ **Recommendation**: `similar` đã dùng thật; `semantic-search`/`hybrid-search` ở backend còn stub, FE có api/hook (`recommendation.api.ts`, `useRecommendation.ts`) nhưng chưa nối UI. ai-service `/search` được cho là lỗi 500 (xem `docs/AI-SERVICE.md`) — cần xác minh runtime trước khi tích hợp.
+- ✅ **Recommendation**: `similar` (topK) và `similar/cursor` (load-more) đã nối UI; `SimilarMoviesInfinite` dùng `useInfiniteQuery` + `ColumnInfiniteScroll` (IntersectionObserver) và xử lý `409 CURSOR_EXPIRED`. `semantic-search`/`hybrid-search` ở backend còn stub, FE có api/hook nhưng chưa nối UI. ai-service `/search` được cho là lỗi 500 (xem `docs/AI-SERVICE.md`) — cần xác minh runtime trước khi tích hợp.
 - ⚠ **`RolesGuard` không được enforce** ở hầu hết module backend — không dựa vào backend để bảo vệ trang admin; dùng `RequireRole(['ADMIN'])` ở client và cẩn trọng khi ẩn/hiện hành động quản trị.
 - ⚠ **`id` của movie/genre/country/people là number** (bigint) — route động `/movies/[id]` nhận string, phải parse sang number trước khi gọi API.

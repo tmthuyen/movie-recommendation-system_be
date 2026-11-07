@@ -1,10 +1,6 @@
 'use client';
 
-import {
-  motion,
-  useReducedMotion,
-  type HTMLMotionProps,
-} from 'motion/react';
+import { motion, useReducedMotion, type HTMLMotionProps } from 'motion/react';
 import type { ReactNode } from 'react';
 import {
   MOTION_DURATION,
@@ -27,6 +23,8 @@ interface MotionRevealProps extends MotionDivProps {
   once?: boolean;
   /** `mount`: chạy khi mount; `in-view`: chạy khi vào viewport. */
   when?: 'mount' | 'in-view';
+  /** Tỉ lệ phần tử cần lộ diện để trigger `in-view`. */
+  viewportAmount?: number | 'some' | 'all';
 }
 
 /** Fade-up cho một item/card; delay theo `index`, tôn trọng reduced motion. */
@@ -35,6 +33,7 @@ export function MotionReveal({
   index = 0,
   once = true,
   when = 'in-view',
+  viewportAmount = 0.2,
   ...rest
 }: MotionRevealProps) {
   const reduceMotion = useReducedMotion();
@@ -46,7 +45,7 @@ export function MotionReveal({
       initial={reduceMotion ? false : { opacity: 0, y: 12 }}
       animate={animateOnMount ? { opacity: 1, y: 0 } : undefined}
       whileInView={animateInView ? { opacity: 1, y: 0 } : undefined}
-      viewport={animateInView ? { once, amount: 0.2 } : undefined}
+      viewport={animateInView ? { once, amount: viewportAmount } : undefined}
       transition={{
         duration: MOTION_DURATION,
         ease: MOTION_EASE,
@@ -66,11 +65,7 @@ interface MotionStaggerProps extends MotionDivProps {
 }
 
 /** Parent stagger cho grid/list; con là `MotionItem` hoặc component có `variants`. */
-export function MotionStagger({
-  children,
-  when = 'mount',
-  ...rest
-}: MotionStaggerProps) {
+export function MotionStagger({ children, when = 'mount', ...rest }: MotionStaggerProps) {
   const reduceMotion = useReducedMotion();
   const animateInView = !reduceMotion && when === 'in-view';
 

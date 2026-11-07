@@ -18,6 +18,18 @@ export interface Pagination {
   totalPages: number;
 }
 
+/** Pagination dạng cursor của các endpoint load-more. */
+export interface CursorPagination {
+  limit: number;
+  total: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+}
+
+export interface ApiCursorPaginatedResponse<T = any> extends ApiResponse<T> {
+  pagination: CursorPagination;
+}
+
 export type ApiErrorResponse = {
   success: false;
   statusCode: number;

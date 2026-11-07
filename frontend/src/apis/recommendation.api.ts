@@ -1,7 +1,6 @@
-import { ApiPaginatedResponse, ApiResponse, Genre } from '@/shared/types/api.types';
-import axiosClient from '../lib/axiosClient';
-import { Movie } from '@/shared/types/movie.types';
-import { MovieWithSimilarScore } from '../shared/types/movie.types';
+import { ApiCursorPaginatedResponse, ApiResponse } from '@/shared/types/api.types';
+import { MovieWithSimilarScore } from '@/shared/types/movie.types';
+import axiosClient from '@/lib/axiosClient';
 
 export interface GenreQuery {
   page?: number;
@@ -20,6 +19,20 @@ export const recommendationApi = {
     params?: { topK?: number },
   ): Promise<ApiResponse<MovieWithSimilarScore[]>> => {
     const { data } = await axiosClient.get(`/recommendations/similar/${movieId}`, { params });
+    return data;
+  },
+
+  /**
+   * /api/recommendations/similar/:movieId/cursor?limit=12&cursor=...
+   * `cursor` bỏ trống ở trang đầu; dùng `pagination.nextCursor` cho trang kế.
+   */
+  getSimilarMoviesCursor: async (
+    movieId: string,
+    params?: { cursor?: string; limit?: number },
+  ): Promise<ApiCursorPaginatedResponse<MovieWithSimilarScore[]>> => {
+    const { data } = await axiosClient.get(`/recommendations/similar/${movieId}/cursor`, {
+      params,
+    });
     return data;
   },
 

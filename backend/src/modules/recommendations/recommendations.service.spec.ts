@@ -4,6 +4,10 @@ import { ConfigService } from '@nestjs/config';
 import { RecommendationsService } from './recommendations.service';
 import { MoviesService } from '@/modules/movies/movies.service';
 import { FakeCacheService } from '@/infrastructure/cache/testing/fake-cache.service';
+import {
+  encodeCursor,
+  fingerprintIds,
+} from '@/common/utlils/cursor-pagination.util';
 
 describe('RecommendationsService', () => {
   let service: RecommendationsService;
@@ -27,6 +31,15 @@ describe('RecommendationsService', () => {
     ...overrides,
   });
 
+  const buildAiResponseForIds = (ids: number[]) =>
+    buildAiResponse({
+      result: ids.map((id, index) => ({
+        id,
+        title: `Phim ${id}`,
+        similarityScore: 0.9 - index * 0.01,
+      })),
+    });
+
   const mockFetchJson = (payload: unknown, status = 200) => {
     const fetchMock = jest.fn().mockResolvedValue({
       ok: status < 400,
@@ -41,6 +54,9 @@ describe('RecommendationsService', () => {
     const movies: Record<number, { id: number; title: string }> = {
       1: { id: 1, title: 'Phim A' },
       2: { id: 2, title: 'Phim B' },
+      3: { id: 3, title: 'Phim C' },
+      4: { id: 4, title: 'Phim D' },
+      5: { id: 5, title: 'Phim E' },
     };
 
     movieService = {
@@ -162,6 +178,169 @@ describe('RecommendationsService', () => {
 
       expect(res.result.map(item => item.rank)).toEqual([1, 2]);
       expect(res.pagination.total).toBe(2);
+    });
+  });
+
+  describe('getSimilarMoviesByCursor', () => {
+    it('trang đầu gọi AI 1 lần, trả đúng limit và nextCursor', async () => {
+      const fetchMock = mockFetchJson(buildAiResponseForIds([1, 2, 3, 4, 5]));
+
+      const res = await service.getSimilarMoviesByCursor(1, { limit: 2 });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(res.result.map(item => item.id)).toEqual([1, 2]);
+      expect(res.pagination).toMatchObject({
+        limit: 2,
+        total: 5,
+        hasMore: true,
+      });
+      expect(res.pagination.nextCursor).not.toBeNull();
+    });
+
+    it('trang 2/3 dùng nextCursor, không gọi AI lần nữa', async () => {
+      const fetchMock = mockFetchJson(buildAiResponseForIds([1, 2, 3, 4, 5]));
+
+      const page1 = await service.getSimilarMoviesByCursor(1, { limit: 2 });
+      const page2 = await service.getSimilarMoviesByCursor(1, {
+        limit: 2,
+        cursor: page1.pagination.nextCursor as string,
+      });
+      const page3 = await service.getSimilarMoviesByCursor(1, {
+        limit: 2,
+        cursor: page2.pagination.nextCursor as string,
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(page2.result.map(item => item.id)).toEqual([3, 4]);
+      expect(page3.result.map(item => item.id)).toEqual([5]);
+      expect(page3.pagination).toEqual({
+        limit: 2,
+        total: 5,
+        hasMore: false,
+        nextCursor: null,
+      });
+    });
+
+    it('skip movie không còn trong DB và fill item phía sau', async () => {
+      mockFetchJson(buildAiResponseForIds([1, 999, 2, 3]));
+
+      const page1 = await service.getSimilarMoviesByCursor(1, { limit: 2 });
+
+      expect(page1.result.map(item => item.id)).toEqual([1, 2]);
+      expect(page1.pagination.hasMore).toBe(true);
+
+      const page2 = await service.getSimilarMoviesByCursor(1, {
+        limit: 2,
+        cursor: page1.pagination.nextCursor as string,
+      });
+
+      expect(page2.result.map(item => item.id)).toEqual([3]);
+      expect(page2.pagination.hasMore).toBe(false);
+    });
+
+    it('cursor hỏng → 400 INVALID_CURSOR', async () => {
+      mockFetchJson(buildAiResponseForIds([1, 2, 3]));
+
+      await expect(
+        service.getSimilarMoviesByCursor(1, { cursor: 'bad-cursor' }),
+      ).rejects.toMatchObject({
+        statusCode: HttpStatus.BAD_REQUEST,
+        errorCode: 'INVALID_CURSOR',
+      });
+    });
+
+    it('cursor của movie khác → 400 INVALID_CURSOR', async () => {
+      mockFetchJson(buildAiResponseForIds([1, 2, 3]));
+
+      const page1 = await service.getSimilarMoviesByCursor(1, { limit: 1 });
+
+      await expect(
+        service.getSimilarMoviesByCursor(2, {
+          limit: 1,
+          cursor: page1.pagination.nextCursor as string,
+        }),
+      ).rejects.toMatchObject({
+        statusCode: HttpStatus.BAD_REQUEST,
+        errorCode: 'INVALID_CURSOR',
+      });
+    });
+
+    it('version tăng giữa 2 trang → 409 CURSOR_EXPIRED', async () => {
+      mockFetchJson(buildAiResponseForIds([1, 2, 3]));
+
+      const page1 = await service.getSimilarMoviesByCursor(1, { limit: 1 });
+      await cache.incr('cache:recommendation:ver:similar:1');
+
+      await expect(
+        service.getSimilarMoviesByCursor(1, {
+          limit: 1,
+          cursor: page1.pagination.nextCursor as string,
+        }),
+      ).rejects.toMatchObject({
+        statusCode: HttpStatus.CONFLICT,
+        errorCode: 'CURSOR_EXPIRED',
+      });
+    });
+
+    it('snapshot đổi fingerprint (cache reload) → 409 CURSOR_EXPIRED', async () => {
+      mockFetchJson(buildAiResponseForIds([1, 2, 3]));
+
+      const page1 = await service.getSimilarMoviesByCursor(1, { limit: 1 });
+      await cache.del('cache:recommendation:similar:1:k100:v0');
+      mockFetchJson(buildAiResponseForIds([3, 2, 1]));
+
+      await expect(
+        service.getSimilarMoviesByCursor(1, {
+          limit: 1,
+          cursor: page1.pagination.nextCursor as string,
+        }),
+      ).rejects.toMatchObject({
+        statusCode: HttpStatus.CONFLICT,
+        errorCode: 'CURSOR_EXPIRED',
+      });
+    });
+
+    it('offset bằng cuối danh sách → trang rỗng, hasMore=false', async () => {
+      mockFetchJson(buildAiResponseForIds([1, 2]));
+
+      await service.getSimilarMoviesByCursor(1, { limit: 2 });
+      const cursorAtEnd = encodeCursor({
+        v: 0,
+        s: 'similar:1',
+        o: 2,
+        f: fingerprintIds([1, 2]),
+      });
+
+      const page2 = await service.getSimilarMoviesByCursor(1, {
+        limit: 2,
+        cursor: cursorAtEnd,
+      });
+
+      expect(page2.result).toEqual([]);
+      expect(page2.pagination).toEqual({
+        limit: 2,
+        total: 2,
+        hasMore: false,
+        nextCursor: null,
+      });
+    });
+
+    it('limit mặc định là 12 khi không truyền', async () => {
+      mockFetchJson(buildAiResponseForIds([1, 2, 3]));
+
+      const res = await service.getSimilarMoviesByCursor(1, {});
+
+      expect(res.pagination.limit).toBe(12);
+      expect(res.result).toHaveLength(3);
+    });
+
+    it('limit vượt max bị clamp về 50', async () => {
+      mockFetchJson(buildAiResponseForIds([1, 2, 3]));
+
+      const res = await service.getSimilarMoviesByCursor(1, { limit: 100 });
+
+      expect(res.pagination.limit).toBe(50);
+      expect(res.result).toHaveLength(3);
     });
   });
 

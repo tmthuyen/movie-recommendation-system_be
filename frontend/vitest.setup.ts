@@ -93,19 +93,56 @@ if (!globalThis.ResizeObserver) {
   } as unknown as typeof ResizeObserver;
 }
 
-if (!globalThis.IntersectionObserver) {
-  globalThis.IntersectionObserver = class IntersectionObserver {
-    root = null;
-    rootMargin = '';
-    thresholds: number[] = [];
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-    takeRecords() {
-      return [];
-    }
-  } as unknown as typeof IntersectionObserver;
+type IntersectionObserverCallback = ConstructorParameters<typeof IntersectionObserver>[0];
+
+class MockIntersectionObserver implements IntersectionObserver {
+  root = null;
+  rootMargin = '';
+  thresholds: number[] = [];
+  private readonly callback: IntersectionObserverCallback;
+
+  constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+    this.callback = callback;
+    this.rootMargin = options?.rootMargin ?? '';
+    this.thresholds = options?.threshold
+      ? Array.isArray(options.threshold)
+        ? options.threshold
+        : [options.threshold]
+      : [0];
+    mockIntersectionObservers.add(this);
+  }
+
+  observe() {}
+  unobserve() {}
+  disconnect() {
+    mockIntersectionObservers.delete(this);
+  }
+  takeRecords() {
+    return [];
+  }
+
+  trigger(isIntersecting = true) {
+    this.callback(
+      [
+        {
+          isIntersecting,
+          target: document.createElement('div'),
+        } as unknown as IntersectionObserverEntry,
+      ],
+      this,
+    );
+  }
 }
+
+const mockIntersectionObservers = new Set<MockIntersectionObserver>();
+
+globalThis.IntersectionObserver =
+  MockIntersectionObserver as unknown as typeof IntersectionObserver;
+
+(globalThis as typeof globalThis & { __triggerIntersection?: () => void }).__triggerIntersection =
+  () => {
+    for (const observer of [...mockIntersectionObservers]) observer.trigger(true);
+  };
 
 if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = vi.fn();
@@ -113,6 +150,7 @@ if (!Element.prototype.scrollIntoView) {
 
 afterEach(() => {
   cleanup();
+  mockIntersectionObservers.clear();
   localStorage.clear();
   sessionStorage.clear();
 });

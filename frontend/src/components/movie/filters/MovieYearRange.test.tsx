@@ -82,7 +82,7 @@ describe('MovieYearRange', () => {
 
     rerender(<MovieYearRange from={1990} to={2005} onChange={vi.fn()} />);
 
-    expect(screen.getByText('1990 – 2005')).toBeInTheDocument();
+    expect(screen.getByText('Đến 2005')).toBeInTheDocument();
     expect(screen.getByRole('slider', { name: 'Năm phát hành từ' })).toHaveAttribute(
       'aria-valuenow',
       '1990',

@@ -1,10 +1,11 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { recommendationApi } from '@/apis/recommendation.api';
 import {
   useGetSimilarMovies,
+  useGetSimilarMoviesInfinite,
   useHybridRecommendations,
   useSemanticSearch,
 } from './useRecommendation';
@@ -12,6 +13,7 @@ import {
 vi.mock('@/apis/recommendation.api', () => ({
   recommendationApi: {
     getSimilarMovies: vi.fn(),
+    getSimilarMoviesCursor: vi.fn(),
     semanticSearch: vi.fn(),
     hybridSearch: vi.fn(),
   },
@@ -31,6 +33,18 @@ const apiResponse = (result: unknown) => ({
   statusCode: 200,
   message: 'OK',
   result,
+});
+
+const cursorResponse = (
+  result: unknown,
+  pagination: { hasMore: boolean; nextCursor: string | null },
+) => ({
+  ...apiResponse(result),
+  pagination: {
+    limit: 12,
+    total: 2,
+    ...pagination,
+  },
 });
 
 let queryClient: QueryClient;
@@ -107,6 +121,88 @@ describe('useGetSimilarMovies', () => {
   });
 });
 
+describe('useGetSimilarMoviesInfinite', () => {
+  beforeEach(() => {
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.mocked(recommendationApi.getSimilarMoviesCursor).mockReset();
+  });
+
+  afterEach(() => {
+    queryClient.clear();
+  });
+
+  it('trang đầu không cursor, fetchNextPage dùng nextCursor', async () => {
+    vi.mocked(recommendationApi.getSimilarMoviesCursor)
+      .mockResolvedValueOnce(
+        cursorResponse([similarMovies[0]], {
+          hasMore: true,
+          nextCursor: 'cursor-2',
+        }) as any,
+      )
+      .mockResolvedValueOnce(
+        cursorResponse([{ id: 3, title: 'Phim 3' }], {
+          hasMore: false,
+          nextCursor: null,
+        }) as any,
+      );
+
+    const { result } = renderHook(() => useGetSimilarMoviesInfinite(7, { limit: 12 }), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(recommendationApi.getSimilarMoviesCursor).toHaveBeenCalledWith('7', {
+      cursor: undefined,
+      limit: 12,
+    });
+    expect(result.current.hasNextPage).toBe(true);
+
+    await act(async () => {
+      await result.current.fetchNextPage();
+    });
+
+    await waitFor(() => expect(result.current.data?.pages).toHaveLength(2));
+    expect(recommendationApi.getSimilarMoviesCursor).toHaveBeenLastCalledWith('7', {
+      cursor: 'cursor-2',
+      limit: 12,
+    });
+    expect(result.current.hasNextPage).toBe(false);
+  });
+
+  it('hasMore=false ngay trang đầu → không có trang kế', async () => {
+    vi.mocked(recommendationApi.getSimilarMoviesCursor).mockResolvedValue(
+      cursorResponse([similarMovies[0]], {
+        hasMore: false,
+        nextCursor: null,
+      }) as any,
+    );
+
+    const { result } = renderHook(() => useGetSimilarMoviesInfinite(7), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.hasNextPage).toBe(false);
+    expect(recommendationApi.getSimilarMoviesCursor).toHaveBeenCalledWith('7', {
+      cursor: undefined,
+      limit: undefined,
+    });
+  });
+
+  it('đưa lỗi vào state khi API thất bại', async () => {
+    vi.mocked(recommendationApi.getSimilarMoviesCursor).mockRejectedValue(
+      new Error('cursor error'),
+    );
+
+    const { result } = renderHook(() => useGetSimilarMoviesInfinite(1), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe('cursor error');
+  });
+});
+
 describe('useSemanticSearch', () => {
   beforeEach(() => {
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -118,7 +214,9 @@ describe('useSemanticSearch', () => {
   });
 
   it('truyền query + topK xuống API', async () => {
-    vi.mocked(recommendationApi.semanticSearch).mockResolvedValue(apiResponse(similarMovies) as any);
+    vi.mocked(recommendationApi.semanticSearch).mockResolvedValue(
+      apiResponse(similarMovies) as any,
+    );
 
     const { result } = renderHook(() => useSemanticSearch({ query: 'phim vũ trụ', topK: 5 }), {
       wrapper: createWrapper(),

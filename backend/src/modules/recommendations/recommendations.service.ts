@@ -1,5 +1,21 @@
 import { AppException } from '@/common/custom-exception/app-exception';
-import { ResultWithPagination } from '@/common/dtos/paginated-result.interface';
+import {
+  ResultWithCursorPagination,
+  ResultWithPagination,
+} from '@/common/dtos/paginated-result.interface';
+import {
+  CursorQueryDto,
+  DEFAULT_CURSOR_LIMIT,
+  MAX_CURSOR_LIMIT,
+} from '@/common/dtos/cursor-query.dto';
+import {
+  buildCursorPagination,
+  buildCursorScope,
+  clampCursorLimit,
+  fingerprintIds,
+  hydrateCursorPage,
+  resolveCursorOffset,
+} from '@/common/utlils/cursor-pagination.util';
 import { Movie } from '@/modules/movies/entities/movie.entity';
 import { MoviesService } from '@/modules/movies/movies.service';
 import { HybridSearchQuery } from '@/modules/recommendations/dtos/hybrid-search-query.dto';
@@ -40,6 +56,10 @@ export interface IRecommendationsService {
     movieId: number,
     topK?: number,
   ): Promise<ResultWithPagination<SimilarMovieResponseDto>>;
+  getSimilarMoviesByCursor(
+    movieId: number,
+    query: CursorQueryDto,
+  ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>>;
   semanticSearch(keyword: string, topK?: number): Promise<any>;
   hybridSearch(hybridSearchQuery: HybridSearchQuery): Promise<any>;
 }
@@ -101,13 +121,60 @@ export class RecommendationsService implements IRecommendationsService {
     };
   }
 
+  async getSimilarMoviesByCursor(
+    movieId: number,
+    query: CursorQueryDto,
+  ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>> {
+    this.logger.log(
+      `Lấy phim tương tự (cursor) cho movieId=${movieId}, limit=${query.limit}, cursor=${query.cursor ? 'yes' : 'no'}`,
+    );
+
+    await this.movieService.findOne(movieId);
+
+    const limit = clampCursorLimit(
+      query.limit,
+      DEFAULT_CURSOR_LIMIT,
+      MAX_CURSOR_LIMIT,
+    );
+    const { items, version, fingerprint } = await this.getSnapshot(movieId);
+    const scope = buildCursorScope('similar', movieId);
+
+    const offset = resolveCursorOffset(
+      query.cursor,
+      { version, scope, fingerprint },
+      items.length,
+    );
+
+    const page = await hydrateCursorPage({
+      items,
+      offset,
+      limit,
+      hydrate: async chunk => (await this.hydrate(chunk)).result,
+    });
+
+    return {
+      result: page.result,
+      pagination: buildCursorPagination({
+        limit,
+        total: items.length,
+        offset: page.nextOffset,
+        version,
+        scope,
+        fingerprint,
+      }),
+    };
+  }
+
   async semanticSearch(keyword: string, topK?: number): Promise<any> {}
 
   async hybridSearch(hybridSearchQuery: HybridSearchQuery): Promise<any> {}
 
-  private async getSnapshot(
-    movieId: number,
-  ): Promise<{ key: string; items: RecommendationItem[] }> {
+  private async getSnapshot(movieId: number): Promise<{
+    key: string;
+    items: RecommendationItem[];
+    version: number;
+    fingerprint: string;
+  }> {
     const version = await this.cache.getCounter(
       CacheKeys.recommendation.similarVersion(movieId),
     );
@@ -120,7 +187,12 @@ export class RecommendationsService implements IRecommendationsService {
       loader: () => this.loadSnapshotFromAi(movieId, this.window),
     });
 
-    return { key, items };
+    return {
+      key,
+      items,
+      version,
+      fingerprint: fingerprintIds(items.map(item => item.id)),
+    };
   }
 
   /** Lấy snapshot từ ai-service và chuẩn hoá `rank` về 1..n. */
@@ -201,23 +273,21 @@ export class RecommendationsService implements IRecommendationsService {
       movieById.set(id, movie);
     }
 
-    this.logger.log(`
-      item.id: ${items[0]?.id} - type: ${typeof items[0]?.id}
-      movie.id: ${movies[0]?.id} - type: ${typeof movies[0]?.id}
-    `);
+    // this.logger.log(`
+    //   item.id: ${items[0]?.id} - type: ${typeof items[0]?.id}
+    //   movie.id: ${movies[0]?.id} - type: ${typeof movies[0]?.id}
+    // `);
 
-    this.logger.log(`
-      Movie Rec: ${itemIds.join(', ')}\n
-      Movie DB: ${movies.map(m => m.id).join(', ')}\n
-      Movie Map: ${Array.from(movieById.keys()).join(', ')}
-      `);
+    // this.logger.log(`
+    //   Movie Rec: ${itemIds.join(', ')}\n
+    //   Movie DB: ${movies.map(m => m.id).join(', ')}\n
+    //   Movie Map: ${Array.from(movieById.keys()).join(', ')}
+    //   `);
 
     const mappedData = items
       .map(item => {
         const movie = movieById.get(Number(item.id));
-        this.logger.log(
-          `Mapping movieId=${item.id} to movie=${movie?.title || 'null'}`,
-        );
+
         if (!movie) {
           this.logger.warn(
             `Movie with id ${item.id} not found in database, skipping.`,

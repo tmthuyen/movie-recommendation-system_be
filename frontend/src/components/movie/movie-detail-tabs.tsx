@@ -1,4 +1,4 @@
-import { SimilarMovies } from './similar-movies';
+import { SimilarMoviesInfinite } from './similar-movies-infinite';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Movie } from '@/shared/types/movie.types';
@@ -13,7 +13,7 @@ export function MovieDetailTabs({ movie }: { movie: Movie }) {
     {
       value: 'similarity',
       label: 'Phim tương tự',
-      contentComponent: <SimilarMovies movieId={movie.id} genres={movie.genres} />,
+      contentComponent: <SimilarMoviesInfinite movieId={movie.id} genres={movie.genres} />,
     },
     {
       value: 'forYou',

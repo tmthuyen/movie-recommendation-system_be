@@ -65,8 +65,12 @@ export interface MovieDetail extends Movie {
   moviePeoples?: MoviePeople[];
 }
 
-/** Movie với similar score */
+/** Movie kèm điểm tương đồng/rank từ recommendation API. */
 export interface MovieWithSimilarScore extends Movie {
+  /** Field backend trả thực tế. */
+  similarityScore?: number;
+  rank?: number;
+  /** @deprecated Giữ để tương thích code cũ; ưu tiên `similarityScore`. */
   similarScore?: number;
 }
 

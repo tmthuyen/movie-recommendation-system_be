@@ -1,7 +1,5 @@
 import { recommendationApi } from '@/apis/recommendation.api';
-import { parseAxiosError } from '@/lib/axiosClient';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 // /api/recommendations/similar/:movieId?top_k=10
 export function useGetSimilarMovies(
@@ -19,6 +17,33 @@ export function useGetSimilarMovies(
 
     staleTime: staleTime, // 5 phút
     gcTime: gcTime, // 10 phút
+  });
+}
+
+/** Query key dùng chung cho infinite similar (cần khi reset do cursor hết hạn). */
+export const similarInfiniteQueryKey = (movieId: number, limit?: number) =>
+  ['recommendations', 'similar', 'infinite', movieId, limit] as const;
+
+// /api/recommendations/similar/:movieId/cursor?limit=12&cursor=...
+export function useGetSimilarMoviesInfinite(
+  movieId: number,
+  params?: { limit?: number },
+  staleTime: number = 1000 * 60 * 5,
+  gcTime: number = 1000 * 60 * 10,
+) {
+  return useInfiniteQuery({
+    queryKey: similarInfiniteQueryKey(movieId, params?.limit),
+    queryFn: ({ pageParam }) =>
+      recommendationApi.getSimilarMoviesCursor(String(movieId), {
+        cursor: pageParam,
+        limit: params?.limit,
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) =>
+      lastPage.pagination.hasMore ? (lastPage.pagination.nextCursor ?? undefined) : undefined,
+    staleTime,
+    gcTime,
+    enabled: movieId > 0,
   });
 }
 
@@ -66,6 +91,7 @@ export function useHybridRecommendations(
 
 const useRecommendation = {
   useGetSimilarMovies,
+  useGetSimilarMoviesInfinite,
   useSemanticSearch,
   useHybridRecommendations,
 };

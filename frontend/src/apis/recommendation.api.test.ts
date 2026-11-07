@@ -41,6 +41,32 @@ describe('recommendationApi', () => {
     expect(mocks.get).toHaveBeenCalledWith('/recommendations/similar/12', { params: undefined });
   });
 
+  it('getSimilarMoviesCursor gọi đúng path + params cursor/limit', async () => {
+    const payload = {
+      success: true,
+      statusCode: 200,
+      message: 'OK',
+      result: [{ id: 2, title: 'Dune 2', similarityScore: 0.9 }],
+      pagination: {
+        limit: 12,
+        total: 20,
+        hasMore: true,
+        nextCursor: 'next-cursor',
+      },
+    };
+    mocks.get.mockResolvedValue({ data: payload });
+
+    const result = await recommendationApi.getSimilarMoviesCursor('7', {
+      cursor: 'current-cursor',
+      limit: 12,
+    });
+
+    expect(mocks.get).toHaveBeenCalledWith('/recommendations/similar/7/cursor', {
+      params: { cursor: 'current-cursor', limit: 12 },
+    });
+    expect(result).toBe(payload);
+  });
+
   it('semanticSearch gửi query + topK', async () => {
     mocks.get.mockResolvedValue({ data: { result: [] } });
 

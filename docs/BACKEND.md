@@ -15,7 +15,7 @@
 - Giao tiếp với `ai-service/` qua **2 kênh**:
   - **RabbitMQ**: đồng bộ dữ liệu/event (movie/user/interaction/training) — xem mục RabbitMQ.
   - **HTTP**: module `recommendations` proxy sang ai-service qua `AI_SERVICE_URL` (mặc định `http://localhost:8082/api/recommendations`) — xem mục `Module recommendations`.
-- **Có endpoint recommendation trong backend** tại prefix `/api/recommendations`: `similar` đã hoạt động (proxy ai-service + map DB), `semantic-search`/`hybrid-search` hiện là stub.
+- **Có endpoint recommendation trong backend** tại prefix `/api/recommendations`: `similar` và `similar/:id/cursor` (load-more) đã hoạt động (proxy ai-service + map DB + cache snapshot), `semantic-search`/`hybrid-search` hiện là stub.
 
 | Thông số | Giá trị |
 |---|---|
@@ -98,7 +98,7 @@ backend/src/
 │   ├── ratings/        # CRUD rating + transaction cập nhật voteAverage/voteCount + WS + publish interaction.created; entities Rating, SeedRating
 │   ├── comments/       # CRUD comment phân cấp (parentId) + WS + publish interaction.created; entity Comment
 │   ├── interactions/   # TOGGLE like + stats + WS + publish interaction.created; entity Interaction; interaction.cron.ts
-│   ├── recommendations/ # proxy HTTP sang ai-service: similar (thật), semantic-search/hybrid-search (stub)
+│   ├── recommendations/ # proxy HTTP sang ai-service: similar + similar/cursor (thật), semantic-search/hybrid-search (stub)
 │   ├── files/          # upload file chung (S3/R2)
 │   ├── failed-events/  # danh sách message rớt DLQ + retry thủ công
 │   ├── events/         # EventsGateway (Socket.IO)
@@ -321,10 +321,11 @@ Module đã được đăng ký trong `AppModule` (`app.module.ts:42,118`) và i
 | Method | Path | Auth | Request | Response | Ghi chú |
 |---|---|---|---|---|---|
 | GET | `/api/recommendations/similar/:id` | Public | path `id` (number), query `topK?` (number, mặc định `10` nếu falsy) | envelope chuẩn: `result` = movie[] kèm `similarityScore`, `rank`; `pagination` map **1:1** từ ai-service: `{page, limit, total, totalPages}` | **Đã hoạt động**: gọi HTTP `GET ${AI_SERVICE_URL}/similar/{id}?topK=...` (`recommendations.service.ts:36-43`), validate response bằng Zod theo `pagination` của ai-service (`ai-service/src/api/schemas.py::Pagination`), rồi map từng `id` với DB qua `movieService.findByIds` (bỏ qua id không có trong DB). Lỗi response không hợp lệ → `AppException` 400 `AI_SERVICE_ERROR`; `AppException` được **rethrow** (không nuốt thành `result: []`). |
+| GET | `/api/recommendations/similar/:id/cursor` | Public | path `id` (number), query `cursor?` (opaque), `limit?` (1–50, mặc định `12`) | envelope chuẩn: `result` = movie[] kèm `similarityScore`, `rank`; `pagination = {limit, total, hasMore, nextCursor}` | **Load-more**: trang đầu bỏ trống `cursor`; dùng `nextCursor` cho trang kế. Tái sử dụng snapshot cache V25, không gọi AI lần 2 nếu cache hit. Cursor dùng chung ở `common/utlils/cursor-pagination.util.ts` (scope/version/fingerprint) để tái sử dụng cho hybrid/semantic sau này. Cursor hỏng/sai movie → `400 INVALID_CURSOR`; snapshot đổi → `409 CURSOR_EXPIRED` (frontend reset về trang đầu). |
 | GET | `/api/recommendations/semantic-search` | Public | query `keyword?`, `topK?` | **KHÔNG envelope**: `{status: 'success', message, data: []}` | **Stub**: controller trả thẳng object, không gọi service (`recommendations.controller.ts:33-45`); service method rỗng (`recommendations.service.ts:110`). |
 | GET | `/api/recommendations/hybrid-search` | Public | query `HybridSearchQuery`: `userId` (bắt buộc), `keyword?` (≤255), `topK?` (1–100, mặc định 50), `page?` (≥1, mặc định 1), `pageSize?` (1–100, mặc định 20) | **KHÔNG envelope**: `{status: 'success', message, data: []}` | **Stub**: controller trả thẳng object (`recommendations.controller.ts:47-55`); service method rỗng (`recommendations.service.ts:112`). DTO: `hybrid-search-query.dto.ts:11-39`. |
 
-⚠ Hệ quả cho client: chỉ `similar` dùng được và theo envelope; `semantic-search`/`hybrid-search` **không** trả `{success, statusCode, result}` và hiện luôn trả `data: []`. Nếu cần semantic/hybrid thật, gọi trực tiếp ai-service (`:8082`) cho tới khi backend hoàn thiện.
+⚠ Hệ quả cho client: `similar` và `similar/cursor` dùng được và theo envelope; `semantic-search`/`hybrid-search` **không** trả `{success, statusCode, result}` và hiện luôn trả `data: []`. Nếu cần semantic/hybrid thật, gọi trực tiếp ai-service (`:8082`) cho tới khi backend hoàn thiện.
 
 ### Module `files` — `/api/files` (class-level `JwtAuthGuard`)
 
@@ -369,6 +370,9 @@ Ghi chú:
 - `GET /api/recommendations/similar/:id` lấy **1 lần** `topK = RECOMMENDATION_WINDOW` (mặc định 100) từ
   ai-service, cache mảng `[{id, score, rank}]`, sau đó cắt theo `topK` client yêu cầu. Hit cache → **không**
   gọi ai-service.
+- `GET /api/recommendations/similar/:id/cursor` dùng **cùng snapshot cache** trên; trang đầu gọi AI (nếu miss),
+  các trang sau chỉ đọc cache và cắt theo offset trong cursor. Cursor chứa `version` + fingerprint danh sách id
+  nên nếu snapshot bị reload/đổi thứ tự, request trang kế trả `409 CURSOR_EXPIRED`.
 - `incrementViewCount` và `update/remove` đọc DB trực tiếp (`findOneFresh`) để tránh lost-update từ cache.
 - **Không dùng** `KEYS`/`SCAN`; invalidation bằng version counter (O(1), an toàn multi-instance).
 - Fail-open: Redis lỗi → API đi thẳng DB/ai-service. Dữ liệu đọc lên phải qua Zod; sai → xoá key + coi như miss.
@@ -484,7 +488,7 @@ Vượt limit → HTTP **429 Too Many Requests** với message của decorator (
 4. **Validation strict**: `forbidNonWhitelisted` → không gửi field thừa; field body/query có thể gửi snake_case (interceptor đổi sang camelCase).
 5. **Interactions là TOGGLE like**: `POST /api/interactions` gọi 1 lần để thích, gọi lại để bỏ — đọc `result.action` (`added`/`removed`); client **không gửi `score`** (backend tự tính band 5) và `result.likeCount` phục vụ cập nhật số like. `POST /api/movies/:id/view` là Optional JWT (tăng view kể cả khi chưa đăng nhập; chỉ user đăng nhập mới tạo/tăng `click`).
 6. **Real-time**: kết nối Socket.IO tới `http://localhost:8081` rồi subscribe `movie-{id}-comment`, `movie-{id}-rating`, `movie-{id}-interaction`, `movie-{id}-viewCount`, `movie-{id}-typing`; gửi `typingComment` khi người dùng gõ.
-7. **Gợi ý phim**: backend **có** module `/api/recommendations` — dùng `GET /api/recommendations/similar/:id?topK=10` (envelope chuẩn) cho phim tương tự; backend proxy sang ai-service qua `AI_SERVICE_URL` rồi map với DB. `semantic-search`/`hybrid-search` hiện là **stub** (trả `{status, message, data: []}`, không envelope) — nếu cần semantic/hybrid thật, gọi trực tiếp ai-service (`http://localhost:8082/api/recommendations/...`) hoặc qua Kong (`http://localhost:8000/api/recommendations/...`) cho tới khi backend hoàn thiện. Ngoài HTTP, backend vẫn trao đổi event với ai-service qua RabbitMQ.
+7. **Gợi ý phim**: backend **có** module `/api/recommendations` — dùng `GET /api/recommendations/similar/:id?topK=10` (envelope chuẩn) cho phim tương tự; load-more dùng `GET /api/recommendations/similar/:id/cursor?limit=12&cursor=...`, đọc `pagination.nextCursor` cho trang kế. Backend proxy sang ai-service qua `AI_SERVICE_URL` rồi map với DB. `semantic-search`/`hybrid-search` hiện là **stub** (trả `{status, message, data: []}`, không envelope) — nếu cần semantic/hybrid thật, gọi trực tiếp ai-service (`http://localhost:8082/api/recommendations/...`) hoặc qua Kong (`http://localhost:8000/api/recommendations/...`) cho tới khi backend hoàn thiện. Ngoài HTTP, backend vẫn trao đổi event với ai-service qua RabbitMQ.
 8. **Phân quyền thực tế**: `@Roles` chưa được enforce ở hầu hết module (RolesGuard chỉ gắn ở `/api/roles`). Đừng dựa vào `@Roles` để bảo vệ UI/API phía client — kiểm tra `roles` trong `GET /api/auth/me`.
 9. **Đổi mật khẩu** (`PATCH /api/auth/change-password`) sẽ logout toàn bộ phiên → client cần đăng nhập lại.
 10. **Upload ảnh**: `POST /api/files/upload` và `POST /api/users/avatar` — multipart field `file`, ≤5MB, chỉ `jpg/jpeg/png/webp` → `{result: {url}}`.

@@ -12,3 +12,16 @@ export interface ResultWithPagination<T> {
   result: T[];
   pagination: Pagination;
 }
+
+/** Pagination dạng cursor, dùng chung cho similar/hybrid/semantic search. */
+export interface CursorPagination {
+  limit: number;
+  total: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+}
+
+export interface ResultWithCursorPagination<T> {
+  result: T[];
+  pagination: CursorPagination;
+}
