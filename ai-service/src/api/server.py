@@ -13,6 +13,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from api.middleware import setup_middleware
 from api.routes import health, recommendations
 from core.config import get_settings
+from core.custom_exception import CustomException
 from core.integrations import TrainingScheduler, VectorStore
 from core.vector_health import log_vector_db_health
 from infra.messaging.consumers.interaction_event_handler import InteractionEventHandler
@@ -25,7 +26,9 @@ from infra.tracing.telemetry import configure_tracing
 from services.bm25_index_service import Bm25IndexService
 from services.embedding_service import embedding_service
 from services.mapping_service import mapping_service
+from services.movie_vector_service import MovieVectorService
 from services.recommend_service import RecommendService
+from services.user_vector_service import UserVectorService
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -44,7 +47,7 @@ async def lifespan(application: FastAPI):
     )
     metrics_thread.start()
 
-    # 1. Khoi tao VectorStore (ChromaDB)
+    # Khởi tạo vector db
     vector_store = VectorStore(settings)
     await vector_store.start()
     vector_db_health = await log_vector_db_health(vector_store, settings)
@@ -53,42 +56,53 @@ async def lifespan(application: FastAPI):
     bm25_index = Bm25IndexService(settings.bm25_model_path)
     await asyncio.to_thread(bm25_index.load)
 
-    # 2. Khoi tao RecommendService (xu ly semantic search va vector CRUD)
-    recommend_svc = RecommendService(
+    # Khỏi tạo các service: movie, user, recommend
+    movie_vector_service = MovieVectorService(
         vector_store=vector_store,
         embedding_service=embedding_service,
         bm25_index=bm25_index,
     )
+    user_vector_service = UserVectorService(
+        vector_store=vector_store,
+    )
+    recommend_svc = RecommendService(
+        vector_store=vector_store,
+        embedding_service=embedding_service,
+        movie_vector_service=movie_vector_service,
+        user_vector_service=user_vector_service,
+    )
 
-    # 3. Khoi tao MovieEventHandler (dispatcher theo event_type)
-    event_handler = MovieEventHandler(recommend_service=recommend_svc)
-
-    # Khoi tao TrainingScheduler (truoc InteractionEventHandler de pass vao)
+    # khởi tạo training scheduler
     training_scheduler = TrainingScheduler(settings, app_state=application.state)
     await training_scheduler.start()
 
-    # Khoi tao InteractionEventHandler
+    # khởi tạo các event handler
+    event_handler = MovieEventHandler(recommend_service=recommend_svc)
     interaction_handler = InteractionEventHandler(
-        vector_store=vector_store, training_scheduler=training_scheduler
+        training_scheduler=training_scheduler,
+        user_vector_service=user_vector_service,
+        movie_vector_service=movie_vector_service,
     )
 
-    # 4. Khoi tao MessageQueue -> inject handler -> bat dau consume
+    # Khởi tạo recommend queue
     mq = MessageQueue(settings)
     mq.set_handler(event_handler)
     try:
         await mq.start()
     except Exception as exc:
-        logger.warning("Khong the ket noi RabbitMQ (bo qua de tiep tuc chay API): %s", exc)
+        logger.warning(
+            "Khong the ket noi RabbitMQ (bo qua de tiep tuc chay API): %s", exc
+        )
 
-    # 4.5. Khoi tao InteractionQueue
-    interaction_mq = InteractionQueue(settings)
+    # Khởi tạo interaction queue
+    interaction_mq = InteractionQueue(settings=settings)
     interaction_mq.set_handler(interaction_handler)
     try:
         await interaction_mq.start()
     except Exception as exc:
         logger.warning("Khong the ket noi InteractionQueue (bo qua): %s", exc)
 
-    # 5. Cac service khac
+    # redis store
     redis_store = RedisStore(settings)
     try:
         await redis_store.start()
@@ -161,6 +175,20 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     )
 
 
+@app.exception_handler(CustomException)
+async def custom_exception_handler(
+    request: Request, exc: CustomException
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "statusCode": exc.status_code,
+            "message": exc.message,
+            "errorCode": exc.error_code,
+        },
+    )
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,
@@ -188,4 +216,3 @@ configure_monitoring(app=app)
 
 # Alias for uvicorn
 application = app
-

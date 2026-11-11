@@ -447,14 +447,28 @@ class VectorStore:
 
     async def upsert(
         self,
-        movie_id: int,
+        movie_id: int | None,
+        id: str | int | None,
         vector: list[float],
         payload: dict[str, Any],
         collection_name: str | None = None,
     ) -> None:
+
         if not self.settings.vector_db_enabled:
             logger.info("Vector DB disabled; accepted vector for movie %s", movie_id)
             return
+
+        if id is not None:
+            await self.backend.upsert(
+                movie_id=id,
+                vector=vector,
+                payload=payload,
+                collection_name=collection_name,
+            )
+            return
+        if movie_id is None:
+            raise ValueError("No id or movie_id provided for vector upsert.")
+
         await self.backend.upsert(movie_id, vector, payload, collection_name)
 
     async def query(
@@ -464,6 +478,7 @@ class VectorStore:
         where: dict | None = None,
         collection_name: str | None = None,
     ) -> list[dict[str, Any]]:
+        """Query vector tương tự và sắp xếp theo score giảm dần. Nếu vector DB không enable thì trả về []"""
         if not self.settings.vector_db_enabled:
             return []
 
@@ -473,10 +488,20 @@ class VectorStore:
         return results
 
     async def get_by_id(
-        self, movie_id: int, collection_name: str | None = None
+        self,
+        movie_id: int = None,
+        id: str | int | None = None,
+        collection_name: str | None = None,
     ) -> dict | None:
         if not self.settings.vector_db_enabled:
             return None
+
+        if id is not None:
+            return await self.backend.get_by_id(id, collection_name)
+
+        if movie_id is None:
+            raise ValueError("Không có id hoặc movie_id để truy vấn vector.")
+
         return await self.backend.get_by_id(movie_id, collection_name)
 
     @property

@@ -1,6 +1,7 @@
 import { ApiCursorPaginatedResponse, ApiResponse } from '@/shared/types/api.types';
-import { MovieWithSimilarScore } from '@/shared/types/movie.types';
+import { MovieWithHybridScore, MovieWithSimilarScore } from '@/shared/types/movie.types';
 import axiosClient from '@/lib/axiosClient';
+import qs from 'qs';
 
 export interface GenreQuery {
   page?: number;
@@ -47,18 +48,11 @@ export const recommendationApi = {
     return data;
   },
 
-  // api/recommendations/hybrid-search?userId=...&keyword=...&topK=10&page=1&pageSize=10
-  // params: userId, keyword, topK, page, pageSize
-  hybridSearch: async (params?: {
-    userId: string;
-    keyword?: string;
-    topK?: number;
-    page?: number;
-    pageSize?: number;
-  }): Promise<ApiResponse<MovieWithSimilarScore[]>> => {
-    const { data } = await axiosClient.get(`/recommendations/hybrid-search`, {
-      params: { ...params },
-    });
+  // api/recommendations/for-you?topK=20
+  // params: topK
+  forYou: async (params?: { topK?: number }): Promise<ApiResponse<MovieWithHybridScore[]>> => {
+    const queryParams = qs.stringify(params, { addQueryPrefix: true });
+    const { data } = await axiosClient.get(`/recommendations/for-you${queryParams}`);
     return data;
   },
 };

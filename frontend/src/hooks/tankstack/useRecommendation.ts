@@ -64,24 +64,16 @@ export function useSemanticSearch(
   });
 }
 
-// api/recommendations/hybrid
-export function useHybridRecommendations(
-  params?: { userId: string; keyword?: string; topK?: number; page?: number; pageSize?: number },
+// api/recommendations/for-you?topK=20
+export function useForYou(
+  params?: { topK?: number },
   staleTime: number = 1000 * 60 * 5,
   gcTime: number = 1000 * 60 * 10,
 ) {
   return useQuery({
-    queryKey: [
-      'recommendations',
-      'hybrid',
-      params?.userId,
-      params?.keyword,
-      params?.topK,
-      params?.page,
-      params?.pageSize,
-    ],
+    queryKey: ['recommendations', 'for-you', params?.topK],
     queryFn: async () => {
-      const response = await recommendationApi.hybridSearch(params);
+      const response = await recommendationApi.forYou(params);
       return response.result;
     },
     staleTime: staleTime, // 5 phút
@@ -93,7 +85,7 @@ const useRecommendation = {
   useGetSimilarMovies,
   useGetSimilarMoviesInfinite,
   useSemanticSearch,
-  useHybridRecommendations,
+  useForYou,
 };
 
 export default useRecommendation;

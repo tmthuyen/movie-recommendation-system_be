@@ -10,14 +10,16 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from core.config import Settings, get_settings
+from core.custom_exception import CustomException
 from core.integrations import VectorStore
+from data.data_loader import build_search_text as _build_search_text
 from services.embedding_service import EmbeddingService
 from utils import setup_logger
 
-logger = setup_logger(name=__name__, filename=__name__)
+logger = setup_logger(name="FastAPI-Recommendations")
 
-
-from data.data_loader import build_search_text as _build_search_text
+settings = get_settings()
 
 
 class MovieVectorService:
@@ -26,6 +28,89 @@ class MovieVectorService:
     ) -> None:
         self._vs = vector_store
         self._emb = embedding_service
+        self.collection_name = settings.vector_collection
+
+    async def find_movie_vector(self, movie_id: int) -> dict[str, Any] | None:
+        """Tìm kiếm movie vector theo movie_id trong VectorDB"""
+        movie_data = await self._vs.get_by_id(
+            movie_id, collection_name=self.collection_name
+        )
+
+        if movie_data is None or not movie_data.get("vector"):
+            logger.error(
+                f"[MovieVectorService] Không tìm thấy movie với id={movie_id} trong collection {self.collection_name}"
+            )
+            raise CustomException(
+                f"Không tìm thấy movie với id={movie_id} trong collection {self.collection_name}",
+                status_code=404,
+                error_code="MOVIE_NOT_FOUND",
+            )
+
+        return movie_data
+
+    async def find_similar_movies(
+        self, movie_id: int, top_k: int = 10
+    ) -> list[dict[str, Any]]:
+        """Tìm kiếm các movie tương tự (đã sắp xếp theo score) dựa trên vector của movie_id trong VectorDB
+
+        Args:
+            movie_id (int): _description_
+            top_k (int, optional): _description_. Defaults to 10.
+
+        Returns:
+            list[dict[str, Any]]:
+            [
+                {
+                    "id": 1,
+                    "score": 0.9,
+                    "payload": thông tin metadata của movie,
+                },
+                {
+                    "id": 2,
+                    "score": 0.8,
+                    "payload": thông tin metadata của movie,
+                }
+            ]
+        """
+        target = await self.find_movie_vector(movie_id=movie_id)
+        raw_results = await self._vs.query(
+            vector=target["vector"],
+            top_k=top_k + 1,
+            collection_name=self.collection_name,
+        )
+        filtered = [item for item in raw_results if item.get("id") != movie_id][:top_k]
+        return filtered
+
+    async def find_similar_movies_with_vector(
+        self, vector: list[float], top_k: int = 10
+    ) -> list[dict[str, Any]]:
+        """Tìm kiếm các movie tương tự (đã sắp xếp theo score) dựa trên vector cung cấp
+
+        Args:
+            vector (list[float]): _description_
+            top_k (int, optional): _description_. Defaults to 10.
+
+        Returns:
+            list[dict[str, Any]]:
+            [
+                {
+                    "id": 1,
+                    "score": 0.9,
+                    "payload": thông tin metadata của movie,
+                },
+                {
+                    "id": 2,
+                    "score": 0.8,
+                    "payload": thông tin metadata của movie,
+                }
+            ]
+        """
+        res = await self._vs.query(
+            vector=vector,
+            top_k=top_k,
+            collection_name=self.collection_name,
+        )
+        return res
 
     async def upsert_movie_vector(self, movie_data: dict[str, Any]) -> None:
         movie_id = movie_data.get("movieId") or movie_data.get("movie_id")

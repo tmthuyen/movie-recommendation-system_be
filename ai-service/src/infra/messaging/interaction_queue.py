@@ -6,21 +6,28 @@ from aio_pika import ExchangeType, IncomingMessage
 
 from core.config import Settings
 from infra.messaging.consumers.interaction_event_handler import InteractionEventHandler
+from infra.messaging.event_schemas import (
+    InteractionCreatedEvent,
+    InteractionCreatedPayload,
+)
 from utils.logger import setup_logger
 
 # ─────────────────────────────────────────────────────────────────────────────
 # InteractionQueue — RabbitMQ consumer for user interactions
 # ─────────────────────────────────────────────────────────────────────────────
 
+logger = setup_logger(name="FastAPI-Recommendations")
+
 
 class InteractionQueue:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self, settings: Settings, event_handler: InteractionEventHandler | None = None
+    ) -> None:
         self._settings = settings
         self._connection = None
         self._channel = None
         self._consumer_tag = None
-        self._handler: InteractionEventHandler | None = None
-        self._logger = setup_logger(name="FastAPI-Interactions", filename=__name__)
+        self._handler = event_handler
 
     def set_handler(self, handler: InteractionEventHandler) -> None:
         """Inject InteractionEventHandler."""
@@ -30,7 +37,7 @@ class InteractionQueue:
 
     async def start(self) -> None:
         if not self._settings.rabbitmq_enabled:
-            self._logger.info("RabbitMQ disabled, skipping InteractionQueue.")
+            logger.info("RabbitMQ disabled, skipping InteractionQueue.")
             return
 
         self._connection = await aio_pika.connect_robust(self._settings.rabbitmq_url)
@@ -90,7 +97,7 @@ class InteractionQueue:
             no_ack=False,
         )
 
-        self._logger.info(
+        logger.info(
             f"Started Interaction Queue: {self._settings.rabbitmq_interaction_queue}"
             f"\nDLX: {self._settings.rabbitmq_interaction_dlx}"
             f"\nDLQ: {self._settings.rabbitmq_interaction_dlq}"
@@ -99,7 +106,7 @@ class InteractionQueue:
     async def close(self) -> None:
         if self._connection:
             await self._connection.close()
-            self._logger.info("InteractionQueue closed.")
+            logger.info("InteractionQueue closed.")
 
     # ── Consumer ──────────────────────────────────────────────────────────────
 
@@ -108,39 +115,55 @@ class InteractionQueue:
         event_type = "(unknown)"
         try:
             routing_key = message.routing_key
+            logger.info(
+                f"[InteractionQueue] Nhận message từ RabbitMQ: routing_key={routing_key}, correlation_id={message.correlation_id}"
+            )
             body = json.loads(message.body.decode("utf-8"))
 
-            self._logger.info(
-                f"Received [Interaction]: message \n"
-                f"Routing Key: {routing_key} \n"
-                f"Event: body"
+            # log nhận sự kiện tương trác
+
+            logger.info(
+                f"[InteractionQueue] Nhận sự kiện tương tác: body={json.dumps(body, indent=2)}"
             )
 
             if routing_key is None:
-                self._logger.warning("Routing key is None!")
+                logger.error("[InteractionQueue] Routing key is None!")
                 await message.nack(requeue=False)
                 return
 
-            event_type = body.get("eventType", "")
-            payload: dict[str, Any] = body.get("payload") or {}
+            event_type = body.get("eventType", None)
+            if event_type is None:
+                logger.error("[InteractionQueue] eventType is None in message body!")
+                await message.nack(requeue=False)
+                return
+
+            # parse
+            if event_type == "interaction.created":
+                event_obj = InteractionCreatedEvent.model_validate(body)
+                correlation_id = event_obj.correlationId
+                payload = event_obj.payload
 
             if self._handler is None:
-                self._logger.error(
+                logger.error(
                     "InteractionEventHandler not injected! Ack to prevent loop."
                 )
                 await message.ack()
                 return
 
-            await self._handler.handle(event_type, payload)
+            await self._handler.handle(
+                event_type=event_type,
+                payload=payload.model_dump(),
+                event=event_obj,
+            )
             await message.ack()
 
         except (ValueError, TypeError, KeyError) as exc:
-            self._logger.error(
-                "[Interaction Queue] Invalid payload event_type=%s, sending to DLQ: %s",
+            logger.error(
+                "[InteractionQueue] Invalid payload event_type=%s, sending to DLQ: %s",
                 event_type,
                 exc,
             )
             await message.nack(requeue=False)
         except Exception as exc:
-            self._logger.error(f"[Interaction Queue] Error handling message: {exc}")
+            logger.error(f"[InteractionQueue] Error handling message: {exc}")
             await message.nack(requeue=False)

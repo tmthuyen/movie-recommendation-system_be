@@ -1,8 +1,21 @@
-import { Controller, Get, Inject, Logger, Param, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpStatus,
+  Inject,
+  Logger,
+  Param,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { IRecommendationsService } from './recommendations.service';
-import { HybridSearchQuery } from '@/modules/recommendations/dtos/hybrid-search-query.dto';
 import { CursorQueryDto } from '@/common/dtos/cursor-query.dto';
+import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
+import { type Request } from 'express';
+import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
+import { AppException } from '@/common/custom-exception/app-exception';
 
 @ApiTags('recommendations')
 @Controller('recommendations')
@@ -85,11 +98,10 @@ export class RecommendationsController {
     summary: 'Tìm kiếm phim theo ngữ nghĩa (Semantic Search)',
   })
   async semanticSearch(
-    @Query('keyword') keyword?: string,
+    @Query('keyword') keyword: string,
     @Query('topK') topK?: number,
-    @Query('query') queryAlias?: string,
   ) {
-    const searchKeyword = keyword || queryAlias || '';
+    const searchKeyword = keyword;
     this.logger.log(
       `Received request for semantic search keyword="${searchKeyword}", topK=${topK}`,
     );
@@ -200,23 +212,31 @@ export class RecommendationsController {
     };
   }
 
-  // /api/recommendations/hybrid-search?userId=...&keyword=...&topK=10&page=1&pageSize=10
-  @Get('/hybrid-search')
-  async hybridSearch(@Query() hybridSearchQuery: HybridSearchQuery) {
-    const res =
-      await this.recommendationsService.hybridSearch(hybridSearchQuery);
+  // /api/recommendations/hybrid?topK=20
+  @UseGuards(JwtAuthGuard)
+  @Get('/for-you')
+  async hybridSearch(@Req() req: Request, @Query('topK') topK: number) {
+    const { sub } = req.user as JwtPayload;
 
+    const accessToken = req.headers['authorization']?.split(' ')[1];
+    if (!accessToken) {
+      throw new AppException(
+        HttpStatus.UNAUTHORIZED,
+        'Access token is missing in the request headers.',
+        'The access token is required to access this endpoint.',
+        'UNAUTHORIZED',
+      );
+    }
+    const res = await this.recommendationsService.hybridSearch(
+      sub,
+      accessToken,
+      topK,
+    );
     return {
-      success: true,
-      statusCode: 200,
-      message: 'Tìm kiếm lai (Hybrid Search) thành công.',
-      result: res?.result ?? [],
-      pagination: res?.pagination ?? {
-        page: hybridSearchQuery?.page ?? 1,
-        limit: hybridSearchQuery?.pageSize ?? 10,
-        total: 0,
-        totalPages: 0,
-      },
+      status: 'success',
+      message: 'This endpoint is a placeholder for hybrid recommendation.',
+      result: res.result,
+      pagination: res.pagination,
     };
   }
 }
