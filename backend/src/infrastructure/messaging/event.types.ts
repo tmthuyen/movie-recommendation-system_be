@@ -60,7 +60,6 @@ export interface InteractionCreatedPayload {
   movieId: number;
   action: string;
   score: number | null;
-
   removed: boolean;
   createdAt: Date;
 }
