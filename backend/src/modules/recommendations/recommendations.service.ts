@@ -18,9 +18,13 @@ import {
 } from '@/common/utlils/cursor-pagination.util';
 import { Movie } from '@/modules/movies/entities/movie.entity';
 import { MoviesService } from '@/modules/movies/movies.service';
-import { HybridSearchQuery } from '@/modules/recommendations/dtos/hybrid-search-query.dto';
-import { SimilarMovieResponseDto } from '@/modules/recommendations/dtos/movie-response-with-score.dto';
 import {
+  HybridMovieResponseDto,
+  SimilarMovieResponseDto,
+} from '@/modules/recommendations/dtos/movie-response-with-score.dto';
+import {
+  HybridFromAiServiceResponse,
+  HybridFromAiServiceResponseSchema,
   SimilarFromAiServiceResponse,
   SimilarFromAiServiceResponseSchema,
 } from '@/modules/recommendations/interfaces/ai-service-response.interfaces';
@@ -60,8 +64,15 @@ export interface IRecommendationsService {
     movieId: number,
     query: CursorQueryDto,
   ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>>;
-  semanticSearch(keyword: string, topK?: number): Promise<any>;
-  hybridSearch(hybridSearchQuery: HybridSearchQuery): Promise<any>;
+  semanticSearch(
+    keyword: string,
+    topK?: number,
+  ): Promise<ResultWithPagination<any>>;
+  hybridSearch(
+    userId: string,
+    accessToken: string,
+    topK?: number,
+  ): Promise<ResultWithPagination<any>>;
 }
 @Injectable()
 export class RecommendationsService implements IRecommendationsService {
@@ -165,9 +176,97 @@ export class RecommendationsService implements IRecommendationsService {
     };
   }
 
-  async semanticSearch(keyword: string, topK?: number): Promise<any> {}
+  async semanticSearch(
+    keyword: string,
+    topK?: number,
+  ): Promise<ResultWithPagination<any>> {
+    return this.hybridSearch(keyword, '', topK);
+  }
 
-  async hybridSearch(hybridSearchQuery: HybridSearchQuery): Promise<any> {}
+  async hybridSearch(
+    userId: string,
+    accessToken: string,
+    topK?: number,
+  ): Promise<ResultWithPagination<any>> {
+    this.logger.log(`Nhận request gợi ý cho userId=${userId}, topK=${topK}`);
+    let parsedResponse: HybridFromAiServiceResponse;
+    try {
+      const res = await fetch(
+        `${AI_SERVICE_URL}/hybrid?userId=${userId}&topK=${topK}`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      );
+
+      const raw = await res.json();
+      parsedResponse = HybridFromAiServiceResponseSchema.parse(raw);
+    } catch (error) {
+      this.logger.error(
+        `Lỗi khi gọi AI service cho hybrid search: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'Lỗi khi gọi AI service cho hybrid search',
+        'Error occurred while calling AI service for hybrid search.',
+        'AI_SERVICE_ERROR',
+      );
+    }
+
+    if (!parsedResponse || !parsedResponse.result) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'Dữ liệu trả về không hợp lệ từ AI service cho hybrid search',
+        'The AI service did not return a valid response for hybrid search.',
+        'AI_SERVICE_ERROR',
+      );
+    }
+
+    // map id
+    const movieIds = parsedResponse.result.map(item => item.movie_id);
+
+    // lấy dữ liệu phim từ DB
+    const movies = await this.movieService.findByIds(movieIds);
+
+    // map movie id to movie
+    const movieMap = new Map<number, Movie>();
+    for (const movie of movies) {
+      movieMap.set(Number(movie.id), movie);
+    }
+
+    // map kết quả
+    const mappedData = parsedResponse.result
+      .map(item => {
+        const movie = movieMap.get(Number(item.movie_id));
+        if (!movie) {
+          this.logger.warn(
+            `Movie with id ${item.movie_id} not found in database, skipping.`,
+          );
+          return null;
+        }
+
+        return {
+          ...movie,
+          hybridScore: item.rrf_score,
+          rank: item.fused_rank,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+
+    // chuyển đổi sang DTO
+    const result = plainToInstance(HybridMovieResponseDto, mappedData, {
+      excludeExtraneousValues: true,
+    });
+
+    return {
+      result,
+      pagination: parsedResponse.pagination,
+    };
+  }
 
   private async getSnapshot(movieId: number): Promise<{
     key: string;

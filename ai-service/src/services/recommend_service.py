@@ -9,9 +9,13 @@ import asyncio
 from typing import Any
 
 from api.schemas import SimilarMoviesResponse
+from core.custom_exception import CustomException
+from core.fusion import reciprocal_rank_fusion_with_details
 from core.integrations import VectorStore
 from services.embedding_service import EmbeddingService
 from services.mapping_service import mapping_service
+from services.movie_vector_service import MovieVectorService
+from services.user_vector_service import UserVectorService
 from utils import setup_logger
 from utils.genre_utils import extract_genres, rerank_similar_candidates
 
@@ -63,18 +67,26 @@ def _format_item(item: dict[str, Any]) -> dict[str, Any]:
 
 class RecommendService:
     def __init__(
-        self, vector_store: VectorStore, embedding_service: EmbeddingService
+        self,
+        vector_store: VectorStore,
+        embedding_service: EmbeddingService,
+        movie_vector_service: MovieVectorService,
+        user_vector_service: UserVectorService,
     ) -> None:
         """Gợi ý phim tương tự (Content Search), nội dung liên quan cho user dựa trên tương tác (CF)
 
         Args:
             vector_store (VectorStore): Nơi lưu trữ vector
             embedding_service (EmbeddingService): Embedding text -> vector
+            movie_vector_service (MovieVectorService): Service vector phim
+            user_vector_service (UserVectorService): Service vector người dùng
         """
         self._vs = vector_store
         self._emb = embedding_service
         self.cf_weight = 0.6
         self.semantic_weight = 0.4
+        self._movie_vector_service = movie_vector_service
+        self._user_vector_service = user_vector_service
 
     async def semantic_search(
         self, query: str, top_k: int = 10
@@ -85,28 +97,26 @@ class RecommendService:
         return [_format_item(item) for item in raw_results]
 
     async def similar_movies(
-        self, movie_id: int, top_k: int = 10
+        self, movie_id: int, top_k: int = 50
     ) -> list[dict[str, Any]]:
         """Semantic Search: Gợi ý phim tương tự dựa trên movieId và vector similarity"""
-        target = await self._vs.get_by_id(movie_id=movie_id)
-        if not target or not target.get("vector"):
-            logger.warning(
-                f"Khong tim thay vector cho movieId={movie_id}: target={target}"
-            )
-            raise ValueError(f"Khong tim thay vector cho movieId={movie_id}")
-        raw_results = await self._vs.query(vector=target["vector"], top_k=top_k + 1)
-        filtered = [item for item in raw_results if item.get("id") != movie_id][:top_k]
+        similar_movies = await self._movie_vector_service.find_similar_movies(
+            movie_id=movie_id, top_k=top_k
+        )
 
-        # rank với score giảm dần
-        filtered.sort(key=lambda x: x.get("score", 0), reverse=True)
-        for idx, item in enumerate(filtered):
+        first = similar_movies[0] if similar_movies else None
+        # logger.info(
+        #     f"[RecommendService] Tìm kiếm phim tương tự cho movieId={movie_id}. Top-{top_k}. First: {first}"
+        # )
+
+        for idx, item in enumerate(similar_movies):
             item["rank"] = idx + 1  # rank bắt đầu từ 1
 
         # format
-        formatted_results = [_format_item(item) for item in filtered]
+        formatted_results = [_format_item(item) for item in similar_movies]
 
         logger.info(
-            f"Found {len(filtered)} similar movies for movieId={movie_id} (Top-{top_k})"
+            f"[RecommendService] Found {len(similar_movies)} similar movies for movieId={movie_id} (Top-{top_k})"
         )
 
         return formatted_results
@@ -125,7 +135,11 @@ class RecommendService:
         target = await self._vs.get_by_id(movie_id)
         vector = target.get("vector") if target else None
         if vector is None or len(vector) == 0:
-            raise ValueError(f"Khong tim thay vector cho movieId={movie_id}")
+            raise CustomException(
+                f"Khong tim thay vector cho movieId={movie_id}",
+                status_code=404,
+                error_code="MOVIE_NOT_FOUND",
+            )
 
         target_meta = target.get("payload") or {}
         target_genres = extract_genres(target_meta.get("genres"))
@@ -161,115 +175,164 @@ class RecommendService:
         return [_format_item(item) for item in reranked]
 
     async def hybrid_recommendation(
-        self, user_uuid: str, top_k: int = 10
+        self, user_id: str, top_k: int = 10
     ) -> list[dict[str, Any]]:
-        """Combine Collaborative Filtering and Semantic Profile for Hybrid Recommendations."""
-        user_idx = mapping_service.get_user_idx(user_uuid)
-        pseudo_id = (
-            user_idx if user_idx is not None else (abs(hash(user_uuid)) % (10**9))
-        )
+        """Gợi ý lại với CF và CBF
+        CBF: Lấy danh sách phim liên quan dựa trên user profile vector
+        CF: Lấy danh sách phim liên quan dựa trên lịch sử tương tác bằng model iALS (Collaborative Filtering)
+        Args:
+            user_id (str): id người dùng
+            top_k (int, optional): số lượng phim gợi ý. Defaults to 10.
 
-        logger.info(
-            f"[HybridSearch] User {user_uuid} -> user_idx: {user_idx}, pseudo_id: {pseudo_id}"
-        )
+        Returns:
+            list[dict[str, Any]]:
+            {
+                "fused_rank"(int): rank sau khi RRF fusion,
+                "movie_id"(int): rank sau khi RRF fusion,
+                "rrf_score"(float): điểm RRF fusion,
+                "model_ranks"(dict[str, int]): thứ hạng của từng mô hình (CF, CBF),
+                "raw_scores"(dict[str, float]): điểm raw score của từng mô hình (CF, CBF),
+                "contributing_models"(list[str]): danh sách mô hình đóng góp cho phim này,
+                "agreement_count"(int): số lượng mô hình đồng ý với phim này,
+                "best_individual_rank"(int): thứ hạng tốt nhất của phim này trong các mô hình.
+            }
+        """
+        user_idx = mapping_service.get_user_idx(user_id)
+
+        logger.info(f"[RecommendService] User {user_id} -> user_idx: {user_idx}")
+
+        # Nếu không có user_idx trong mapping (cold start user)
+        # Gợi ý theo user profile vector
 
         cf_results = []
-        sem_results = []
+        cbf_results = []
 
-        # 1. Fetch CF Recommendations
+        # =======================================================
+        # CF: gợi ý phim lọc cộng tác với iALS model
         if user_idx is not None:
-            u_cf = await self._vs.get_by_id(
-                user_idx, collection_name=self._vs.settings.vector_user_cf_collection
+            logger.info(
+                f"[RecommendService] Fetching CF recommendations for user {user_id} (user_idx={user_idx})"
             )
-            if u_cf and u_cf.get("vector"):
-                logger.info(
-                    f"[HybridSearch] Found CF vector for user {user_uuid} (idx {user_idx})"
+        else:
+            logger.info(
+                f"[RecommendService] User {user_id} not found in CF mapping (Cold Start)."
+            )
+
+        # =======================================================
+        # CBF: Gợi ý phim dựa trên sở thích nội dung (semantic) của user
+
+        # tìm user profile vector để lấy semantic recommendations
+        try:
+            user_data = await self._user_vector_service.find_user_profile_vector(
+                user_id=user_id
+            )
+            user_vector = user_data.get("vector")
+            # tìm phim tương tự dựa trên user profile vector
+            if user_vector:
+                cbf_results = (
+                    await self._movie_vector_service.find_similar_movies_with_vector(
+                        vector=user_vector, top_k=top_k
+                    )
                 )
-                cf_hits = await self._vs.query(
-                    u_cf["vector"],
-                    top_k=top_k * 2,
-                    collection_name=self._vs.settings.vector_movie_cf_collection,
-                )
-                cf_results = cf_hits
             else:
-                logger.info(
-                    f"[HybridSearch] User {user_uuid} is in mapping, but NO CF vector found in ChromaDB."
+                logger.warning(
+                    f"[RecommendService] User {user_id} has no profile vector; skipping semantic recommendations."
                 )
-        else:
-            logger.info(
-                f"[HybridSearch] User {user_uuid} not found in CF mapping (Cold Start)."
-            )
+                cbf_results = []
 
-        # 2. Fetch Semantic Recommendations
-        u_sem = await self._vs.get_by_id(
-            pseudo_id, collection_name=self._vs.settings.vector_user_profile_collection
-        )
-        if u_sem and u_sem.get("vector"):
-            logger.info(f"[HybridSearch] Found Semantic vector for user {user_uuid}")
-            sem_hits = await self._vs.query(
-                u_sem["vector"],
-                top_k=top_k * 2,
-                collection_name=self._vs.settings.vector_collection,
+        except Exception as e:
+            logger.error(
+                f"[RecommendService] Error fetching semantic recommendations for user {user_id}: {e}"
             )
-            sem_results = sem_hits
-        else:
-            logger.info(
-                f"[HybridSearch] NO Semantic vector found for user {user_uuid} (id {pseudo_id})."
-            )
+            cbf_results = []
 
         logger.info(
-            f"[HybridSearch] Found {len(cf_results)} CF hits and {len(sem_results)} Semantic hits."
+            f"[RecommendService] Found {len(cf_results)} CF hits and {len(cbf_results)} Semantic hits."
         )
 
-        # 3. Combine and Rerank
-        combined_scores = {}
-        evidences = {}
+        # =======================================================
+        #  Chạy thuật toán rerank RRF cho CF và CBF
 
-        # Normalize scores (assuming cosine similarity [0,1] or similar)
-        for item in cf_results:
-            mid = item["id"]
-            cf_score = item["score"]
-            combined_scores[mid] = (
-                combined_scores.get(mid, 0) + cf_score * self.cf_weight
-            )
-            evidences[mid] = evidences.get(mid, []) + [
-                f"Được đề xuất dựa trên phân tích hành vi người dùng tương đồng (Điểm CF: {round(cf_score*100, 1)}%)"
-            ]
+        # rank list là movie ids
+        ranked_lists = {
+            "CF": [item.get("id") for item in cf_results],
+            "CBF": [item.get("id") for item in cbf_results],
+        }
+        raw_scores = {
+            "CF": [item.get("score", 0.0) for item in cf_results],
+            "CBF": [item.get("score", 0.0) for item in cbf_results],
+        }
 
-        for item in sem_results:
-            mid = item["id"]
-            sem_score = item["score"]
-            combined_scores[mid] = (
-                combined_scores.get(mid, 0) + sem_score * self.semantic_weight
-            )
-            evidences[mid] = evidences.get(mid, []) + [
-                f"Phù hợp với sở thích về nội dung và thể loại phim của bạn (Điểm Semantic: {round(sem_score*100, 1)}%)"
-            ]
-
-        # Sort by combined score
-        sorted_mids = sorted(
-            combined_scores.keys(), key=lambda k: combined_scores[k], reverse=True
-        )[:top_k]
-
-        # 4. Format Results
-        final_results = []
-        for mid in sorted_mids:
-            # Get full movie info from semantic collection
-            movie_info = await self._vs.get_by_id(
-                mid, collection_name=self._vs.settings.vector_collection
-            )
-            if movie_info:
-                # Add the original score to movie_info so _format_item parses it correctly
-                movie_info["score"] = combined_scores[mid]
-                formatted = _format_item(movie_info)
-                formatted["hybridScore"] = combined_scores[mid]
-
-                # Combine evidences into a nice readable string
-                formatted["evidences"] = evidences[mid]
-                final_results.append(formatted)
-
-        logger.info(
-            f"[HybridSearch] Returning {len(final_results)} hybrid recommendations for user {user_uuid}."
+        # nếu không có user idx thì cf weights thấp
+        if user_idx is None:
+            weights = {
+                "CF": 0.1,
+                "CBF": 0.8,
+            }
+        else:
+            weights = {
+                "CF": 0.6,
+                "CBF": 0.4,
+            }
+        detailed_fused = reciprocal_rank_fusion_with_details(
+            ranked_lists=ranked_lists,
+            raw_scores_lists=raw_scores,
+            weights=weights,
+            k=60,
+            top_n=top_k * 2,
         )
 
-        return final_results
+        return detailed_fused
+
+        # # 3. Combine and Rerank
+        # combined_scores = {}
+        # evidences = {}
+
+        # # Normalize scores (assuming cosine similarity [0,1] or similar)
+        # for item in cf_results:
+        #     mid = item["id"]
+        #     cf_score = item["score"]
+        #     combined_scores[mid] = (
+        #         combined_scores.get(mid, 0) + cf_score * self.cf_weight
+        #     )
+        #     evidences[mid] = evidences.get(mid, []) + [
+        #         f"Được đề xuất dựa trên phân tích hành vi người dùng tương đồng (Điểm CF: {round(cf_score*100, 1)}%)"
+        #     ]
+
+        # for item in cbf_results:
+        #     mid = item["id"]
+        #     sem_score = item["score"]
+        #     combined_scores[mid] = (
+        #         combined_scores.get(mid, 0) + sem_score * self.semantic_weight
+        #     )
+        #     evidences[mid] = evidences.get(mid, []) + [
+        #         f"Phù hợp với sở thích về nội dung và thể loại phim của bạn (Điểm Semantic: {round(sem_score*100, 1)}%)"
+        #     ]
+
+        # # Sort by combined score
+        # sorted_mids = sorted(
+        #     combined_scores.keys(), key=lambda k: combined_scores[k], reverse=True
+        # )[:top_k]
+
+        # # 4. Format Results
+        # final_results = []
+        # for mid in sorted_mids:
+        #     # Get full movie info from semantic collection
+        #     movie_info = await self._vs.get_by_id(
+        #         mid, collection_name=self._vs.settings.vector_collection
+        #     )
+        #     if movie_info:
+        #         # Add the original score to movie_info so _format_item parses it correctly
+        #         movie_info["score"] = combined_scores[mid]
+        #         formatted = _format_item(movie_info)
+        #         formatted["hybridScore"] = combined_scores[mid]
+
+        #         # Combine evidences into a nice readable string
+        #         formatted["evidences"] = evidences[mid]
+        #         final_results.append(formatted)
+
+        # logger.info(
+        #     f"[RecommendService] Returning {len(final_results)} hybrid recommendations for user {user_id}."
+        # )
+
+        # return final_results

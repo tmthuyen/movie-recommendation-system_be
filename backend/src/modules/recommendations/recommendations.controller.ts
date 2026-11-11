@@ -1,8 +1,21 @@
-import { Controller, Get, Inject, Logger, Param, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpStatus,
+  Inject,
+  Logger,
+  Param,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { IRecommendationsService } from './recommendations.service';
-import { HybridSearchQuery } from '@/modules/recommendations/dtos/hybrid-search-query.dto';
 import { CursorQueryDto } from '@/common/dtos/cursor-query.dto';
+import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
+import { type Request } from 'express';
+import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
+import { AppException } from '@/common/custom-exception/app-exception';
 
 @ApiTags('recommendations')
 @Controller('recommendations')
@@ -94,13 +107,31 @@ export class RecommendationsController {
     };
   }
 
-  // /api/recommendations/hybrid-search?userId=...&keyword=...&topK=10&page=1&pageSize=10
-  @Get('/hybrid-search')
-  hybridSearch(@Query() hybridSearchQuery: HybridSearchQuery) {
+  // /api/recommendations/hybrid?topK=20
+  @UseGuards(JwtAuthGuard)
+  @Get('/for-you')
+  async hybridSearch(@Req() req: Request, @Query('topK') topK: number) {
+    const { sub } = req.user as JwtPayload;
+
+    const accessToken = req.headers['authorization']?.split(' ')[1];
+    if (!accessToken) {
+      throw new AppException(
+        HttpStatus.UNAUTHORIZED,
+        'Access token is missing in the request headers.',
+        'The access token is required to access this endpoint.',
+        'UNAUTHORIZED',
+      );
+    }
+    const res = await this.recommendationsService.hybridSearch(
+      sub,
+      accessToken,
+      topK,
+    );
     return {
       status: 'success',
       message: 'This endpoint is a placeholder for hybrid recommendation.',
-      data: [],
+      result: res.result,
+      pagination: res.pagination,
     };
   }
 }

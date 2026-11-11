@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRight, Play, Star, Eye, Crown, Calendar } from 'lucide-react';
+import { ArrowRight, Play, Star, Eye, Crown, Calendar, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useMemo } from 'react';
@@ -15,6 +15,7 @@ import useCountry from '@/hooks/tankstack/useCountry';
 import { getMovieTitle, getPosterUrl, getReleaseYear } from '@/shared/utils/movie';
 import { useAuthStore } from '@/stores/auth.store';
 import { EmptyState } from '@/components/common/EmptyState';
+import useRecommendation from '@/hooks/tankstack/useRecommendation';
 
 function HeroCarouselSkeleton() {
   return (
@@ -111,7 +112,29 @@ function MovieRowSection({
   }
 
   if (!movies || movies.length === 0) {
-    return null;
+    return (
+      <section className="space-y-4">
+        <SectionHeader
+          title={title}
+          description={description}
+          action={
+            href ? (
+              <Link
+                href={href}
+                className="text-primary inline-flex shrink-0 items-center gap-1 text-sm font-medium hover:underline"
+              >
+                Xem tất cả <ArrowRight className="size-4" />
+              </Link>
+            ) : undefined
+          }
+        />
+        <EmptyState
+          title="Không tìm thấy phim"
+          description="Hệ thống chưa có phim để hiển thị."
+          icon={Sparkles}
+        />
+      </section>
+    );
   }
 
   return (
@@ -269,7 +292,10 @@ function CountrySection() {
 
 export default function HomePage() {
   const { isAuthenticated, user } = useAuthStore();
-  const isForYouLoading = false; // TODO: implement for you loading state
+  const { data: forYouData, isLoading: isForYouLoading } = useRecommendation.useForYou({
+    topK: 12,
+  });
+  const forYouMovies = forYouData ?? [];
 
   // const { topRated, mostViewed, newest } = useMemo(() => {
   //   const sortedByRating = [...movies].sort((a, b) => (b.voteAverage ?? 0) - (a.voteAverage ?? 0));
@@ -391,7 +417,7 @@ export default function HomePage() {
           title={`Dành cho bạn, ${user?.fullName || 'thành viên'}`}
           description="Gợi ý dựa trên sở thích và hoạt động gần đây"
           href="/recommendations"
-          movies={newest.slice(0, 6)}
+          movies={forYouMovies.slice(0, 12)}
           isLoading={isForYouLoading}
         />
       )}

@@ -201,7 +201,7 @@ async def search(
 #     return paginated([], 0, request.page, request.pageSize, 'Recommendations generated')
 
 
-@router.get("/hybrid-search")
+@router.get("/hybrid")
 async def hybrid_search(
     request: Annotated[HybridRequest, Query()],
     current_user: Annotated[CurrentUser, Depends(get_current_user)],
@@ -212,27 +212,20 @@ async def hybrid_search(
     logger.info(f"hybrid search req: {request}")
     logger.info(f"hybrid search user: {current_user.sub}")
 
-    if current_user.sub != request.userId:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Không có quyền truy cập gợi ý của người khác",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
     svc = await _get_recommend_service(app_request)
-    data = await svc.hybrid_recommendation(user_uuid=request.userId, top_k=request.topK)
+    data = await svc.hybrid_recommendation(user_id=current_user.sub, top_k=request.topK)
 
     total = len(data)
     if total == 0:
-        message = f"Không tìm thấy gợi ý cho userId={request.userId}"
+        message = f"Không tìm thấy gợi ý cho userId={current_user.sub}"
     else:
-        message = f"Gợi ý {total} phim cho userId={request.userId} thành công"
+        message = f"Gợi ý {total} phim cho userId={current_user.sub} thành công"
 
     return paginated(
         data,
         total=total,
-        page=request.page,
-        limit=request.pageSize,
+        page=1,
+        limit=request.topK,
         message=message,
     )
 

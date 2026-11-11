@@ -9,10 +9,10 @@ export class SimilarMovieResponseDto extends MovieResponseDto {
   rank?: number;
 }
 
-export class HybridMovieResponseDto extends SimilarMovieResponseDto {
+export class HybridMovieResponseDto extends MovieResponseDto {
   @Expose()
   hybridScore: number;
 
   @Expose()
-  evidences: string[];
+  rank?: number;
 }

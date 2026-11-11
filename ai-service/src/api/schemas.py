@@ -85,17 +85,7 @@ class SearchRequest(BaseModel):
 
 
 class HybridRequest(BaseModel):
-    userId: str = Field(
-        min_length=1, max_length=100, description="Mã định danh người dùng (UUID)"
-    )
-    keyword: str = Field(
-        min_length=1, max_length=500, description="Từ khóa tìm kiếm (ví dụ: 'action')"
-    )
     topK: int = Field(default=100, ge=1, le=1000, description="Số lượng kết quả trả về")
-    page: int = Field(default=1, ge=1, description="Trang hiện tại")
-    pageSize: int = Field(
-        default=10, ge=1, le=100, description="Số lượng kết quả mỗi trang"
-    )
 
 
 class RecommendationRequest(BaseModel):

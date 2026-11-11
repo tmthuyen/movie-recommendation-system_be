@@ -67,11 +67,13 @@ export interface MovieDetail extends Movie {
 
 /** Movie kèm điểm tương đồng/rank từ recommendation API. */
 export interface MovieWithSimilarScore extends Movie {
-  /** Field backend trả thực tế. */
   similarityScore?: number;
   rank?: number;
-  /** @deprecated Giữ để tương thích code cũ; ưu tiên `similarityScore`. */
-  similarScore?: number;
+}
+/** Movie kèm điểm tương đồng/rank từ recommendation API. */
+export interface MovieWithHybridScore extends Movie {
+  hybridScore?: number;
+  rank?: number;
 }
 
 /** Query hợp lệ của `GET /api/movies` — backend chỉ nhận `page`/`limit`/`keyword`. */

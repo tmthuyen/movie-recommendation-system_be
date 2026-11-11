@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import uuid
@@ -8,26 +9,43 @@ import numpy as np
 import pandas as pd
 
 from core.config import get_settings
-from core.integrations import TrainingScheduler, VectorStore
+from core.custom_exception import CustomException
+from core.integrations import TrainingScheduler
+from infra.messaging.event_schemas import (
+    DomainEvent,
+    InteractionAction,
+    InteractionCreatedEvent,
+    InteractionCreatedPayload,
+)
 from infra.storage.storage_service import storage_service
-from services.mapping_service import mapping_service
+from services.movie_vector_service import MovieVectorService
+from services.user_vector_service import UserVectorService
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(name="FastAPI-Recommendations")
+
+settings = get_settings()
 
 
 class InteractionEventHandler:
     def __init__(
-        self, vector_store: VectorStore, training_scheduler: TrainingScheduler
+        self,
+        training_scheduler: TrainingScheduler,
+        user_vector_service: UserVectorService,
+        movie_vector_service: MovieVectorService,
     ):
-        self.settings = get_settings()
-        self.vector_store = vector_store
         self.training_scheduler = training_scheduler
+        self.user_vector_service = user_vector_service
+        self.movie_vector_service = movie_vector_service
 
-    async def handle(self, event_type: str, payload: dict[str, Any]) -> None:
+    async def handle(
+        self, event_type: str, payload: dict[str, Any], event: DomainEvent
+    ) -> None:
         """
         Handle incoming interaction events from RabbitMQ.
         """
-        logger.info(f"[InteractionEventHandler] Received event: {event_type}")
+        logger.info(
+            f"[InteractionEventHandler] Xử lý sự kiện {json.dumps(event.model_dump(), indent=2)}"
+        )
 
         if event_type in ("interaction.created", "interaction.event"):
             await self._handle_interaction_created(payload)
@@ -81,50 +99,54 @@ class InteractionEventHandler:
         """
         Process a new interaction (click, like, rating, etc.) and update user vectors.
         """
-        user_uuid = payload.get("userId")
-        movie_id = payload.get("movieId")
-        action = payload.get("action", "click")
-        rating = payload.get("rating")
-        removed = bool(payload.get("removed", False))
+        # user_id = payload.get("userId")
+        # movie_id = payload.get("movieId")
+        # action = payload.get("action", "click")
+        # rating = payload.get("rating")
+        # removed = bool(payload.get("removed", False))
 
-        if not user_uuid or not movie_id:
-            raise ValueError("userId and movieId are required for interaction events.")
+        payload_obj = InteractionCreatedPayload.model_validate(payload)
+        user_id = payload_obj.userId
+        movie_id = payload_obj.movieId
+        action = payload_obj.action
+        score = payload_obj.score
+        removed = payload_obj.removed
+
+        if not user_id or not movie_id or not action:
+            raise CustomException(
+                "Missing required fields in interaction payload: userId, movieId, and action are required.",
+                status_code=400,
+                error_code="INVALID_PAYLOAD",
+            )
 
         movie_id = int(movie_id)
 
-        # 1. Determine interaction score (band 5: score = confidence)
-        score = self._get_action_score(payload, action, rating)
+        # Tính score dựa trên action và rating (nếu có): Confidence score
+        score = self._get_action_score(action=action, rating=score)
 
         logger.info(
-            f"Processing interaction: User {user_uuid} -> Movie {movie_id} "
+            f"[InteractionEventHandler] Đang xử lý tương tác: User {user_id} -> Movie {movie_id} "
             f"(Action: {action}, Score: {score}, Removed: {removed})"
         )
 
         # 2. Update Semantic Profile Vector
-        await self._update_semantic_profile(user_uuid, movie_id, score)
+        await self._update_semantic_profile(
+            user_id=user_id, movie_id=movie_id, score=score
+        )
+        logger.info(
+            f"[InteractionEventHandler] Xử lý xong sự kiện interaction.created: User {user_id} -> Movie {movie_id} (Action: {action}, Score: {score})"
+        )
 
-        # 3. Update Collaborative Filtering Vector (if exists)
-        await self._update_cf_profile(user_uuid, movie_id, score)
-
-    def _get_action_score(
-        self, payload: dict[str, Any], action: str, rating: Any
-    ) -> float:
-        """Ưu tiên score backend tính sẵn; fallback theo band 5."""
-        raw_score = payload.get("score")
-        if raw_score is not None:
-            try:
-                return float(raw_score)
-            except (TypeError, ValueError):
-                logger.warning(f"Invalid score in payload: {raw_score!r}")
-
-        if action == "rating" and rating is not None:
+    def _get_action_score(self, action: str, rating: float | None = None) -> float:
+        """Tính score dựa trên action và rating (nếu có)."""
+        if action == InteractionAction.RATING and rating is not None:
             return float(rating)
 
         scores = {
-            "click": 1.0,
-            "like": 5.0,
-            "comment": 4.0,
-            "rating": 0.0,
+            InteractionAction.VIEW: 1.0,
+            InteractionAction.LIKE: 5.0,
+            InteractionAction.COMMENT: 2.0,
+            InteractionAction.RATING: 0.0,
         }
         return scores.get(action.lower(), 1.0)
 
@@ -134,37 +156,22 @@ class InteractionEventHandler:
         return max(-1.0, min(1.0, float(score) / 5.0))
 
     async def _update_semantic_profile(
-        self, user_uuid: str, movie_id: int, score: float
+        self, user_id: str, movie_id: int, score: float
     ) -> None:
         """Update user_profile_vectors using Exponential Moving Average."""
         # Get movie semantic vector
-        movie_data = await self.vector_store.get_by_id(
-            movie_id, collection_name=self.settings.vector_collection
-        )
-        if not movie_data or not movie_data.get("vector"):
-            logger.warning(
-                f"Movie {movie_id} not found in semantic collection. Skipping semantic update."
-            )
-            return
+
+        movie_data = await self.movie_vector_service.find_movie_vector(movie_id)
 
         movie_vec = np.array(movie_data["vector"])
 
-        # We use UUID directly as the ID for user_profile_vectors
-        user_id_str = str(user_uuid)
-        # However, VectorStore expects integer IDs currently. We might need a hash or just use mapping.
-        # Wait, ChromaVectorBackend converts int to str. Let's use a hashed int for user_uuid, or modify it to accept string.
-        # For now, let's hash the UUID to int to bypass VectorStore type hints, or just use the mapped index if available.
-        user_idx = mapping_service.get_user_idx(user_uuid)
-
-        # Fallback to hash if not mapped (e.g. new user)
-        if user_idx is None:
-            user_idx = abs(hash(user_uuid)) % (
-                10**9
-            )  # pseudo-id for Chroma string conversion
-
-        user_data = await self.vector_store.get_by_id(
-            user_idx, collection_name=self.settings.vector_user_profile_collection
-        )
+        try:
+            user_data = await self.user_vector_service.find_user_profile_vector(user_id)
+        except CustomException as e:
+            logger.info(
+                f"[InteractionEventHandler] Không tìm thấy user vector với id={user_id}. Tạo mới."
+            )
+            user_data = None
 
         alpha = 0.2  # Time decay factor for newer interactions
 
@@ -181,57 +188,9 @@ class InteractionEventHandler:
         if norm > 0:
             new_vec = new_vec / norm
 
-        await self.vector_store.upsert(
-            movie_id=user_idx,  # Used as ID
-            vector=new_vec.tolist(),
-            payload={"user_uuid": user_uuid, "updated_from": "semantic_realtime"},
-            collection_name=self.settings.vector_user_profile_collection,
+        await self.user_vector_service.upsert_user_profile_vector(
+            user_id=user_id, vector=new_vec.tolist()
         )
-        logger.info(f"Updated Semantic Profile for user {user_uuid}")
-
-    async def _update_cf_profile(
-        self, user_uuid: str, movie_id: int, score: float
-    ) -> None:
-        """Update user_cf_vectors using EMA if user and movie exist in CF model."""
-        user_idx = mapping_service.get_user_idx(user_uuid)
-
-        if user_idx is None:
-            logger.warning(
-                f"User {user_uuid} not found in CF mapping (Cold-Start). Skipping CF update."
-            )
-            return
-
-        movie_cf_data = await self.vector_store.get_by_id(
-            movie_id, collection_name=self.settings.vector_movie_cf_collection
+        logger.info(
+            f"[InteractionEventHandler] Cập nhật user profile vector cho user_id={user_id} dựa trên interaction với movie_id={movie_id} (score={score})"
         )
-        if not movie_cf_data or not movie_cf_data.get("vector"):
-            logger.warning(
-                f"Movie {movie_id} not found in CF collection (Cold-Start). Skipping CF update."
-            )
-            return
-
-        user_cf_data = await self.vector_store.get_by_id(
-            user_idx, collection_name=self.settings.vector_user_cf_collection
-        )
-        if not user_cf_data or not user_cf_data.get("vector"):
-            logger.warning(
-                f"User {user_idx} not found in CF collection. Skipping CF update."
-            )
-            return
-
-        movie_vec = np.array(movie_cf_data["vector"])
-        current_user_vec = np.array(user_cf_data["vector"])
-
-        alpha = 0.1  # Slower decay for CF to maintain global preferences
-
-        new_vec = (1 - alpha) * current_user_vec + alpha * (
-            self._normalize_score(score)
-        ) * movie_vec
-
-        await self.vector_store.upsert(
-            movie_id=user_idx,
-            vector=new_vec.tolist(),
-            payload={"user_uuid": user_uuid, "updated_from": "cf_realtime"},
-            collection_name=self.settings.vector_user_cf_collection,
-        )
-        logger.info(f"Updated CF Profile for user {user_uuid}")
