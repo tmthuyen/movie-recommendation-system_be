@@ -19,6 +19,9 @@ const sdk = new NodeSDK({
   instrumentations: [
     getNodeAutoInstrumentations({
       '@opentelemetry/instrumentation-fs': { enabled: false }, // rác log
+      '@opentelemetry/instrumentation-http': { enabled: true },
+      '@opentelemetry/instrumentation-pg': { enabled: true }, // PostgreSQL
+      '@opentelemetry/instrumentation-ioredis': { enabled: true }, // Redis
     }),
   ],
 });

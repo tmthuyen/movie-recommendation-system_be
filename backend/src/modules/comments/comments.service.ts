@@ -34,7 +34,6 @@ export class CommentsService {
     createCommentDto: CreateCommentDto,
   ): Promise<Comment> {
     const { movieId, content, parentId } = createCommentDto;
-    const score = InteractionScoreMap[InteractionType.COMMENT];
 
     const savedComment = await this.dataSource.transaction(async manager => {
       // Create Comment
@@ -48,7 +47,7 @@ export class CommentsService {
 
       // Create Interaction
       const interaction = manager.create(Interaction, {
-        score,
+        score: 0,
         type: InteractionType.COMMENT,
         movie: { id: movieId } as Movie,
         user: { id: userId } as User,
@@ -66,7 +65,7 @@ export class CommentsService {
       movieId,
       type: InteractionType.COMMENT,
       action: 'added',
-      score,
+      score: 0,
       likeCount: stats.likeCount,
       commentCount: stats.commentCount,
       viewCount: stats.viewCount,
@@ -76,7 +75,7 @@ export class CommentsService {
       userId,
       movieId,
       action: InteractionType.COMMENT,
-      score,
+      score: null,
       removed: false,
       createdAt: savedComment.createdAt ?? new Date(),
     });

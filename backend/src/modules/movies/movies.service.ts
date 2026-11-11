@@ -367,15 +367,15 @@ export class MoviesService {
       });
     }
 
-    // 4. Chỉ publish khi TẠO MỚI click (update lấy confidence qua training.batch)
-    if (userId && interactionState === 'created' && createdInteraction) {
+    // publish queue khi click movie (cả mới và cũ)
+    if (userId) {
       this.interactionProducer.publishInteractionCreated({
         userId,
         movieId: numericMovieId,
         action: InteractionType.CLICK,
-        score,
+        score: null, // không cần score
         removed: false,
-        createdAt: createdInteraction.createdAt ?? new Date(),
+        createdAt: new Date(),
       });
     }
 

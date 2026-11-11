@@ -47,11 +47,16 @@ export class InteractionsService {
   ): Promise<ToggleInteractionResult> {
     const { movieId, type } = createInteractionDto;
 
+    this.logger.log(
+      `Xử lý tương tác userId=${userId}, movieId=${movieId}, type=${type}`,
+    );
+
     const { action, likeCount, data } = await this.dataSource.transaction(
       async manager => {
         // check if the movie exists
         const movie = await manager.findOne(Movie, { where: { id: movieId } });
         if (!movie) {
+          this.logger.error(`Không tìm thấy phim với ID ${movieId}`);
           throw new NotFoundException(`Không tìm thấy phim với ID ${movieId}`);
         }
         const oldLikeCount = movie.likeCount || 0;
@@ -218,7 +223,7 @@ export class InteractionsService {
       `Đã broadcast sự kiện tương tác: userId=${userId}, movieId=${movieId}, type=${type}, action=${action}`,
     );
 
-    // Nếu remove khả publish queue
+    // Nếu remove khỏi publish queue
     if (action !== 'removed') {
       this.interactionProducer.publishInteractionCreated({
         userId,

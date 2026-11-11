@@ -21,7 +21,7 @@ export class InteractionProducer {
     correlationId?: string,
   ): void {
     this.logger.log(
-      `Publishing interaction event for User: ${payload.userId} -> Movie: ${payload.movieId}`,
+      `Publishing interaction event for User: ${payload.userId} -> Movie: ${payload.movieId} (type=${payload.action}, score=${payload.score})`,
     );
     this.eventPublisher.publish(
       MESSAGE_BUS_CONFIG.INTERACTION_EXCHANGE,

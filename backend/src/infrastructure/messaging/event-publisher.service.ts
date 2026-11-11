@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { ConfigService } from '@nestjs/config';
 import { MESSAGE_BUS_CLIENT } from './messaging.constants';
 import { EventEnvelope } from './event.types';
+import { context, propagation, trace } from '@opentelemetry/api';
 
 @Injectable()
 export class EventPublisherService {
@@ -29,13 +30,23 @@ export class EventPublisherService {
     correlationId?: string,
     routingKey?: string,
   ): void {
+    this.logger.log(
+      `Sự kiện: type=${eventType}, exchange=${exchange}, routingKey=${routingKey ?? eventType} | correlationId=${correlationId}`,
+    );
+
+    // lấy traceId của open telemetry làm correlationId
+    const activeSpan = trace.getActiveSpan();
+    const traceId = activeSpan?.spanContext().traceId;
+    const headers: Record<string, string> = {};
+    propagation.inject(context.active(), headers);
+
     const event: EventEnvelope<TPayload> = {
       eventId: randomUUID(),
       eventType,
       eventVersion: 1,
       source: this.configService.get<string>('SERVICE_NAME', 'backend-service'),
       occurredAt: new Date().toISOString(),
-      correlationId,
+      correlationId: correlationId ?? traceId,
       payload,
     };
 
@@ -43,9 +54,15 @@ export class EventPublisherService {
     this.channelWrapper
       .publish(exchange, routingKey ?? eventType, event, {
         persistent: true,
+        headers,
       })
       .catch((error: Error) => {
         this.logger.error(`Failed to publish ${eventType}: ${error.message}`);
       });
+
+    // log
+    this.logger.log(
+      `Đã publish sự kiện [Type=${eventType}] | [TraceID=${traceId}] | [CorrelationID=${correlationId}] | [EventID=${event.eventId}]]`,
+    );
   }
 }
