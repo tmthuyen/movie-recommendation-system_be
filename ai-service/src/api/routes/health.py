@@ -11,7 +11,7 @@ from utils import setup_logger
 
 from ..response import success
 
-logger = setup_logger(name="FastAPI-Recommendations", filename=__name__)
+logger = setup_logger(name="FastAPI-Recommendations")
 router = APIRouter(tags=["health"])
 
 

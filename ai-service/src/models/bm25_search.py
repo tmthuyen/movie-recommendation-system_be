@@ -17,7 +17,7 @@ class BM25Recommender(BaseRecommender):
 
     def __init__(self, tokenizer: BaseTokenizer = None, **kwargs):
         super().__init__(tokenizer, **kwargs)
-        self.logger = setup_logger(self.__class__.__name__)
+        self.logger = setup_logger(name="FastAPI-Recommendations")
 
         self.bm25 = None
         self.movie_ids = []

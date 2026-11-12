@@ -35,6 +35,7 @@ export const MESSAGE_BUS_CONFIG = {
   INTERACTION_QUEUE: 'interaction.queue',
   INTERACTION_EVENT_RK: 'interaction.event',
   INTERACTION_TRAINING_BATCH_RK: 'training.batch',
+  INTERACTION_TRAINING_REQUEST_RK: 'training.request',
   INTERACTION_DLX: 'interaction.queue.dlx',
   INTERACTION_DLQ: 'interaction.queue.dlq',
   INTERACTION_DLQ_ROUTING_KEY: 'interaction.queue.dlq.rk',

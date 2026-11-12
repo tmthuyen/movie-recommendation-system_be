@@ -12,7 +12,7 @@ from models.bm25_search import BM25Recommender
 from models.tfidf_search import TFIDFRecommender
 from utils.logger import setup_logger
 
-logger = setup_logger()
+logger = setup_logger(name="Test-FastAPI-Recommendations")
 
 
 def find_latest_experiment(model_name: str) -> Path:

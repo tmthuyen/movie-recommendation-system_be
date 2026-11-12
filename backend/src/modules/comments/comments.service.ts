@@ -71,7 +71,7 @@ export class CommentsService {
       viewCount: stats.viewCount,
     });
 
-    this.interactionProducer.publishInteractionCreated({
+    await this.interactionProducer.publishInteractionCreated({
       userId,
       movieId,
       action: InteractionType.COMMENT,

@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import type { Request } from 'express';
 import { RecommendationsController } from './recommendations.controller';
 import { IRecommendationsService } from './recommendations.service';
 
@@ -129,19 +130,28 @@ describe('RecommendationsController', () => {
     });
   });
 
-  it('GET /hybrid-search hiện là stub trả {status,message,data:[]}', () => {
-    const res = controller.hybridSearch({
-      userId: 'user-1',
-      keyword: 'hành động',
-      topK: 10,
-      page: 1,
-      pageSize: 10,
+  it('GET /for-you gọi service với userId/token từ request và trả envelope', async () => {
+    recommendationsService.hybridSearch.mockResolvedValue({
+      result: [{ id: 5, title: 'Phim', score: 0.9 }],
+      pagination: { page: 1, limit: 10, total: 1, totalPages: 1 },
     });
+    const req = {
+      user: { sub: 'user-1' },
+      headers: { authorization: 'Bearer access-token' },
+    } as unknown as Request;
 
+    const res = await controller.hybridSearch(req, 10);
+
+    expect(recommendationsService.hybridSearch).toHaveBeenCalledWith(
+      'user-1',
+      'access-token',
+      10,
+    );
     expect(res).toEqual({
       status: 'success',
       message: expect.any(String),
-      data: [],
+      result: [{ id: 5, title: 'Phim', score: 0.9 }],
+      pagination: { page: 1, limit: 10, total: 1, totalPages: 1 },
     });
   });
 });

@@ -15,6 +15,11 @@ export interface IStorageService {
   uploadFile(file: Express.Multer.File, folder?: string): Promise<string>;
   deleteFile(fileUrl: string): Promise<void>;
   getUrl(key: string): Promise<string>;
+  uploadBuffer(
+    buffer: Buffer,
+    key: string,
+    contentType: string,
+  ): Promise<string>;
 }
 
 @Injectable()
@@ -78,5 +83,22 @@ export class S3StorageService implements IStorageService {
     }
 
     return data.Body as any;
+  }
+
+  async uploadBuffer(
+    buffer: Buffer,
+    key: string,
+    contentType: string,
+  ): Promise<string> {
+    await this.s3Client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+      }),
+    );
+
+    return key;
   }
 }

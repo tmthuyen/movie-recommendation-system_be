@@ -8,18 +8,21 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+import numpy as np
+
 from api.schemas import SimilarMoviesResponse
 from core.custom_exception import CustomException
 from core.fusion import reciprocal_rank_fusion_with_details
 from core.integrations import VectorStore
 from services.embedding_service import EmbeddingService
+from services.IALSRecommendationService import ALS_Implicit, ALSModelService
 from services.mapping_service import mapping_service
 from services.movie_vector_service import MovieVectorService
 from services.user_vector_service import UserVectorService
 from utils import setup_logger
 from utils.genre_utils import extract_genres, rerank_similar_candidates
 
-logger = setup_logger(name=__name__, filename=__name__)
+logger = setup_logger(name="FastAPI-Recommendations")
 
 
 # Reuse the exact corpus text builder used by DataLoader; no index rebuild here.
@@ -72,6 +75,7 @@ class RecommendService:
         embedding_service: EmbeddingService,
         movie_vector_service: MovieVectorService,
         user_vector_service: UserVectorService,
+        als_model_service: ALSModelService,
     ) -> None:
         """Gợi ý phim tương tự (Content Search), nội dung liên quan cho user dựa trên tương tác (CF)
 
@@ -87,6 +91,15 @@ class RecommendService:
         self.semantic_weight = 0.4
         self._movie_vector_service = movie_vector_service
         self._user_vector_service = user_vector_service
+        self._als_model_service = als_model_service
+
+    def set_als_model_service(self, als_model_service: ALS_Implicit):
+        """Set the ALS model service for collaborative filtering recommendations.
+
+        Args:
+            als_model_service (ALS_Implicit): The ALS model service instance.
+        """
+        self._als_model_service = als_model_service
 
     async def semantic_search(
         self, query: str, top_k: int = 10
@@ -213,6 +226,38 @@ class RecommendService:
             logger.info(
                 f"[RecommendService] Fetching CF recommendations for user {user_id} (user_idx={user_idx})"
             )
+
+            if self._als_model_service is not None:
+                als_model = self._als_model_service.get_model()
+                candidate_items = np.arange(
+                    als_model.model.item_factors.shape[0],
+                    dtype=np.int64,
+                )
+
+                item_indices, scores = als_model.recommend(
+                    user_idx=user_idx,
+                    k=top_k * 2,
+                    candidate_items=candidate_items,
+                    seen_items=None,  # Không loại bỏ phim đã xem, model sẽ gợi ý lại phim đã xem
+                )
+
+                # map item_idx -> item_id
+                item_ids = [
+                    mapping_service.get_item_id(item_idx=int(idx))
+                    for idx in item_indices
+                ]
+
+                # format results: [{"id": item_id, "score": score, "item_idx": item_idx}, ...]
+                cf_results = [
+                    {"id": int(mid), "score": float(score), "item_idx": int(idx)}
+                    for mid, score, idx in zip(item_ids, scores, item_indices)
+                    if mid is not None
+                ]
+            else:
+
+                logger.warning(
+                    f"[RecommendService] ALS model service is not available; skipping CF recommendations for user {user_id}."
+                )
         else:
             logger.info(
                 f"[RecommendService] User {user_id} not found in CF mapping (Cold Start)."

@@ -369,7 +369,7 @@ export class MoviesService {
 
     // publish queue khi click movie (cả mới và cũ)
     if (userId) {
-      this.interactionProducer.publishInteractionCreated({
+      await this.interactionProducer.publishInteractionCreated({
         userId,
         movieId: numericMovieId,
         action: InteractionType.CLICK,

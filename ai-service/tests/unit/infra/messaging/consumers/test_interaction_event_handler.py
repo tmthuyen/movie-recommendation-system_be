@@ -1,78 +1,128 @@
-"""Unit test cho ``services/interaction_event_handler.py``.
+"""Unit test cho ``infra/messaging/consumers/interaction_event_handler.py``.
 
 Không kết nối RabbitMQ/ChromaDB/model thật:
-- vector store dùng ``FakeChroma`` (fixture trong ``tests/conftest.py``),
-- mapping service, storage service và training scheduler được monkeypatch.
+- ``MovieVectorService`` và ``UserVectorService`` được thay bằng mock,
+- ``TrainingScheduler`` được thay bằng mock,
+- batch training ghi parquet vào ``tmp_path``.
 
-Bao phủ: band điểm 1..5, ưu tiên ``score`` backend, normalize/clamp [-1, 1],
-payload thiếu field, movie/user cold-start, EMA semantic/CF, ``removed``,
-event type lạ và batch training (mock upload R2).
+Bao phủ: action score hiện tại, normalize/clamp [-1, 1], validate payload,
+dispatch event, EMA semantic profile, ``removed``, training batch và
+training request.
 """
 
 import asyncio
+import logging
 import math
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
+import pandas as pd
 import pytest
+from pydantic import ValidationError
 
 import infra.messaging.consumers.interaction_event_handler as handler_module
+from core.custom_exception import CustomException
 from infra.messaging.consumers.interaction_event_handler import InteractionEventHandler
-
-
-def make_handler(store, scheduler=None) -> InteractionEventHandler:
-    return InteractionEventHandler(
-        vector_store=store,
-        training_scheduler=scheduler or MagicMock(),
-    )
+from infra.messaging.event_schemas import (
+    InteractionCreatedPayload,
+    InteractionListPayload,
+)
 
 
 def run(coro):
     return asyncio.run(coro)
 
 
-def upserts_for(store, collection_name):
-    return [row for row in store.upserts if row["collection_name"] == collection_name]
+def make_handler(
+    movie_service=None,
+    user_service=None,
+    scheduler=None,
+) -> InteractionEventHandler:
+    return InteractionEventHandler(
+        training_scheduler=scheduler if scheduler is not None else MagicMock(),
+        user_vector_service=(
+            user_service if user_service is not None else MagicMock()
+        ),
+        movie_vector_service=(
+            movie_service if movie_service is not None else MagicMock()
+        ),
+    )
 
 
-class TestActionScoreBand:
+def make_event(event_type: str, payload: dict, **overrides) -> dict:
+    event = {
+        "eventId": "evt-1",
+        "eventType": event_type,
+        "eventVersion": 1,
+        "source": "backend",
+        "occurredAt": "2026-11-12T00:00:00Z",
+        "correlationId": "corr-1",
+        "payload": payload,
+    }
+    event.update(overrides)
+    return event
+
+
+def interaction_payload(**overrides) -> dict:
+    payload = {
+        "userId": "u-1",
+        "movieId": 10,
+        "action": "like",
+        "score": 5,
+        "removed": False,
+        "createdAt": "2026-11-12T00:00:00Z",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def make_profile_handler(
+    movie_vector: list[float] | None = None,
+    movie_error: Exception | None = None,
+    user_data: dict | None = None,
+    user_error: Exception | None = None,
+):
+    movie_service = MagicMock()
+    movie_service.find_movie_vector = AsyncMock(
+        side_effect=movie_error
+        if movie_error is not None
+        else None,
+        return_value=None if movie_error is not None else {"vector": movie_vector},
+    )
+    user_service = MagicMock()
+    user_service.find_user_profile_vector = AsyncMock(
+        side_effect=user_error,
+        return_value=user_data,
+    )
+    user_service.upsert_user_profile_vector = AsyncMock()
+    handler = make_handler(movie_service=movie_service, user_service=user_service)
+    return handler, movie_service, user_service
+
+
+class TestActionScore:
     @pytest.mark.parametrize(
         ("action", "expected"),
         [
             ("click", 1.0),
             ("LIKE", 5.0),
             ("like", 5.0),
-            ("comment", 4.0),
+            ("comment", 2.0),
             ("rating", 0.0),
             ("share", 1.0),  # event lạ → mặc định 1.0
         ],
     )
-    def test_action_score_band(self, fake_chroma, action, expected):
-        handler = make_handler(fake_chroma)
-        assert handler._get_action_score({}, action, None) == expected
+    def test_action_score_band(self, action, expected):
+        handler = make_handler()
+        assert handler._get_action_score(action=action) == expected
 
-    def test_backend_score_takes_priority(self, fake_chroma):
-        handler = make_handler(fake_chroma)
-        assert handler._get_action_score({"score": 2.5}, "like", 5) == 2.5
+    def test_rating_value_is_used_when_provided(self):
+        handler = make_handler()
+        assert handler._get_action_score(action="rating", rating=4) == 4.0
+        assert handler._get_action_score(action="rating", rating=None) == 0.0
 
-    def test_backend_score_zero_is_not_treated_as_missing(self, fake_chroma):
-        handler = make_handler(fake_chroma)
-        assert handler._get_action_score({"score": 0}, "like", 5) == 0.0
-
-    def test_backend_score_accepts_numeric_string(self, fake_chroma):
-        handler = make_handler(fake_chroma)
-        assert handler._get_action_score({"score": "3.5"}, "click", None) == 3.5
-
-    @pytest.mark.parametrize("bad_score", ["abc", [], {}])
-    def test_invalid_backend_score_falls_back_to_action_band(
-        self, fake_chroma, bad_score
-    ):
-        handler = make_handler(fake_chroma)
-        assert handler._get_action_score({"score": bad_score}, "like", None) == 5.0
-
-    def test_rating_value_is_used_when_no_backend_score(self, fake_chroma):
-        handler = make_handler(fake_chroma)
-        assert handler._get_action_score({}, "rating", 4) == 4.0
-        assert handler._get_action_score({}, "rating", None) == 0.0
+    def test_non_rating_action_ignores_rating_value(self):
+        handler = make_handler()
+        assert handler._get_action_score(action="like", rating=2.5) == 5.0
 
 
 class TestNormalizeScore:
@@ -93,325 +143,300 @@ class TestNormalizeScore:
         assert InteractionEventHandler._normalize_score(raw) == pytest.approx(expected)
 
 
-class TestHandleInteractionCreatedValidation:
+class TestHandleInteractionCreated:
     @pytest.mark.parametrize(
         "payload",
         [
-            {"movieId": 1},
-            {"userId": "u-1"},
-            {},
+            {"movieId": 1, "action": "like", "createdAt": "2026-11-12T00:00:00Z"},
+            {"userId": "u-1", "action": "like", "createdAt": "2026-11-12T00:00:00Z"},
+            {"userId": "u-1", "movieId": 1, "createdAt": "2026-11-12T00:00:00Z"},
         ],
     )
-    def test_missing_user_or_movie_raises_value_error(self, fake_chroma, payload):
-        handler = make_handler(fake_chroma)
-        with pytest.raises(ValueError, match="userId and movieId"):
+    def test_missing_required_field_raises_validation_error(self, payload):
+        handler = make_handler()
+
+        with pytest.raises(ValidationError):
             run(handler._handle_interaction_created(payload))
 
-    def test_string_movie_id_is_coerced_to_int(self, fake_chroma, monkeypatch):
-        handler = make_handler(fake_chroma)
-        fake_chroma.seed(
-            10, [1.0, 0.0], collection_name=handler.settings.vector_collection
-        )
-        monkeypatch.setattr(handler_module.mapping_service, "get_user_idx", lambda _: 5)
+    def test_empty_user_id_raises_custom_exception(self):
+        handler = make_handler()
+
+        with pytest.raises(CustomException) as exc:
+            run(
+                handler._handle_interaction_created(
+                    interaction_payload(userId="")
+                )
+            )
+
+        assert exc.value.status_code == 400
+
+    def test_string_movie_id_is_coerced_to_int(self, monkeypatch):
+        handler = make_handler()
+        update = AsyncMock()
+        monkeypatch.setattr(handler, "_update_semantic_profile", update)
+
+        run(handler._handle_interaction_created(interaction_payload(movieId="10")))
+
+        update.assert_awaited_once_with(user_id="u-1", movie_id=10, score=5.0)
+
+    def test_action_score_is_forwarded_to_semantic_update(self, monkeypatch):
+        handler = make_handler()
+        update = AsyncMock()
+        monkeypatch.setattr(handler, "_update_semantic_profile", update)
+
+        run(handler._handle_interaction_created(interaction_payload(action="comment")))
+
+        update.assert_awaited_once_with(user_id="u-1", movie_id=10, score=2.0)
+
+    def test_removed_true_still_updates_semantic_profile(self, monkeypatch):
+        handler = make_handler()
+        update = AsyncMock()
+        monkeypatch.setattr(handler, "_update_semantic_profile", update)
 
         run(
             handler._handle_interaction_created(
-                {"userId": "u-1", "movieId": "10", "action": "like", "score": 5}
+                interaction_payload(removed=True)
             )
         )
 
-        semantic = upserts_for(
-            fake_chroma, handler.settings.vector_user_profile_collection
-        )
-        assert semantic[0]["movie_id"] == 5  # user index, không phải movie id
-        assert semantic[0]["payload"]["user_uuid"] == "u-1"
+        update.assert_awaited_once_with(user_id="u-1", movie_id=10, score=5.0)
 
 
 class TestSemanticProfileUpdate:
-    def test_new_user_vector_is_normalized_movie_vector(self, fake_chroma, monkeypatch):
-        handler = make_handler(fake_chroma)
-        fake_chroma.seed(
-            10, [3.0, 4.0, 0.0], collection_name=handler.settings.vector_collection
+    def test_new_user_vector_is_normalized_movie_vector(self):
+        handler, _, user_service = make_profile_handler(
+            movie_vector=[3.0, 4.0, 0.0],
+            user_error=CustomException("not found", status_code=404),
         )
-        monkeypatch.setattr(handler_module.mapping_service, "get_user_idx", lambda _: 7)
 
         run(
-            handler._handle_interaction_created(
-                {"userId": "u-1", "movieId": 10, "action": "like", "score": 5}
+            handler._update_semantic_profile(
+                user_id="u-1", movie_id=10, score=5.0
             )
         )
 
-        rows = upserts_for(fake_chroma, handler.settings.vector_user_profile_collection)
-        assert len(rows) == 1
-        assert rows[0]["movie_id"] == 7
-        assert rows[0]["vector"] == pytest.approx([0.6, 0.8, 0.0])
-        assert rows[0]["payload"]["updated_from"] == "semantic_realtime"
+        user_service.upsert_user_profile_vector.assert_awaited_once_with(
+            user_id="u-1", vector=pytest.approx([0.6, 0.8, 0.0])
+        )
 
-    def test_existing_user_vector_uses_ema(self, fake_chroma, monkeypatch):
-        handler = make_handler(fake_chroma)
-        fake_chroma.seed(
-            10, [1.0, 0.0, 0.0], collection_name=handler.settings.vector_collection
+    def test_existing_user_vector_uses_ema(self):
+        handler, _, user_service = make_profile_handler(
+            movie_vector=[1.0, 0.0, 0.0],
+            user_data={"vector": [0.0, 1.0, 0.0]},
         )
-        fake_chroma.seed(
-            7,
-            [0.0, 1.0, 0.0],
-            collection_name=handler.settings.vector_user_profile_collection,
-        )
-        monkeypatch.setattr(handler_module.mapping_service, "get_user_idx", lambda _: 7)
 
         run(
-            handler._handle_interaction_created(
-                {"userId": "u-1", "movieId": 10, "score": 2.5}
+            handler._update_semantic_profile(
+                user_id="u-1", movie_id=10, score=2.5
             )
         )
 
-        vector = upserts_for(
-            fake_chroma, handler.settings.vector_user_profile_collection
-        )[0]["vector"]
-        # alpha=0.2, normalized_score=0.5 → [0.1, 0.8, 0], sau đó normalize.
         norm = math.sqrt(0.1**2 + 0.8**2)
-        assert vector == pytest.approx([0.1 / norm, 0.8 / norm, 0.0])
-
-    def test_missing_movie_skips_semantic_update(self, fake_chroma, monkeypatch):
-        handler = make_handler(fake_chroma)
-        monkeypatch.setattr(handler_module.mapping_service, "get_user_idx", lambda _: 7)
-
-        run(handler._handle_interaction_created({"userId": "u-1", "movieId": 10}))
-
-        assert (
-            upserts_for(fake_chroma, handler.settings.vector_user_profile_collection)
-            == []
+        user_service.upsert_user_profile_vector.assert_awaited_once_with(
+            user_id="u-1",
+            vector=pytest.approx([0.1 / norm, 0.8 / norm, 0.0]),
         )
 
-    def test_empty_movie_vector_skips_semantic_update(self, fake_chroma, monkeypatch):
-        handler = make_handler(fake_chroma)
-        fake_chroma.seed(10, [], collection_name=handler.settings.vector_collection)
-        monkeypatch.setattr(handler_module.mapping_service, "get_user_idx", lambda _: 7)
-
-        run(handler._handle_interaction_created({"userId": "u-1", "movieId": 10}))
-
-        assert (
-            upserts_for(fake_chroma, handler.settings.vector_user_profile_collection)
-            == []
+    def test_zero_score_produces_zero_vector_without_nan(self):
+        handler, _, user_service = make_profile_handler(
+            movie_vector=[1.0, 0.0],
+            user_error=CustomException("not found", status_code=404),
         )
-
-    def test_unmapped_user_falls_back_to_hash_index(self, fake_chroma, monkeypatch):
-        handler = make_handler(fake_chroma)
-        fake_chroma.seed(
-            10, [1.0, 0.0], collection_name=handler.settings.vector_collection
-        )
-        monkeypatch.setattr(
-            handler_module.mapping_service, "get_user_idx", lambda _: None
-        )
-
-        run(handler._handle_interaction_created({"userId": "new-user", "movieId": 10}))
-
-        rows = upserts_for(fake_chroma, handler.settings.vector_user_profile_collection)
-        assert len(rows) == 1
-        assert isinstance(rows[0]["movie_id"], int)
-        assert rows[0]["movie_id"] >= 0
-        assert rows[0]["payload"]["user_uuid"] == "new-user"
-
-    def test_zero_score_produces_zero_vector_without_nan(
-        self, fake_chroma, monkeypatch
-    ):
-        handler = make_handler(fake_chroma)
-        fake_chroma.seed(
-            10, [1.0, 0.0], collection_name=handler.settings.vector_collection
-        )
-        monkeypatch.setattr(handler_module.mapping_service, "get_user_idx", lambda _: 7)
 
         run(
-            handler._handle_interaction_created(
-                {"userId": "u-1", "movieId": 10, "action": "rating", "rating": 0}
+            handler._update_semantic_profile(
+                user_id="u-1", movie_id=10, score=0.0
             )
         )
 
-        vector = upserts_for(
-            fake_chroma, handler.settings.vector_user_profile_collection
-        )[0]["vector"]
+        vector = user_service.upsert_user_profile_vector.await_args.kwargs["vector"]
         assert vector == [0.0, 0.0]
         assert not any(math.isnan(value) for value in vector)
 
-
-class TestCfProfileUpdate:
-    def test_cf_update_uses_smaller_alpha(self, fake_chroma, monkeypatch):
-        handler = make_handler(fake_chroma)
-        fake_chroma.seed(
-            10,
-            [0.0, 1.0],
-            collection_name=handler.settings.vector_movie_cf_collection,
+    def test_negative_score_is_normalized(self):
+        handler, _, user_service = make_profile_handler(
+            movie_vector=[1.0, 0.0],
+            user_error=CustomException("not found", status_code=404),
         )
-        fake_chroma.seed(
-            7,
-            [1.0, 0.0],
-            collection_name=handler.settings.vector_user_cf_collection,
-        )
-        monkeypatch.setattr(handler_module.mapping_service, "get_user_idx", lambda _: 7)
-
-        run(handler._update_cf_profile("u-1", 10, 2.5))
-
-        rows = upserts_for(fake_chroma, handler.settings.vector_user_cf_collection)
-        assert len(rows) == 1
-        # CF không normalize lại: new = 0.9*[1,0] + 0.1*0.5*[0,1].
-        assert rows[0]["vector"] == pytest.approx([0.9, 0.05])
-        assert rows[0]["payload"]["updated_from"] == "cf_realtime"
-
-    def test_cf_update_skips_cold_start_user(self, fake_chroma, monkeypatch):
-        handler = make_handler(fake_chroma)
-        monkeypatch.setattr(
-            handler_module.mapping_service, "get_user_idx", lambda _: None
-        )
-        run(handler._update_cf_profile("u-1", 10, 5.0))
-        assert (
-            upserts_for(fake_chroma, handler.settings.vector_user_cf_collection) == []
-        )
-
-    def test_cf_update_skips_missing_movie(self, fake_chroma, monkeypatch):
-        handler = make_handler(fake_chroma)
-        fake_chroma.seed(
-            7,
-            [1.0, 0.0],
-            collection_name=handler.settings.vector_user_cf_collection,
-        )
-        monkeypatch.setattr(handler_module.mapping_service, "get_user_idx", lambda _: 7)
-        run(handler._update_cf_profile("u-1", 10, 5.0))
-        assert (
-            upserts_for(fake_chroma, handler.settings.vector_user_cf_collection) == []
-        )
-
-    def test_cf_update_skips_missing_user_vector(self, fake_chroma, monkeypatch):
-        handler = make_handler(fake_chroma)
-        fake_chroma.seed(
-            10,
-            [0.0, 1.0],
-            collection_name=handler.settings.vector_movie_cf_collection,
-        )
-        monkeypatch.setattr(handler_module.mapping_service, "get_user_idx", lambda _: 7)
-        run(handler._update_cf_profile("u-1", 10, 5.0))
-        assert (
-            upserts_for(fake_chroma, handler.settings.vector_user_cf_collection) == []
-        )
-
-
-class TestRemovedFlagAndDispatch:
-    def test_removed_flag_is_accepted_without_crash(self, fake_chroma, monkeypatch):
-        """``removed=True`` hiện chỉ được log (xem báo cáo gap), không làm crash."""
-        handler = make_handler(fake_chroma)
-        fake_chroma.seed(
-            10, [1.0, 0.0], collection_name=handler.settings.vector_collection
-        )
-        monkeypatch.setattr(handler_module.mapping_service, "get_user_idx", lambda _: 7)
 
         run(
-            handler.handle(
-                "interaction.event",
-                {
-                    "userId": "u-1",
-                    "movieId": 10,
-                    "action": "like",
-                    "removed": True,
-                    "score": 5,
-                },
+            handler._update_semantic_profile(
+                user_id="u-1", movie_id=10, score=-5.0
             )
         )
 
-        rows = upserts_for(fake_chroma, handler.settings.vector_user_profile_collection)
-        assert len(rows) == 1
-        assert rows[0]["vector"][0] > 0
+        user_service.upsert_user_profile_vector.assert_awaited_once_with(
+            user_id="u-1", vector=pytest.approx([-1.0, 0.0])
+        )
 
+    def test_missing_movie_propagates_and_skips_user_upsert(self):
+        handler, _, user_service = make_profile_handler(
+            movie_error=CustomException("movie not found", status_code=404)
+        )
+
+        with pytest.raises(CustomException, match="movie not found"):
+            run(
+                handler._update_semantic_profile(
+                    user_id="u-1", movie_id=10, score=5.0
+                )
+            )
+
+        user_service.upsert_user_profile_vector.assert_not_awaited()
+
+    def test_unexpected_user_lookup_error_propagates(self):
+        handler, _, user_service = make_profile_handler(
+            movie_vector=[1.0, 0.0],
+            user_error=RuntimeError("redis down"),
+        )
+
+        with pytest.raises(RuntimeError, match="redis down"):
+            run(
+                handler._update_semantic_profile(
+                    user_id="u-1", movie_id=10, score=5.0
+                )
+            )
+
+        user_service.upsert_user_profile_vector.assert_not_awaited()
+
+    def test_empty_user_vector_is_treated_as_new_user(self):
+        handler, _, user_service = make_profile_handler(
+            movie_vector=[1.0, 0.0],
+            user_data={"vector": []},
+        )
+
+        run(
+            handler._update_semantic_profile(
+                user_id="u-1", movie_id=10, score=5.0
+            )
+        )
+
+        user_service.upsert_user_profile_vector.assert_awaited_once_with(
+            user_id="u-1", vector=pytest.approx([1.0, 0.0])
+        )
+
+
+class TestDispatch:
     @pytest.mark.parametrize("event_type", ["interaction.created", "interaction.event"])
     def test_interaction_events_dispatch_to_handler(
-        self, fake_chroma, event_type, monkeypatch
+        self, event_type, monkeypatch
     ):
-        handler = make_handler(fake_chroma)
+        handler = make_handler()
         mocked = AsyncMock()
         monkeypatch.setattr(handler, "_handle_interaction_created", mocked)
-        run(handler.handle(event_type, {"userId": "u", "movieId": 1}))
-        mocked.assert_awaited_once_with({"userId": "u", "movieId": 1})
+        payload = interaction_payload()
 
-    def test_training_batch_event_dispatches(self, fake_chroma, monkeypatch):
-        handler = make_handler(fake_chroma)
+        run(handler.handle(make_event(event_type, payload)))
+
+        expected = InteractionCreatedPayload.model_validate(payload).model_dump()
+        mocked.assert_awaited_once_with(expected)
+
+    def test_training_batch_event_dispatches(self, monkeypatch):
+        handler = make_handler()
         mocked = AsyncMock()
         monkeypatch.setattr(handler, "_handle_training_batch", mocked)
-        run(handler.handle("training.batch", {"interactions": []}))
-        mocked.assert_awaited_once_with({"interactions": []})
+        payload = {"interactions": [interaction_payload()]}
 
-    def test_unknown_event_only_logs_warning(self, fake_chroma, monkeypatch):
-        handler = make_handler(fake_chroma)
+        run(handler.handle(make_event("training.batch", payload)))
+
+        expected = InteractionListPayload.model_validate(payload).model_dump()
+        mocked.assert_awaited_once_with(expected)
+
+    def test_training_request_creates_background_task(self, monkeypatch):
+        scheduler = MagicMock()
+        scheduler.train_main_model = AsyncMock()
+        handler = make_handler(scheduler=scheduler)
+        created = []
+
+        def fake_create_task(coro):
+            created.append(coro)
+            coro.close()
+            return MagicMock()
+
+        monkeypatch.setattr(handler_module.asyncio, "create_task", fake_create_task)
+
+        run(handler.handle(make_event("training.request", {})))
+
+        scheduler.train_main_model.assert_called_once()
+        assert len(created) == 1
+
+    def test_unknown_event_only_logs_warning(self, monkeypatch):
+        handler = make_handler()
         created = AsyncMock()
         batch = AsyncMock()
         monkeypatch.setattr(handler, "_handle_interaction_created", created)
         monkeypatch.setattr(handler, "_handle_training_batch", batch)
 
-        run(handler.handle("something.else", {"x": 1}))
+        run(handler.handle(make_event("something.else", {"x": 1})))
 
         created.assert_not_awaited()
         batch.assert_not_awaited()
 
+    def test_invalid_event_raises_validation_error(self):
+        handler = make_handler()
+
+        with pytest.raises(ValidationError):
+            run(handler.handle({"eventType": "interaction.created"}))
+
 
 class TestTrainingBatch:
-    def test_empty_batch_is_skipped(self, fake_chroma, tmp_path, monkeypatch):
+    def test_empty_batch_is_skipped(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         scheduler = MagicMock()
         scheduler.train_main_model = AsyncMock()
-        handler = make_handler(fake_chroma, scheduler)
+        handler = make_handler(scheduler=scheduler)
 
         run(handler._handle_training_batch({"interactions": []}))
 
         scheduler.train_main_model.assert_not_awaited()
         assert not (tmp_path / "data" / "temp_batches").exists()
 
-    def test_successful_batch_uploads_and_schedules_training(
-        self, fake_chroma, tmp_path, monkeypatch
-    ):
+    def test_batch_writes_parquet_and_removes_temp_file(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
+        removed: list[Path] = []
+        monkeypatch.setattr(
+            handler_module.os,
+            "remove",
+            lambda path: removed.append(Path(path)),
+        )
         scheduler = MagicMock()
         scheduler.train_main_model = AsyncMock()
-        handler = make_handler(fake_chroma, scheduler)
-
-        uploaded = {}
-        monkeypatch.setattr(
-            handler_module.storage_service,
-            "upload_file",
-            lambda path, key: uploaded.update(path=path, key=key) or True,
-        )
-        created_tasks = []
-
-        def fake_create_task(coro):
-            created_tasks.append(coro)
-            coro.close()
-            return MagicMock()
-
-        monkeypatch.setattr(asyncio, "create_task", fake_create_task)
+        handler = make_handler(scheduler=scheduler)
 
         run(
             handler._handle_training_batch(
-                {"interactions": [{"userId": 1, "movieId": 2, "rating": 5}]}
+                {"interactions": [interaction_payload()]}
             )
         )
 
-        assert len(created_tasks) == 1
-        scheduler.train_main_model.assert_called_once()
-        assert uploaded["key"].startswith("interactions/batch_")
-        assert uploaded["key"].endswith(".parquet")
-        # File tạm phải bị xoá sau khi upload thành công.
-        assert list((tmp_path / "data" / "temp_batches").glob("*.parquet")) == []
+        scheduler.train_main_model.assert_not_awaited()
+        assert len(removed) == 1
+        assert (
+            removed[0].resolve().parent
+            == (tmp_path / "data" / "temp_batches").resolve()
+        )
+        assert removed[0].exists()
+        df = pd.read_parquet(removed[0])
+        assert len(df) == 1
+        assert df.iloc[0]["userId"] == "u-1"
 
-    def test_upload_failure_raises_and_keeps_temp_file(
-        self, fake_chroma, tmp_path, monkeypatch
+    def test_remove_failure_is_logged_and_does_not_raise(
+        self, tmp_path, monkeypatch, caplog
     ):
         monkeypatch.chdir(tmp_path)
-        handler = make_handler(fake_chroma)
         monkeypatch.setattr(
-            handler_module.storage_service, "upload_file", lambda path, key: False
+            handler_module.os,
+            "remove",
+            MagicMock(side_effect=OSError("locked")),
         )
+        handler = make_handler()
 
-        with pytest.raises(RuntimeError, match="Failed to upload batch"):
+        with caplog.at_level(logging.WARNING):
             run(
                 handler._handle_training_batch(
-                    {"interactions": [{"userId": 1, "movieId": 2}]}
+                    {"interactions": [interaction_payload()]}
                 )
             )
 
-        assert len(list((tmp_path / "data" / "temp_batches").glob("*.parquet"))) == 1
+        assert "Failed to delete temp batch" in caplog.text
+        batch_dir = tmp_path / "data" / "temp_batches"
+        assert len(list(batch_dir.glob("*.parquet"))) == 1

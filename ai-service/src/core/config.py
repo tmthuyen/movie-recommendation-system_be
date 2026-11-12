@@ -63,7 +63,6 @@ class Settings(BaseSettings):
 
     # Dimension of paraphrase-multilingual-MiniLM-L12-v2 (multilingual, 384-dim)
     vector_size: int = 384
-    cf_vector_size: int = 64  # Kích thước vector của ALS model (implicit)
 
     vector_db_enabled: bool = True
 
@@ -73,6 +72,14 @@ class Settings(BaseSettings):
 
     # SBERT model used for embedding (also referenced by build_vector_db.py)
     embedding_model_name: str = "paraphrase-multilingual-MiniLM-L12-v2"
+
+    # CF model
+    cf_vector_size: int = 64  # Kích thước vector của ALS model (implicit)
+    cf_num_factors: int = 64
+    cf_regularization: float = 0.1
+    cf_alpha: float = 40.0
+    cf_iterations: int = 15
+    cf_random_state: int = 42
 
     model_train_cron: str = "0 3 * * 0"
     model_train_enabled: bool = False

@@ -31,7 +31,7 @@ class MessageQueue:
         self._channel = None
         self._consumer_tag = None
         self._handler: MovieEventHandler | None = None
-        self._logger = setup_logger(name="FastAPI-Recommendations", filename=__name__)
+        self._logger = setup_logger(name="FastAPI-Recommendations")
 
     def set_handler(self, handler: MovieEventHandler) -> None:
         """Inject MovieEventHandler sau khi khoi tao app (tranh circular import)."""

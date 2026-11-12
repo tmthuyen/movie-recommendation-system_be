@@ -16,15 +16,19 @@ export class InteractionHandler {
   async handleInteractionDlq(eventDto: FailedEventDto): Promise<void> {
     try {
       this.logger.log(
-        'Handling failed interaction event',
-        JSON.stringify(eventDto),
+        `[InteractionDLQHandler] Handling failed interaction event: ${JSON.stringify(eventDto)}`,
       );
 
       await this.failedEventsService.logFailedEvent(eventDto);
 
-      this.logger.log(`Finished saving failed interaction event`);
+      this.logger.log(
+        `[InteractionDLQHandler] Finished saving failed interaction event`,
+      );
     } catch (error) {
-      this.logger.error('Error handling failed interaction event', error);
+      this.logger.error(
+        '[InteractionDLQHandler] Error handling failed interaction event',
+        error,
+      );
       throw error;
     }
   }
@@ -40,7 +44,9 @@ export class InteractionConsumer implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
-    this.logger.log('Initializing Interaction Consumer...');
+    this.logger.log(
+      '[InteractionConsumer] Initializing Interaction Consumer...',
+    );
 
     this.channelWrapper.addSetup(this.setupConsumer.bind(this));
   }
@@ -96,7 +102,7 @@ export class InteractionConsumer implements OnModuleInit {
       const eventDto = this.toFailedEvent(msg);
 
       this.logger.log(
-        `Interaction DLQ received message: [Routing Key]: ${eventDto.routingKey} | [Event]: ${JSON.stringify(eventDto.payload)}`,
+        `[InteractionDLQConsumer] Interaction DLQ received message: [Routing Key]: ${eventDto.routingKey} | [Event]: ${JSON.stringify(eventDto.payload)}`,
       );
 
       await this.handler.handleInteractionDlq(eventDto);
@@ -104,9 +110,10 @@ export class InteractionConsumer implements OnModuleInit {
       // ack message
       channel.ack(msg);
     } catch (error) {
+      const err = error instanceof Error ? error.stack : String(error);
+
       this.logger.error(
-        'Failed to handle interaction DLQ message',
-        error instanceof Error ? error.stack : String(error),
+        `[InteractionDLQConsumer] Failed to handle interaction DLQ message error=${err}`,
       );
 
       // nack message

@@ -12,6 +12,7 @@ import { RatingsModule } from '../ratings/ratings.module';
 import { EventsModule } from '../events/events.module';
 import { InteractionStatsModule } from './interaction-stats.module';
 import { MoviesModule } from '@/modules/movies/movies.module';
+import { RedisModule } from '@/infrastructure/redis/redis.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { MoviesModule } from '@/modules/movies/movies.module';
     forwardRef(() => EventsModule),
     InteractionStatsModule,
     MoviesModule,
+    RedisModule,
   ],
   controllers: [InteractionsController],
   providers: [

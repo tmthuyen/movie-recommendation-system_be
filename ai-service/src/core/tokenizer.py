@@ -17,7 +17,7 @@ class BaseTokenizer(ABC):
     """
 
     def __init__(self):
-        self.logger = setup_logger()
+        self.logger = setup_logger(name="FastAPI-Recommendations")
 
     @abstractmethod
     def tokenize(self, text: str) -> list[str]:

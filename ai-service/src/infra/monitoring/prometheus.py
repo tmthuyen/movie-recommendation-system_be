@@ -8,7 +8,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 
 from utils.logger import setup_logger
 
-logger = setup_logger(name="FastAPI-Recommendations", filename=__name__)
+logger = setup_logger(name="FastAPI-Recommendations")
 
 
 def configure_monitoring(app: FastAPI) -> None:

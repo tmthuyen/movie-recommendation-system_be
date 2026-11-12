@@ -324,7 +324,7 @@ describe('MoviesService', () => {
       expect(res).toEqual({ viewCount: 6, score: 0, interaction: 'none' });
     });
 
-    it('user xem lần đầu: tạo click score=1, broadcast added, publish event', async () => {
+    it('user xem lần đầu: tạo click score=1, broadcast added, publish event score=null', async () => {
       repo.findById.mockResolvedValue({ id: 1, viewCount: 0 });
       manager.findOne.mockResolvedValue(null);
 
@@ -347,15 +347,16 @@ describe('MoviesService', () => {
       ).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 'user-1',
+          movieId: 1,
           action: InteractionType.CLICK,
-          score: 1,
+          score: null,
           removed: false,
         }),
       );
       expect(res).toMatchObject({ score: 1, interaction: 'created' });
     });
 
-    it('user xem lại: score tăng 1, broadcast updated, KHÔNG publish lại', async () => {
+    it('user xem lại: score tăng 1, broadcast updated, vẫn publish event score=null', async () => {
       repo.findById.mockResolvedValue({ id: 1, viewCount: 3 });
       manager.findOne.mockResolvedValue({ id: 88, score: 2 });
 
@@ -369,7 +370,15 @@ describe('MoviesService', () => {
       );
       expect(
         interactionProducer.publishInteractionCreated,
-      ).not.toHaveBeenCalled();
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-1',
+          movieId: 1,
+          action: InteractionType.CLICK,
+          score: null,
+          removed: false,
+        }),
+      );
       expect(res).toMatchObject({ score: 3, interaction: 'updated' });
     });
 

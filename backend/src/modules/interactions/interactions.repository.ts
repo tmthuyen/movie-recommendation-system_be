@@ -33,6 +33,14 @@ export interface IInteractionRepository {
     userId: string,
     movieId: number,
   ): Promise<Interaction[]>;
+  findLatestByCreatedAtAndId(
+    lastCreatedAt: string | null,
+    lastId: number | null,
+    limit: number,
+  ): Promise<{
+    data: Interaction[];
+    nextCursor: { lastCreatedAt: string; lastId: number } | null;
+  }>;
 }
 
 @Injectable()
@@ -160,5 +168,57 @@ export class InteractionRepository implements IInteractionRepository {
         id: 'DESC',
       },
     });
+  }
+
+  async findLatestByCreatedAtAndId(
+    lastCreatedAt: string | null,
+    lastId: Interaction['id'] | null,
+    limit: number,
+  ): Promise<{
+    data: Interaction[];
+    nextCursor: { lastCreatedAt: string; lastId: number } | null;
+  }> {
+    const queryBuilder = this.repo
+      .createQueryBuilder('interaction')
+      .leftJoin('interaction.user', 'user')
+      .leftJoin('interaction.movie', 'movie')
+      .addSelect(['user.id'])
+      .addSelect(['movie.id'])
+
+      // Lấy createdAt nguyên bản từ PostgreSQL dưới dạng string
+      .addSelect('CAST(interaction.createdAt AS text)', 'cursorCreatedAt')
+
+      .orderBy('interaction.createdAt', 'ASC')
+      .addOrderBy('interaction.id', 'ASC')
+      .take(limit);
+
+    if (lastCreatedAt !== null && lastId !== null) {
+      queryBuilder.where(
+        '(interaction.createdAt, interaction.id) > (:lastCreatedAt, :lastId)',
+        {
+          lastCreatedAt,
+          lastId,
+        },
+      );
+    }
+
+    const { entities, raw } = await queryBuilder.getRawAndEntities();
+
+    if (entities.length === 0) {
+      return {
+        data: [],
+        nextCursor: null,
+      };
+    }
+
+    const lastIndex = entities.length - 1;
+
+    return {
+      data: entities,
+      nextCursor: {
+        lastCreatedAt: raw[lastIndex].cursorCreatedAt,
+        lastId: entities[lastIndex].id,
+      },
+    };
   }
 }

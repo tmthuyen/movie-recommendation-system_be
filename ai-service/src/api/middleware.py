@@ -13,7 +13,7 @@ settings = get_settings()
 
 from opentelemetry import trace
 
-logger = setup_logger(name="FastAPI-Recommendations", filename=__name__)
+logger = setup_logger(name="FastAPI-Recommendations")
 
 
 def get_correlation_id(request: Request) -> tuple[str, str, str]:

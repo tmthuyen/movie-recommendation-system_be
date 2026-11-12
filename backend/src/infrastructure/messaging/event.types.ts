@@ -63,3 +63,8 @@ export interface InteractionCreatedPayload {
   removed: boolean;
   createdAt: Date;
 }
+
+// Training payload
+export interface TrainingRequestedPayload {
+  folder: string;
+}

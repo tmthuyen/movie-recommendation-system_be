@@ -18,7 +18,7 @@ class DomainEvent(BaseModel, Generic[DataT]):
     eventVersion: int = 1
     source: str
     occurredAt: str
-    correlationId: str
+    correlationId: str | None = None
     payload: DataT
 
 
@@ -27,6 +27,7 @@ class DomainEvent(BaseModel, Generic[DataT]):
 # ===================
 class InteractionAction(str, Enum):
     VIEW = "view"
+    CLICK = "click"
     LIKE = "like"
     # DISLIKE = "dislike"
     RATING = "rating"
@@ -44,6 +45,14 @@ class InteractionCreatedPayload(BaseModel):
 
 class InteractionCreatedEvent(DomainEvent[InteractionCreatedPayload]):
     eventType: str = "interaction.created"
+
+
+class InteractionListPayload(BaseModel):
+    interactions: list[InteractionCreatedPayload]
+
+
+class TrainingBatchEvent(DomainEvent[InteractionListPayload]):
+    eventType: str = "training.batch"
 
 
 # class MovieCreated(BaseModel):

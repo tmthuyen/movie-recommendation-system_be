@@ -17,7 +17,7 @@ class MovieEventHandler:
 
     def __init__(self, recommend_service: RecommendService) -> None:
         self._svc = recommend_service
-        self._logger = setup_logger("movie_event_handler")
+        self._logger = setup_logger(name="FastAPI-Recommendations")
 
     async def handle(self, event_type: str, payload: dict[str, Any]) -> None:
         """

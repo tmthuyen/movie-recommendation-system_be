@@ -107,10 +107,16 @@ class FakeChroma:
 
     def __init__(self) -> None:
         # collection -> {id: {"vector": list[float], "payload": dict}}
-        self._collections: dict[str, dict[int, dict]] = {}
+        # Movie IDs are ints; user-profile IDs are UUID strings.
+        self._collections: dict[str, dict[int | str, dict]] = {}
         self.upserts: list[dict] = []
         self.started = False
         self.closed = False
+
+    def _collection_name(self, name: str | None) -> str:
+        if name is not None:
+            return name
+        return getattr(getattr(self, "settings", None), "vector_collection", "default")
 
     async def start(self) -> None:
         self.started = True
@@ -120,46 +126,57 @@ class FakeChroma:
 
     def seed(
         self,
-        item_id: int,
+        item_id: int | str,
         vector: list[float],
         payload: dict | None = None,
-        collection_name: str = "default",
+        collection_name: str | None = None,
     ) -> None:
         """Nạp sẵn dữ liệu (dùng trong test) — không tính là một lần upsert."""
-        self._collections.setdefault(collection_name, {})[item_id] = {
+        name = self._collection_name(collection_name)
+        self._collections.setdefault(name, {})[item_id] = {
             "vector": list(vector),
             "payload": dict(payload or {}),
         }
 
     async def upsert(
         self,
-        movie_id: int,
-        vector: list[float],
-        payload: dict,
+        movie_id: int | None = None,
+        id: str | int | None = None,
+        vector: list[float] | None = None,
+        payload: dict | None = None,
         collection_name: str | None = None,
     ) -> None:
-        name = collection_name or "default"
-        self._collections.setdefault(name, {})[movie_id] = {
-            "vector": list(vector),
-            "payload": dict(payload),
+        """Hỗ trợ cả movie vector (``movie_id``) và user profile vector (``id``)."""
+        item_id = id if id is not None else movie_id
+        if item_id is None:
+            raise ValueError("FakeChroma.upsert requires movie_id or id")
+        name = self._collection_name(collection_name)
+        self._collections.setdefault(name, {})[item_id] = {
+            "vector": list(vector or []),
+            "payload": dict(payload or {}),
         }
         self.upserts.append(
             {
-                "movie_id": movie_id,
-                "vector": list(vector),
-                "payload": dict(payload),
-                "collection_name": collection_name,
+                "movie_id": item_id,
+                "vector": list(vector or []),
+                "payload": dict(payload or {}),
+                "collection_name": name,
             }
         )
 
     async def get_by_id(
-        self, movie_id: int, collection_name: str | None = None
+        self,
+        movie_id: int | None = None,
+        id: str | int | None = None,
+        collection_name: str | None = None,
     ) -> dict | None:
-        item = self._collections.get(collection_name or "default", {}).get(movie_id)
+        item_id = id if id is not None else movie_id
+        name = self._collection_name(collection_name)
+        item = self._collections.get(name, {}).get(item_id)
         if item is None:
             return None
         return {
-            "id": movie_id,
+            "id": item_id,
             "vector": list(item["vector"]),
             "payload": dict(item["payload"]),
         }
@@ -171,7 +188,8 @@ class FakeChroma:
         where: dict | None = None,
         collection_name: str | None = None,
     ) -> list[dict]:
-        items = self._collections.get(collection_name or "default", {})
+        name = self._collection_name(collection_name)
+        items = self._collections.get(name, {})
         results = []
         for item_id, item in items.items():
             if where and any(item["payload"].get(k) != v for k, v in where.items()):

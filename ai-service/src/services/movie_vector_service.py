@@ -130,7 +130,12 @@ class MovieVectorService:
             if k not in ("movieId", "movie_id")
         }
         payload["search_text"] = search_text
-        await self._vs.upsert(movie_id, vector, payload)
+        await self._vs.upsert(
+            movie_id=movie_id,
+            id=None,
+            vector=vector,
+            payload=payload,
+        )
         logger.info(
             "upsert_movie_vector: movieId=%s text_len=%d", movie_id, len(search_text)
         )

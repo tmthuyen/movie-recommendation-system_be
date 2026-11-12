@@ -10,7 +10,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from core.config import Settings
 from utils import setup_logger
 
-logger = setup_logger(name="FastAPI-Recommendations", filename=__name__)
+logger = setup_logger(name="FastAPI-Recommendations")
 
 
 def configure_tracing(app: FastAPI, settings: Settings) -> None:

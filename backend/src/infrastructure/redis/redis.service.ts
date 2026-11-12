@@ -1,12 +1,37 @@
 import { Inject, Injectable, OnModuleDestroy } from '@nestjs/common';
 import Redis from 'ioredis';
 
+export const REDIS_CLIENT = 'REDIS_CLIENT';
+
 @Injectable()
 export class RedisService implements OnModuleDestroy {
-  constructor(@Inject('REDIS_CLIENT') private readonly redisClient: Redis) {}
+  constructor(@Inject(REDIS_CLIENT) private readonly redisClient: Redis) {}
 
   getClient(): Redis {
     return this.redisClient;
+  }
+
+  /**
+   * Acquire a lock in Redis
+   * @param key The key to lock
+   * @param value The value to set for the lock
+   * @param ttlSeconds The time to live for the lock in seconds
+   * @returns OK or null if the lock was not acquired
+   */
+  async acquireLock(
+    key: string,
+    value: string,
+    ttlSeconds: number,
+  ): Promise<string | null> {
+    return await this.redisClient.set(key, value, 'EX', ttlSeconds, 'NX');
+  }
+
+  async eval(
+    script: string,
+    numKeys: number,
+    ...args: (string | number)[]
+  ): Promise<void> {
+    await this.redisClient.eval(script, numKeys, ...args);
   }
 
   async set(key: string, value: string, ttlSeconds?: number): Promise<void> {

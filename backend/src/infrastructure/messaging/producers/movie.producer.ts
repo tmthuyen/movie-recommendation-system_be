@@ -13,7 +13,10 @@ export class MovieProducer {
 
   constructor(private readonly eventPublisher: EventPublisherService) {}
 
-  publishMovieCreated(payload: MovieCreatedPayload, correlationId?: string) {
+  async publishMovieCreated(
+    payload: MovieCreatedPayload,
+    correlationId?: string,
+  ) {
     // this.logger.debug(
     //   `Publishing movie.created event with payload: ${JSON.stringify(
     //     payload,
@@ -23,7 +26,7 @@ export class MovieProducer {
       `Publishing movie.created event with movie id: ${payload.movieId} with [Trace ID] : ${correlationId}`,
     );
 
-    this.eventPublisher.publish(
+    await this.eventPublisher.publish(
       MESSAGE_BUS_CONFIG.MOVIE_EXCHANGE,
       MESSAGE_EVENTS.MOVIE_CREATED,
       payload,
@@ -31,8 +34,11 @@ export class MovieProducer {
     );
   }
 
-  publishMovieUpdated(payload: MovieUpdatedPayload, correlationId?: string) {
-    this.eventPublisher.publish(
+  async publishMovieUpdated(
+    payload: MovieUpdatedPayload,
+    correlationId?: string,
+  ) {
+    await this.eventPublisher.publish(
       MESSAGE_BUS_CONFIG.MOVIE_EXCHANGE,
       MESSAGE_EVENTS.MOVIE_UPDATED,
       payload,
@@ -40,8 +46,11 @@ export class MovieProducer {
     );
   }
 
-  publishMovieDeleted(payload: MovieDeletedPayload, correlationId?: string) {
-    this.eventPublisher.publish(
+  async publishMovieDeleted(
+    payload: MovieDeletedPayload,
+    correlationId?: string,
+  ) {
+    await this.eventPublisher.publish(
       MESSAGE_BUS_CONFIG.MOVIE_EXCHANGE,
       MESSAGE_EVENTS.MOVIE_DELETED,
       payload,

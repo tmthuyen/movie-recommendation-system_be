@@ -1,24 +1,24 @@
 """Unit test cho ``services/model_training_service.py``.
 
-Chiến lược: dữ liệu rating rất nhỏ ghi vào parquet trong ``tmp_path`` (chdir để
-mọi thư mục ``data/training`` rơi vào tmp), mock ALS và storage:
+Chiến lược: dữ liệu interaction rất nhỏ ghi vào JSONL trong ``tmp_path``
+(chdir để mọi thư mục ``data/training`` rơi vào tmp), mock ALS, storage và Redis:
 
-- ALS thật (``implicit``) không được train — ``AlternatingLeastSquares`` được
-  thay bằng ``FakeALS`` chỉ ghi nhận tham số, ``fit`` và tạo factor giả.
-- R2/S3 được thay bằng ``FakeStorage`` ghi nhận upload/download/delete, không
-  mở kết nối mạng.
-- Vector store dùng ``fake_chroma`` từ ``tests/conftest.py``.
+- ALS thật (``implicit``) không được train — ``ALS_Implicit`` được thay bằng
+  ``FakeALSImplicit`` chỉ ghi nhận tham số và tạo file model giả.
+- R2/S3 được thay bằng ``FakeStorage`` ghi nhận upload/download, không mở kết
+  nối mạng.
+- Redis được thay bằng ``FakeRedis`` chỉ ghi nhận publish ``model.updated``.
 """
 
 import asyncio
+import json
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import pytest
-import scipy.sparse as sparse
 
 import src.services.model_training_service as training_module
+from src.infra.messaging.event_schemas import InteractionAction
 from src.services.model_training_service import ModelTrainingService
 
 
@@ -51,21 +51,42 @@ class FakeStorage:
         return True
 
 
-class FakeALS:
-    """Stub ``implicit.als.AlternatingLeastSquares``."""
+class FakeRedis:
+    """Stub ``RedisStore`` chỉ cần ``publish`` cho pipeline."""
 
-    def __init__(self, **kwargs) -> None:
-        self.kwargs = kwargs
-        self.user_factors = None
-        self.item_factors = None
-        self.fit_matrices: list = []
+    def __init__(self) -> None:
+        self.published: list[tuple[str, dict]] = []
+
+    async def publish(self, channel: str, payload: dict) -> int:
+        self.published.append((channel, payload))
+        return 1
+
+
+class FakeALSImplicit:
+    """Stub ``ALS_Implicit`` — không train implicit thật."""
+
+    def __init__(
+        self,
+        train_frame: pd.DataFrame,
+        num_users: int,
+        num_items: int,
+        factors=64,
+        alpha=60,
+        regularization=0.1,
+        iterations=15,
+        random_state=42,
+    ) -> None:
+        self.train_frame = train_frame
+        self.num_users = num_users
+        self.num_items = num_items
+        self.kwargs = {
+            "factors": factors,
+            "alpha": alpha,
+            "regularization": regularization,
+            "iterations": iterations,
+            "random_state": random_state,
+        }
         self.saved_paths: list[str] = []
-
-    def fit(self, user_item_matrix):
-        self.fit_matrices.append(user_item_matrix)
-        self.user_factors = np.full((user_item_matrix.shape[0], 4), 0.25)
-        self.item_factors = np.full((user_item_matrix.shape[1], 4), 0.5)
-        return self
 
     def save(self, path: str) -> None:
         self.saved_paths.append(path)
@@ -73,173 +94,191 @@ class FakeALS:
 
 
 @pytest.fixture
-def training(tmp_path, monkeypatch, fake_chroma, settings):
+def training(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    return ModelTrainingService(fake_chroma)
+    return ModelTrainingService(FakeRedis())
 
 
-def write_parquet(training: ModelTrainingService, rows: list[dict], name="batch.parquet"):
-    path = training.parquet_dir / name
-    pd.DataFrame(rows).to_parquet(path, index=False)
+def write_jsonl(
+    training: ModelTrainingService, rows: list[dict], name: str = "batch.jsonl"
+) -> Path:
+    path = training.interaction_dir / name
+    pd.DataFrame(rows).to_json(path, orient="records", lines=True)
     return path
 
 
 SMALL_ROWS = [
-    {"userId": "u1", "movieId": 10, "rating": 5.0},
-    {"userId": "u1", "movieId": 20, "rating": 3.0},
-    {"userId": "u2", "movieId": 30, "rating": 4.0},
+    {
+        "userId": "u1",
+        "movieId": 10,
+        "action": "click",
+        "score": 1.0,
+        "createdAt": "2024-01-01T00:00:00",
+    },
+    {
+        "userId": "u1",
+        "movieId": 20,
+        "action": "rating",
+        "score": 3.0,
+        "createdAt": "2024-01-02T00:00:00",
+    },
+    {
+        "userId": "u2",
+        "movieId": 30,
+        "action": "like",
+        "score": None,
+        "createdAt": "2024-01-03T00:00:00",
+    },
 ]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# _preprocess_data
+# _get_action_score / _preprocess_data
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestActionScore:
+    def test_rating_uses_explicit_rating(self, training):
+        assert training._get_action_score(InteractionAction.RATING, 4.5) == 4.5
+
+    @pytest.mark.parametrize(
+        ("action", "expected"),
+        [
+            (InteractionAction.CLICK, 1.0),
+            (InteractionAction.LIKE, 5.0),
+            (InteractionAction.COMMENT, 2.0),
+            ("unknown-action", 1.0),
+        ],
+    )
+    def test_action_defaults(self, training, action, expected):
+        assert training._get_action_score(action) == expected
 
 
 class TestPreprocessData:
-    def test_builds_sparse_matrix_and_mappings(self, training):
-        write_parquet(training, SMALL_ROWS)
+    def test_builds_mappings_and_scores(self, training):
+        write_jsonl(training, SMALL_ROWS)
 
-        matrix, user_mapping, movie_mapping, full_df = training._preprocess_data()
+        user_mapping, movie_mapping, full_df = training._preprocess_data()
 
-        assert matrix.shape == (2, 3)
-        assert matrix.toarray().tolist() == [[5.0, 3.0, 0.0], [0.0, 0.0, 4.0]]
         assert user_mapping == {"u1": 0, "u2": 1}
         assert movie_mapping == {"10": 0, "20": 1, "30": 2}
         assert full_df["user_idx"].tolist() == [0, 0, 1]
-        assert full_df["movie_idx"].tolist() == [0, 1, 2]
+        assert full_df["item_idx"].tolist() == [0, 1, 2]
+        assert full_df["score"].tolist() == [1.0, 3.0, 5.0]
 
-    def test_score_column_is_clipped_like_rating(self, training):
-        write_parquet(
+    def test_keeps_latest_duplicate_interaction(self, training):
+        write_jsonl(
             training,
             [
-                {"userId": "u1", "movieId": 10, "score": 0.0},
-                {"userId": "u1", "movieId": 20, "score": 6.0},
+                {
+                    "userId": "u1",
+                    "movieId": 10,
+                    "action": "click",
+                    "score": 1.0,
+                    "createdAt": "2024-01-01T00:00:00",
+                },
+                {
+                    "userId": "u1",
+                    "movieId": 10,
+                    "action": "click",
+                    "score": 1.0,
+                    "createdAt": "2024-01-02T00:00:00",
+                },
             ],
         )
 
-        matrix, *_ = training._preprocess_data()
+        _, _, full_df = training._preprocess_data()
 
-        assert matrix.toarray().tolist() == [[0.1, 5.0]]
+        assert len(full_df) == 1
+        assert full_df.iloc[0]["createdAt"] == pd.Timestamp("2024-01-02")
 
-    def test_missing_rating_and_score_defaults_to_one(self, training):
-        write_parquet(
-            training,
-            [
-                {"userId": "u1", "movieId": 10},
-                {"userId": "u2", "movieId": 20},
-            ],
-        )
-
-        matrix, *_ = training._preprocess_data()
-
-        assert matrix.toarray().tolist() == [[1.0, 0.0], [0.0, 1.0]]
-
-    def test_no_parquet_files_returns_empty_triplet(self, training, caplog):
+    def test_no_jsonl_files_returns_empty_triplet(self, training, caplog):
         with caplog.at_level("WARNING"):
-            matrix, user_mapping, movie_mapping = training._preprocess_data()
+            user_mapping, movie_mapping, full_df = training._preprocess_data()
 
-        assert matrix is None
-        assert user_mapping == {}
+        assert user_mapping is None
         assert movie_mapping == {}
-        assert "No local parquet files" in caplog.text
+        assert full_df == {}
+        assert "No local jsonl files" in caplog.text
 
-    def test_missing_user_or_movie_column_returns_empty_triplet(self, training):
-        write_parquet(training, [{"movieId": 10, "rating": 5.0}])
-
-        matrix, user_mapping, movie_mapping = training._preprocess_data()
-
-        assert matrix is None
-        assert user_mapping == {}
-        assert movie_mapping == {}
-
-    def test_corrupt_parquet_file_is_skipped(self, training, caplog):
-        (training.parquet_dir / "broken.parquet").write_bytes(b"not a parquet file")
+    def test_corrupt_jsonl_file_is_skipped(self, training, caplog):
+        (training.interaction_dir / "broken.jsonl").write_text(
+            "{not-json", encoding="utf-8"
+        )
 
         with caplog.at_level("ERROR"):
-            matrix, user_mapping, movie_mapping = training._preprocess_data()
+            user_mapping, movie_mapping, full_df = training._preprocess_data()
 
-        assert matrix is None
-        assert user_mapping == {}
+        assert user_mapping is None
         assert movie_mapping == {}
-        assert "Failed to read parquet file" in caplog.text
+        assert full_df == {}
+        assert "Failed to read jsonl file" in caplog.text
+
+    def test_missing_action_is_dropped(self, training):
+        write_jsonl(
+            training,
+            [
+                {
+                    "userId": "u1",
+                    "movieId": 10,
+                    "action": None,
+                    "score": 1.0,
+                    "createdAt": "2024-01-01T00:00:00",
+                },
+                {
+                    "userId": "u2",
+                    "movieId": 20,
+                    "action": "click",
+                    "score": 1.0,
+                    "createdAt": "2024-01-02T00:00:00",
+                },
+            ],
+        )
+
+        user_mapping, movie_mapping, full_df = training._preprocess_data()
+
+        assert user_mapping == {"u2": 0}
+        assert movie_mapping == {"20": 0}
+        assert len(full_df) == 1
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# _train_model / _update_chroma_vectors
+# _train_model / _download_training_data / _upload_artifacts
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 class TestTrainModel:
-    def test_builds_als_from_settings_and_fits_matrix(self, training, monkeypatch):
-        matrix = sparse.csr_matrix(np.eye(2))
-        monkeypatch.setattr(training_module, "AlternatingLeastSquares", FakeALS)
+    def test_builds_als_from_settings_and_dataframe(self, training, monkeypatch):
+        monkeypatch.setattr(training_module, "ALS_Implicit", FakeALSImplicit)
+        frame = pd.DataFrame(SMALL_ROWS)
 
-        model = training._train_model(matrix)
+        model = training._train_model(frame, num_users=2, num_items=3)
 
-        assert isinstance(model, FakeALS)
+        assert isinstance(model, FakeALSImplicit)
+        assert model.train_frame is frame
+        assert model.num_users == 2
+        assert model.num_items == 3
         assert model.kwargs == {
-            "factors": training.settings.cf_vector_size,
-            "regularization": 0.1,
-            "iterations": 20,
-            "use_gpu": False,
+            "factors": training.settings.cf_num_factors,
+            "alpha": training.settings.cf_alpha,
+            "regularization": training.settings.cf_regularization,
+            "iterations": training.settings.cf_iterations,
+            "random_state": training.settings.cf_random_state,
         }
-        assert model.fit_matrices[0] is matrix
-
-
-class TestUpdateChromaVectors:
-    def test_upserts_user_and_movie_factors_to_separate_collections(
-        self, training, fake_chroma, settings
-    ):
-        model = FakeALS()
-        model.user_factors = np.array([[1.0, 0.0], [0.0, 1.0]])
-        model.item_factors = np.array([[2.0, 0.0], [0.0, 3.0]])
-
-        run(
-            training._update_chroma_vectors(
-                model, {"uuid-a": 0, "uuid-b": 1}, {"100": 0, "200.0": 1}
-            )
-        )
-
-        assert len(fake_chroma.upserts) == 4
-        user_upserts = [
-            row
-            for row in fake_chroma.upserts
-            if row["collection_name"] == settings.vector_user_cf_collection
-        ]
-        movie_upserts = [
-            row
-            for row in fake_chroma.upserts
-            if row["collection_name"] == settings.vector_movie_cf_collection
-        ]
-        assert [row["movie_id"] for row in user_upserts] == [0, 1]
-        assert all(row["payload"]["updated_from"] == "batch_train" for row in user_upserts)
-        assert [row["payload"]["user_uuid"] for row in user_upserts] == [
-            "uuid-a",
-            "uuid-b",
-        ]
-        assert [row["movie_id"] for row in movie_upserts] == [100, 200]
-        assert [row["payload"]["movieId"] for row in movie_upserts] == [100, 200]
-        assert movie_upserts[0]["vector"] == [2.0, 0.0]
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# _download_training_data / _upload_artifacts / _manage_r2_data / cleanup
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 class TestDownloadTrainingData:
-    def test_downloads_only_parquet_files(self, training, monkeypatch):
+    def test_downloads_only_jsonl_files(self, training, monkeypatch):
         storage = FakeStorage(
-            listed=["interactions/a.parquet", "interactions/readme.txt"]
+            listed=["interactions/a.jsonl", "interactions/readme.txt"]
         )
         monkeypatch.setattr(training_module, "storage_service", storage)
 
         run(training._download_training_data())
 
-        assert training.r2_parquet_files == ["interactions/a.parquet"]
+        assert training.storage_interaction_files == ["interactions/a.jsonl"]
         assert storage.downloaded == [
-            ("interactions/a.parquet", str(training.parquet_dir / "a.parquet"))
+            ("interactions/a.jsonl", str(training.interaction_dir / "a.jsonl"))
         ]
 
     def test_empty_bucket_keeps_empty_list_and_warns(
@@ -250,15 +289,15 @@ class TestDownloadTrainingData:
         with caplog.at_level("WARNING"):
             run(training._download_training_data())
 
-        assert training.r2_parquet_files == []
-        assert "No parquet files found" in caplog.text
+        assert training.storage_interaction_files == []
+        assert "No files found" in caplog.text
 
 
 class TestUploadArtifacts:
     def test_saves_model_and_mappings_then_uploads(self, training, monkeypatch):
         storage = FakeStorage()
         monkeypatch.setattr(training_module, "storage_service", storage)
-        model = FakeALS()
+        model = FakeALSImplicit(pd.DataFrame(), 1, 1)
 
         training._upload_artifacts(model, {"u1": 0}, {"10": 0})
 
@@ -266,39 +305,25 @@ class TestUploadArtifacts:
         mapping_path = training.models_dir / "mappings.json"
         assert Path(model_path) in [Path(path) for path in model.saved_paths]
         assert mapping_path.exists()
-        assert mapping_path.read_text(encoding="utf-8") == (
-            '{"users": {"u1": 0}, "movies": {"10": 0}}'
-        )
+        assert json.loads(mapping_path.read_text(encoding="utf-8")) == {
+            "users": {"u1": 0},
+            "movies": {"10": 0},
+        }
         assert storage.uploaded == [
             (str(model_path), "models/als_model.npz"),
             (str(mapping_path), "models/mappings.json"),
         ]
 
 
-class TestManageR2Data:
-    def test_merges_master_file_and_deletes_old_batches(self, training, monkeypatch):
-        storage = FakeStorage()
-        monkeypatch.setattr(training_module, "storage_service", storage)
-        training.r2_parquet_files = [
-            "interactions/batch.parquet",
-            "interactions/master_interactions.parquet",
-        ]
-        frame = pd.DataFrame(SMALL_ROWS)
-
-        training._manage_r2_data(frame)
-
-        master_path = training.parquet_dir / "master_interactions.parquet"
-        assert master_path.exists()
-        assert pd.read_parquet(master_path).equals(frame)
-        assert storage.uploaded == [
-            (str(master_path), "interactions/master_interactions.parquet")
-        ]
-        assert storage.deleted == ["interactions/batch.parquet"]
+# ─────────────────────────────────────────────────────────────────────────────
+# _cleanup_local_data / run_training_pipeline
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 class TestCleanupLocalData:
     def test_removes_parquet_and_model_files(self, training):
-        parquet = write_parquet(training, SMALL_ROWS)
+        parquet = training.interaction_dir / "batch.parquet"
+        parquet.write_bytes(b"parquet")
         model_file = training.models_dir / "als_model.npz"
         model_file.write_bytes(b"model")
 
@@ -318,54 +343,51 @@ class TestCleanupLocalData:
         assert "Could not remove file" in caplog.text
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# run_training_pipeline
-# ─────────────────────────────────────────────────────────────────────────────
-
-
 class TestRunTrainingPipeline:
-    def test_happy_path_trains_syncs_and_cleans_up(
-        self, training, monkeypatch, fake_chroma, settings
+    def test_happy_path_trains_uploads_and_publishes(
+        self, training, monkeypatch
     ):
-        write_parquet(training, SMALL_ROWS)
-        storage = FakeStorage(listed=["interactions/batch.parquet"])
+        write_jsonl(training, SMALL_ROWS)
+        storage = FakeStorage()
         monkeypatch.setattr(training_module, "storage_service", storage)
-        monkeypatch.setattr(training_module, "AlternatingLeastSquares", FakeALS)
+        monkeypatch.setattr(training_module, "ALS_Implicit", FakeALSImplicit)
 
-        assert run(training.run_training_pipeline()) is True
+        assert run(training.run_training_pipeline()) is None
 
-        assert [row["movie_id"] for row in fake_chroma.upserts] == [0, 1, 10, 20, 30]
         uploaded_objects = [object_name for _, object_name in storage.uploaded]
         assert "models/als_model.npz" in uploaded_objects
         assert "models/mappings.json" in uploaded_objects
-        assert "interactions/master_interactions.parquet" in uploaded_objects
-        assert storage.deleted == ["interactions/batch.parquet"]
-        assert list(training.parquet_dir.glob("*.parquet")) == []
-        assert list(training.models_dir.iterdir()) == []
+        assert (training.models_dir / "als_model.npz").exists()
+        assert (training.models_dir / "mappings.json").exists()
+        assert training.redis_store.published == [
+            (
+                "model.updated",
+                {
+                    "modelKey": "models/als_model.npz",
+                    "mappingKey": "models/mappings.json",
+                },
+            )
+        ]
 
-    def test_no_training_data_returns_false(self, training, monkeypatch):
-        monkeypatch.setattr(training_module, "storage_service", FakeStorage())
-
-        assert run(training.run_training_pipeline()) is False
-
-    def test_download_error_returns_false(self, training, monkeypatch):
+    def test_download_error_reraises(self, training, monkeypatch):
         class BrokenStorage(FakeStorage):
             def list_files(self, prefix=""):
                 raise RuntimeError("R2 down")
 
         monkeypatch.setattr(training_module, "storage_service", BrokenStorage())
 
-        assert run(training.run_training_pipeline()) is False
+        with pytest.raises(RuntimeError, match="R2 down"):
+            run(training.run_training_pipeline())
 
-    def test_training_error_returns_false(self, training, monkeypatch):
-        write_parquet(training, SMALL_ROWS)
-        storage = FakeStorage(listed=["interactions/batch.parquet"])
-        monkeypatch.setattr(training_module, "storage_service", storage)
-        monkeypatch.setattr(training_module, "AlternatingLeastSquares", FakeALS)
+    def test_training_error_reraises(self, training, monkeypatch):
+        write_jsonl(training, SMALL_ROWS)
+        monkeypatch.setattr(training_module, "storage_service", FakeStorage())
 
-        def explode(self, user_item_matrix):
-            raise RuntimeError("ALS crashed")
+        class BrokenALS(FakeALSImplicit):
+            def __init__(self, *args, **kwargs):
+                raise RuntimeError("ALS crashed")
 
-        monkeypatch.setattr(FakeALS, "fit", explode)
+        monkeypatch.setattr(training_module, "ALS_Implicit", BrokenALS)
 
-        assert run(training.run_training_pipeline()) is False
+        with pytest.raises(RuntimeError, match="ALS crashed"):
+            run(training.run_training_pipeline())

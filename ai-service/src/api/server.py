@@ -13,6 +13,7 @@ from api.middleware import setup_middleware
 from api.routes import health, recommendations
 from core.config import get_settings
 from core.custom_exception import CustomException
+from core.handle_model_updated import handle_model_updated
 from core.integrations import TrainingScheduler, VectorStore
 from core.vector_health import log_vector_db_health
 from infra.messaging.consumers.interaction_event_handler import InteractionEventHandler
@@ -23,6 +24,7 @@ from infra.monitoring.prometheus import configure_monitoring, update_metrics
 from infra.redis.redis_service import RedisStore
 from infra.tracing.telemetry import configure_tracing
 from services.embedding_service import embedding_service
+from services.IALSRecommendationService import ALS_Implicit, ALSModelService
 from services.mapping_service import mapping_service
 from services.movie_vector_service import MovieVectorService
 from services.recommend_service import RecommendService
@@ -44,10 +46,50 @@ async def lifespan(application: FastAPI):
     )
     metrics_thread.start()
 
+    # ALS model service: cập nhật model khi redis pub/sub model mới, set model khi mở app
+    als_model_service = ALSModelService()
+
+    # =======================
+    # START: Khởi tạo infra
+    # =======================
+
     # Khởi tạo vector db
     vector_store = VectorStore(settings)
     await vector_store.start()
     vector_db_health = await log_vector_db_health(vector_store, settings)
+
+    # redis store
+    redis_store = RedisStore(settings)
+    await redis_store.start()
+
+    # tasks
+    training_updated_subscriber_task = asyncio.create_task(
+        redis_store.subscribe(
+            "model.updated",
+            lambda payload: handle_model_updated(
+                als_model_service=als_model_service,
+                payload=payload,
+            ),
+        )
+    )
+
+    # khởi tạo training scheduler
+    training_scheduler = TrainingScheduler(settings=settings, redis_store=redis_store)
+    await training_scheduler.start()
+
+    # mapping service lấy từ storage
+    Path("data/training/models").mkdir(parents=True, exist_ok=True)
+    mapping_service.load_mapping_from_storage(
+        "models/mappings.json", "data/training/models/mappings.json"
+    )
+
+    # =======================
+    # END: khởi tạo infra
+    # =======================
+
+    # =======================
+    # START: khởi tạo các service
+    # =======================
 
     # Khỏi tạo các service: movie, user, recommend
     movie_vector_service = MovieVectorService(
@@ -57,16 +99,28 @@ async def lifespan(application: FastAPI):
     user_vector_service = UserVectorService(
         vector_store=vector_store,
     )
+
+    # CF model: ALS
+    als_model = ALS_Implicit.load(path="data/training/models/als_model.npz")
+    als_model_service = ALSModelService()
+    als_model_service.set_model(als_model)
+
+    # recommend service
     recommend_svc = RecommendService(
         vector_store=vector_store,
         embedding_service=embedding_service,
         movie_vector_service=movie_vector_service,
         user_vector_service=user_vector_service,
+        als_model_service=als_model_service,
     )
 
-    # khởi tạo training scheduler
-    training_scheduler = TrainingScheduler(settings, app_state=application.state)
-    await training_scheduler.start()
+    # =======================
+    # END: khởi tạo các service
+    # =======================
+
+    # =======================
+    # START: khởi tạo các queue và event handler
+    # =======================
 
     # khởi tạo các event handler
     event_handler = MovieEventHandler(recommend_service=recommend_svc)
@@ -86,15 +140,9 @@ async def lifespan(application: FastAPI):
     interaction_mq.set_handler(interaction_handler)
     await interaction_mq.start()
 
-    # redis store
-    redis_store = RedisStore(settings)
-    await redis_store.start()
-
-    # 6. Load mapping (User UUID <-> Idx) from R2 storage on startup
-    Path("data/training/models").mkdir(parents=True, exist_ok=True)
-    mapping_service.load_mapping_from_storage(
-        "models/mappings.json", "data/training/models/mappings.json"
-    )
+    # =======================
+    # END: khởi tạo các queue và event handler
+    # =======================
 
     # Luu vao app.state de cac route co the truy cap neu can
     application.state.vector_store = vector_store
@@ -105,20 +153,28 @@ async def lifespan(application: FastAPI):
     application.state.redis = redis_store
     application.state.training_scheduler = training_scheduler
 
-    yield
+    try:
+        yield
+    finally:
+        training_updated_subscriber_task.cancel()
 
-    # Shutdown nguoc lai
-    stop_event.set()
-    await asyncio.to_thread(
-        metrics_thread.join,
-        timeout=2,
-    )
+        try:
+            await training_updated_subscriber_task
+        except asyncio.CancelledError:
+            pass
 
-    await training_scheduler.close()
-    await redis_store.close()
-    await interaction_mq.close()
-    await mq.close()
-    await vector_store.close()
+        # Shutdown nguoc lai
+        stop_event.set()
+        await asyncio.to_thread(
+            metrics_thread.join,
+            timeout=2,
+        )
+
+        await training_scheduler.close()
+        await redis_store.close()
+        await interaction_mq.close()
+        await mq.close()
+        await vector_store.close()
 
 
 app = FastAPI(title=settings.app_name, version=settings.app_version, lifespan=lifespan)

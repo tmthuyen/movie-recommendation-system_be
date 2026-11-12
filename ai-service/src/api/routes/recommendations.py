@@ -23,7 +23,7 @@ from ..response import paginated, success
 router = APIRouter(tags=["recommendations"])
 settings = get_settings()
 
-logger = setup_logger(name="FastAPI-Recommendations", filename=__name__)
+logger = setup_logger(name="FastAPI-Recommendations")
 
 
 async def _get_recommend_service(request: Request) -> RecommendService:
@@ -178,19 +178,19 @@ async def search(
     """API Search tong hop ho tro ca Semantic Search va cac mo hinh tim kiem khac."""
     svc = await _get_recommend_service(app_request)
     if request.model in ("semantic", "main", "tfidf"):
-        data = await svc.semantic_search(query=request.query, top_k=request.pageSize)
+        data = await svc.semantic_search(query=request.query, top_k=request.page_size)
         return paginated(
             data=data,
             total=len(data),
             page=request.page,
-            limit=request.pageSize,
+            limit=request.page_size,
             message="Semantic search completed",
         )
     return paginated(
         [],
         0,
         request.page,
-        request.pageSize,
+        request.page_size,
         f"Search model '{request.model}' completed",
     )
 
@@ -246,7 +246,7 @@ async def hybrid_search_debug(
 
     svc = await _get_recommend_service(app_request)
 
-    data = await svc.hybrid_recommendation(user_uuid=userId, top_k=topK)
+    data = await svc.hybrid_recommendation(user_id=userId, top_k=topK)
 
     res = paginated(
         data,

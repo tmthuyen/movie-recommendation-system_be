@@ -4,7 +4,7 @@ from typing import Any
 
 from utils import setup_logger
 
-logger = setup_logger(name="VectorHealth")
+logger = setup_logger(name="FastAPI-Recommendations")
 
 
 async def build_vector_db_health(vector_store: Any, settings: Any) -> dict[str, Any]:

@@ -189,7 +189,7 @@ export class RecommendationsService implements IRecommendationsService {
     topK?: number,
   ): Promise<ResultWithPagination<any>> {
     this.logger.log(`Nhận request gợi ý cho userId=${userId}, topK=${topK}`);
-    let parsedResponse: HybridFromAiServiceResponse;
+    let parsedResponse: HybridFromAiServiceResponse | null = null;
     try {
       const res = await fetch(
         `${AI_SERVICE_URL}/hybrid?userId=${userId}&topK=${topK}`,
@@ -209,21 +209,36 @@ export class RecommendationsService implements IRecommendationsService {
           error instanceof Error ? error.message : String(error)
         }`,
       );
-      throw new AppException(
-        HttpStatus.BAD_REQUEST,
-        'Lỗi khi gọi AI service cho hybrid search',
-        'Error occurred while calling AI service for hybrid search.',
-        'AI_SERVICE_ERROR',
-      );
+      // throw new AppException(
+      //   HttpStatus.BAD_REQUEST,
+      //   'Lỗi khi gọi AI service cho hybrid search',
+      //   'Error occurred while calling AI service for hybrid search.',
+      //   'AI_SERVICE_ERROR',
+      // );
     }
 
     if (!parsedResponse || !parsedResponse.result) {
-      throw new AppException(
-        HttpStatus.BAD_REQUEST,
-        'Dữ liệu trả về không hợp lệ từ AI service cho hybrid search',
-        'The AI service did not return a valid response for hybrid search.',
-        'AI_SERVICE_ERROR',
+      this.logger.error(
+        `Dữ liệu trả về không hợp lệ từ AI service cho hybrid search: ${JSON.stringify(
+          parsedResponse,
+        )}`,
       );
+      // throw new AppException(
+      //   HttpStatus.BAD_REQUEST,
+      //   'Dữ liệu trả về không hợp lệ từ AI service cho hybrid search',
+      //   'The AI service did not return a valid response for hybrid search.',
+      //   'AI_SERVICE_ERROR',
+      // );
+
+      return {
+        result: [],
+        pagination: {
+          page: 1,
+          limit: topK || DEFAULT_TOP_K,
+          total: 0,
+          totalPages: 1,
+        },
+      };
     }
 
     // map id

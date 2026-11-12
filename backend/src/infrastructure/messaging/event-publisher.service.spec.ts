@@ -36,8 +36,8 @@ describe('EventPublisherService', () => {
 
   afterEach(() => jest.restoreAllMocks());
 
-  it('publish đúng exchange / routing key (mặc định = eventType) và persistent', () => {
-    service.publish(
+  it('publish đúng exchange / routing key (mặc định = eventType) và persistent', async () => {
+    await service.publish(
       'movie.exchange',
       'movie.created',
       { movieId: 1 },
@@ -49,15 +49,15 @@ describe('EventPublisherService', () => {
       string,
       string,
       EventEnvelope<unknown>,
-      { persistent: boolean },
+      { persistent: boolean; headers: Record<string, string> },
     ];
     expect(exchange).toBe('movie.exchange');
     expect(routingKey).toBe('movie.created');
-    expect(options).toEqual({ persistent: true });
+    expect(options).toEqual({ persistent: true, headers: {} });
   });
 
-  it('đóng gói EventEnvelope đầy đủ (eventId UUID v4, version 1, source, ISO occurredAt)', () => {
-    service.publish(
+  it('đóng gói EventEnvelope đầy đủ (eventId UUID v4, version 1, source, ISO occurredAt)', async () => {
+    await service.publish(
       'user.exchange',
       'user.created',
       { userId: 'u1' },
@@ -79,8 +79,8 @@ describe('EventPublisherService', () => {
     expect(config.get).toHaveBeenCalledWith('SERVICE_NAME', 'backend-service');
   });
 
-  it('routingKey tuỳ biến được ưu tiên hơn eventType', () => {
-    service.publish(
+  it('routingKey tuỳ biến được ưu tiên hơn eventType', async () => {
+    await service.publish(
       'user.exchange',
       'interaction.created',
       { userId: 'u1', movieId: 2 },
@@ -98,19 +98,19 @@ describe('EventPublisherService', () => {
     expect(envelope.correlationId).toBeUndefined();
   });
 
-  it('SERVICE_NAME lấy từ ConfigService khi được cấu hình', () => {
+  it('SERVICE_NAME lấy từ ConfigService khi được cấu hình', async () => {
     config.get.mockImplementation((key: string, defaultValue?: unknown) =>
       key === 'SERVICE_NAME' ? 'recommendation-service' : defaultValue,
     );
 
-    service.publish('movie.exchange', 'movie.updated', { movieId: 1 });
+    await service.publish('movie.exchange', 'movie.updated', { movieId: 1 });
 
     expect(lastEnvelope().source).toBe('recommendation-service');
   });
 
-  it('mỗi lần publish có eventId khác nhau', () => {
-    service.publish('movie.exchange', 'movie.created', { movieId: 1 });
-    service.publish('movie.exchange', 'movie.created', { movieId: 1 });
+  it('mỗi lần publish có eventId khác nhau', async () => {
+    await service.publish('movie.exchange', 'movie.created', { movieId: 1 });
+    await service.publish('movie.exchange', 'movie.created', { movieId: 1 });
 
     const first = channel.publish.mock.calls[0][2] as EventEnvelope<unknown>;
     const second = channel.publish.mock.calls[1][2] as EventEnvelope<unknown>;
@@ -122,12 +122,9 @@ describe('EventPublisherService', () => {
   it('channel từ chối (async) → log error, không ném ra ngoài', async () => {
     channel.publish.mockRejectedValue(new Error('channel closed'));
 
-    expect(() =>
+    await expect(
       service.publish('movie.exchange', 'movie.created', { movieId: 1 }),
-    ).not.toThrow();
-
-    // Chờ microtask để .catch() của service chạy.
-    await new Promise(resolve => setImmediate(resolve));
+    ).resolves.toBeUndefined();
 
     expect(loggerError).toHaveBeenCalledWith(
       'Failed to publish movie.created: channel closed',

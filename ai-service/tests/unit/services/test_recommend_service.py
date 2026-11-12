@@ -8,22 +8,26 @@ Không kết nối ChromaDB hay load SentenceTransformer thật:
   được gán trực tiếp nên không có torch/model nào bị nạp.
 - ``mapping_service`` (singleton đọc file mapping) được thay bằng fake nhỏ để
   kiểm soát nhánh warm-start / cold-start của hybrid recommendation.
+- ALS model được thay bằng fake, không train ``implicit`` thật.
 """
 
 import asyncio
-import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import numpy as np
 import pytest
 
 import src.services.recommend_service as recommend_module
+from core.custom_exception import CustomException
 from src.services.embedding_service import EmbeddingService
+from src.services.movie_vector_service import MovieVectorService
 from src.services.recommend_service import (
     RecommendService,
     _build_search_text,
     _format_item,
 )
+from src.services.user_vector_service import UserVectorService
 
 
 def run(coro):
@@ -31,15 +35,61 @@ def run(coro):
 
 
 class FakeMapping:
-    """Thay ``mapping_service`` — chỉ cần ``get_user_idx`` cho hybrid."""
+    """Thay ``mapping_service`` — chỉ cần map user UUID và item index."""
 
-    def __init__(self, user_to_idx: dict[str, int] | None = None) -> None:
+    def __init__(
+        self,
+        user_to_idx: dict[str, int] | None = None,
+        item_idx_to_id: dict[int, int] | None = None,
+    ) -> None:
         self._user_to_idx = {
             str(key): value for key, value in (user_to_idx or {}).items()
+        }
+        self._item_idx_to_id = {
+            int(key): int(value) for key, value in (item_idx_to_id or {}).items()
         }
 
     def get_user_idx(self, user_uuid: str):
         return self._user_to_idx.get(str(user_uuid))
+
+    def get_item_id(self, item_idx: int):
+        return self._item_idx_to_id.get(int(item_idx))
+
+
+class FakeALSModel:
+    """Stub ``ALS_Implicit`` cho nhánh CF, không train implicit thật."""
+
+    def __init__(
+        self,
+        item_indices: list[int],
+        scores: list[float],
+        item_factor_count: int,
+    ) -> None:
+        self.model = SimpleNamespace(
+            item_factors=np.zeros((item_factor_count, 2), dtype=np.float32)
+        )
+        self._item_indices = np.asarray(item_indices, dtype=np.int64)
+        self._scores = np.asarray(scores, dtype=np.float32)
+        self.calls: list[dict] = []
+
+    def recommend(self, user_idx, k, candidate_items, seen_items=None):
+        self.calls.append(
+            {
+                "user_idx": user_idx,
+                "k": k,
+                "candidate_items": np.asarray(candidate_items),
+                "seen_items": seen_items,
+            }
+        )
+        return self._item_indices[:k], self._scores[:k]
+
+
+class FakeALSModelService:
+    def __init__(self, model: FakeALSModel | None = None) -> None:
+        self._model = model
+
+    def get_model(self):
+        return self._model
 
 
 class FakeCollection:
@@ -67,7 +117,15 @@ def service(fake_chroma, fake_model, settings):
     fake_chroma.settings = settings
     embedding = EmbeddingService(model_name="MiniLM")
     embedding._model = fake_model
-    return RecommendService(fake_chroma, embedding)
+    movie_service = MovieVectorService(fake_chroma, embedding)
+    user_service = UserVectorService(fake_chroma)
+    return RecommendService(
+        fake_chroma,
+        embedding,
+        movie_service,
+        user_service,
+        FakeALSModelService(),
+    )
 
 
 def patch_query_vector(service: RecommendService, vector: list[float]) -> None:
@@ -242,15 +300,20 @@ class TestSimilarMovies:
 
         assert [item["id"] for item in results] == [2]
 
-    def test_missing_target_raises_value_error(self, service):
-        with pytest.raises(ValueError, match="movieId=99"):
+    def test_missing_target_raises_custom_exception(self, service):
+        with pytest.raises(CustomException) as exc_info:
             run(service.similar_movies(99))
 
-    def test_target_without_vector_raises_value_error(self, service, fake_chroma):
+        assert exc_info.value.status_code == 404
+        assert exc_info.value.error_code == "MOVIE_NOT_FOUND"
+
+    def test_target_without_vector_raises_custom_exception(self, service, fake_chroma):
         fake_chroma.seed(5, [], {"title": "No vector"})
 
-        with pytest.raises(ValueError, match="movieId=5"):
+        with pytest.raises(CustomException) as exc_info:
             run(service.similar_movies(5))
+
+        assert exc_info.value.error_code == "MOVIE_NOT_FOUND"
 
     def test_vector_store_error_propagates(self, service, fake_chroma):
         fake_chroma.seed(1, [1.0, 0.0], {"title": "Target"})
@@ -263,9 +326,11 @@ class TestSimilarMovies:
 class TestSimilarMoviesRerank:
     """`similar_movies_rerank` — ANN candidates + genre-aware rerank."""
 
-    def test_missing_target_vector_raises(self, service, fake_chroma):
-        with pytest.raises(ValueError, match="movieId=99"):
+    def test_missing_target_vector_raises_custom_exception(self, service, fake_chroma):
+        with pytest.raises(CustomException) as exc_info:
             run(service.similar_movies_rerank(99))
+
+        assert exc_info.value.error_code == "MOVIE_NOT_FOUND"
 
     def test_mode_off_returns_cosine_order_without_target(self, service, fake_chroma):
         fake_chroma.seed(1, [1.0, 0.0], {"genres": ["Action"]})
@@ -327,173 +392,134 @@ class TestSimilarMoviesRerank:
 
 
 class TestHybridRecommendation:
-    def seed_user_vectors(self, fake_chroma, settings, user_idx: int) -> None:
+    def seed_profile(self, fake_chroma, settings, user_id: str, vector) -> None:
         fake_chroma.seed(
-            user_idx,
-            [1.0, 0.0, 0.0],
-            {"user_uuid": "u-1"},
-            settings.vector_user_cf_collection,
-        )
-        fake_chroma.seed(
-            user_idx,
-            [1.0, 0.0, 0.0],
-            {},
+            user_id,
+            vector,
+            {"user_id": user_id},
             settings.vector_user_profile_collection,
         )
 
-    def test_combines_cf_and_semantic_scores(
+    def seed_movie(self, fake_chroma, settings, movie_id: int, vector, title=None):
+        fake_chroma.seed(
+            movie_id,
+            vector,
+            {"title": title or f"Movie {movie_id}"},
+            settings.vector_collection,
+        )
+
+    def test_combines_cf_and_cbf_with_rrf_details(
         self, service, fake_chroma, settings, monkeypatch
     ):
         monkeypatch.setattr(
-            recommend_module, "mapping_service", FakeMapping({"u-1": 7})
+            recommend_module,
+            "mapping_service",
+            FakeMapping({"u-1": 7}, {0: 101, 1: 102}),
         )
-        self.seed_user_vectors(fake_chroma, settings, 7)
-        fake_chroma.seed(
-            101,
-            [1.0, 0.0, 0.0],
-            {"movieId": 101},
-            settings.vector_movie_cf_collection,
-        )
-        fake_chroma.seed(
-            102,
-            [0.0, 1.0, 0.0],
-            {"movieId": 102},
-            settings.vector_movie_cf_collection,
-        )
-        fake_chroma.seed(
-            101,
-            [1.0, 0.0, 0.0],
-            {"title": "Dune", "title_vi": "Dune Vi", "overview": "A"},
-            settings.vector_collection,
-        )
-        fake_chroma.seed(
-            102,
-            [0.0, 1.0, 0.0],
-            {"title": "Alien", "overview": "B"},
-            settings.vector_collection,
+        self.seed_profile(fake_chroma, settings, "u-1", [1.0, 0.0, 0.0])
+        self.seed_movie(fake_chroma, settings, 101, [1.0, 0.0, 0.0], "Dune")
+        self.seed_movie(fake_chroma, settings, 102, [0.0, 1.0, 0.0], "Alien")
+        service._als_model_service = FakeALSModelService(
+            FakeALSModel([0, 1], [0.9, 0.8], item_factor_count=2)
         )
 
         results = run(service.hybrid_recommendation("u-1", top_k=10))
 
-        assert [item["id"] for item in results] == [101, 102]
-        assert results[0]["hybridScore"] == pytest.approx(1.0)
-        assert results[0]["hybridScore"] == results[0]["similarityScore"]
-        assert len(results[0]["evidences"]) == 2
-        assert "CF" in results[0]["evidences"][0]
-        assert "Semantic" in results[0]["evidences"][1]
-        assert results[0]["title"] == "Dune Vi"
+        assert [item["movie_id"] for item in results] == [101, 102]
+        assert results[0]["fused_rank"] == 1
+        assert results[0]["model_ranks"] == {"CF": 1, "CBF": 1}
+        assert results[0]["raw_scores"]["CF"] == pytest.approx(0.9)
+        assert results[0]["raw_scores"]["CBF"] == pytest.approx(1.0)
+        assert results[0]["contributing_models"] == ["CF", "CBF"]
+        assert results[0]["agreement_count"] == 2
+        assert results[1]["agreement_count"] == 2
 
-    def test_user_in_mapping_without_cf_vector_uses_semantic_only(
+    def test_cf_only_when_user_profile_is_missing(
         self, service, fake_chroma, settings, monkeypatch
     ):
         monkeypatch.setattr(
-            recommend_module, "mapping_service", FakeMapping({"u-2": 5})
+            recommend_module,
+            "mapping_service",
+            FakeMapping({"u-2": 5}, {0: 201}),
         )
-        fake_chroma.seed(
-            5, [1.0, 0.0, 0.0], {}, settings.vector_user_profile_collection
-        )
-        fake_chroma.seed(
-            201,
-            [1.0, 0.0, 0.0],
-            {"title": "Semantic only"},
-            settings.vector_collection,
+        service._als_model_service = FakeALSModelService(
+            FakeALSModel([0], [0.7], item_factor_count=1)
         )
 
         results = run(service.hybrid_recommendation("u-2", top_k=5))
 
-        assert [item["id"] for item in results] == [201]
-        assert results[0]["hybridScore"] == pytest.approx(0.4)
-        assert len(results[0]["evidences"]) == 1
+        assert [item["movie_id"] for item in results] == [201]
+        assert results[0]["contributing_models"] == ["CF"]
+        assert results[0]["model_ranks"] == {"CF": 1}
+        assert results[0]["raw_scores"]["CF"] == pytest.approx(0.7)
 
-    def test_cold_start_without_any_vector_returns_empty(
+    def test_cbf_only_for_cold_start_user_with_profile(
+        self, service, fake_chroma, settings, monkeypatch
+    ):
+        monkeypatch.setattr(recommend_module, "mapping_service", FakeMapping())
+        self.seed_profile(fake_chroma, settings, "cold-user", [1.0, 0.0, 0.0])
+        self.seed_movie(fake_chroma, settings, 301, [1.0, 0.0, 0.0])
+
+        results = run(service.hybrid_recommendation("cold-user", top_k=5))
+
+        assert [item["movie_id"] for item in results] == [301]
+        assert results[0]["contributing_models"] == ["CBF"]
+        assert results[0]["model_ranks"] == {"CBF": 1}
+
+    def test_unknown_user_without_profile_returns_empty(
         self, service, fake_chroma, monkeypatch
     ):
         monkeypatch.setattr(recommend_module, "mapping_service", FakeMapping())
 
         assert run(service.hybrid_recommendation("unknown-user", top_k=5)) == []
 
-    def test_cold_start_uses_hash_pseudo_id_for_semantic_profile(
-        self, service, fake_chroma, settings, monkeypatch
-    ):
-        monkeypatch.setattr(recommend_module, "mapping_service", FakeMapping())
-        pseudo_id = abs(hash("unknown-user")) % (10**9)
-        fake_chroma.seed(
-            pseudo_id, [1.0, 0.0, 0.0], {}, settings.vector_user_profile_collection
-        )
-        fake_chroma.seed(
-            301,
-            [1.0, 0.0, 0.0],
-            {"title": "Cold start hit"},
-            settings.vector_collection,
-        )
-
-        results = run(service.hybrid_recommendation("unknown-user", top_k=5))
-
-        assert [item["id"] for item in results] == [301]
-
-    def test_hits_without_movie_metadata_are_skipped(
+    def test_unknown_item_indices_are_skipped(
         self, service, fake_chroma, settings, monkeypatch
     ):
         monkeypatch.setattr(
-            recommend_module, "mapping_service", FakeMapping({"u-3": 9})
+            recommend_module,
+            "mapping_service",
+            FakeMapping({"u-3": 9}, {0: 401}),
         )
-        fake_chroma.seed(
-            9,
-            [1.0, 0.0, 0.0],
-            {"user_uuid": "u-3"},
-            settings.vector_user_cf_collection,
-        )
-        fake_chroma.seed(
-            401,
-            [1.0, 0.0, 0.0],
-            {"movieId": 401},
-            settings.vector_movie_cf_collection,
+        service._als_model_service = FakeALSModelService(
+            FakeALSModel([0, 1], [0.9, 0.8], item_factor_count=2)
         )
 
-        assert run(service.hybrid_recommendation("u-3", top_k=5)) == []
+        results = run(service.hybrid_recommendation("u-3", top_k=5))
 
-    def test_top_k_limits_combined_results(
+        assert [item["movie_id"] for item in results] == [401]
+        assert results[0]["raw_scores"]["CF"] == pytest.approx(0.9)
+
+    def test_result_limit_is_double_top_k(
         self, service, fake_chroma, settings, monkeypatch
     ):
         monkeypatch.setattr(
-            recommend_module, "mapping_service", FakeMapping({"u-5": 3})
+            recommend_module,
+            "mapping_service",
+            FakeMapping({"u-5": 3}, {0: 501, 1: 502, 2: 503}),
         )
-        fake_chroma.seed(
-            3,
-            [1.0, 0.0],
-            {"user_uuid": "u-5"},
-            settings.vector_user_cf_collection,
+        service._als_model_service = FakeALSModelService(
+            FakeALSModel([0, 1, 2], [0.9, 0.8, 0.7], item_factor_count=3)
         )
-        for movie_id, vector in (
-            (501, [1.0, 0.0]),
-            (502, [0.9, 0.1]),
-            (503, [0.8, 0.2]),
-        ):
-            fake_chroma.seed(
-                movie_id,
-                vector,
-                {"movieId": movie_id},
-                settings.vector_movie_cf_collection,
-            )
-            fake_chroma.seed(
-                movie_id,
-                vector,
-                {"title": f"Movie {movie_id}"},
-                settings.vector_collection,
-            )
 
-        results = run(service.hybrid_recommendation("u-5", top_k=2))
+        results = run(service.hybrid_recommendation("u-5", top_k=1))
 
-        assert [item["id"] for item in results] == [501, 502]
+        assert [item["movie_id"] for item in results] == [501, 502]
 
-    def test_vector_store_error_propagates(
-        self, service, fake_chroma, settings, monkeypatch
-    ):
+    def test_als_error_propagates(self, service, fake_chroma, monkeypatch):
         monkeypatch.setattr(
-            recommend_module, "mapping_service", FakeMapping({"u-4": 11})
+            recommend_module,
+            "mapping_service",
+            FakeMapping({"u-4": 11}, {0: 401}),
         )
-        self.seed_user_vectors(fake_chroma, settings, 11)
-        fake_chroma.query = AsyncMock(side_effect=RuntimeError("hybrid query failed"))
+
+        class BrokenALSModel(FakeALSModel):
+            def recommend(self, **kwargs):
+                raise RuntimeError("hybrid query failed")
+
+        service._als_model_service = FakeALSModelService(
+            BrokenALSModel([0], [0.9], item_factor_count=1)
+        )
 
         with pytest.raises(RuntimeError, match="hybrid query failed"):
             run(service.hybrid_recommendation("u-4"))
