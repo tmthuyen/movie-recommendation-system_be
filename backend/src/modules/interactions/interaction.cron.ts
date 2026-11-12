@@ -4,49 +4,100 @@ import { IInteractionRepository } from './interactions.repository';
 import { ISeedRatingRepository } from '../ratings/seed-ratings.repository';
 import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
 import { InteractionCreatedPayload } from '@/infrastructure/messaging/event.types';
+import {
+  type IRedisLockService,
+  REDIS_LOCK_SERVICE,
+} from '@/infrastructure/redis/redis-lock.service';
+import { RedisService } from '@/infrastructure/redis/redis.service';
+import {
+  type IStorageService,
+  STORAGE_SERVICE,
+} from '@/infrastructure/storage/storage.service';
+import { Interaction } from '@/modules/interactions/entities/interaction.entity';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class InteractionCronService {
   private readonly logger = new Logger(InteractionCronService.name);
-
-  // A flag to prevent concurrent cron executions from overlapping if processing takes too long
-  private isProcessing = false;
+  private readonly checkpointKey = 'interaction:training:checkpoint';
 
   constructor(
     @Inject(IInteractionRepository)
-    private readonly repo: IInteractionRepository,
+    private readonly interactionRepo: IInteractionRepository,
     @Inject(ISeedRatingRepository)
     private readonly seedRepo: ISeedRatingRepository,
     private readonly interactionProducer: InteractionProducer,
+    @Inject(REDIS_LOCK_SERVICE)
+    private readonly redisLockService: IRedisLockService,
+    private readonly redisService: RedisService,
+    @Inject(STORAGE_SERVICE)
+    private readonly storageService: IStorageService,
   ) {}
 
-  // Run every 2 minutes for testing, you can change to a longer interval in production
-  @Cron('0 */1440 * * * *')
-  handleBatchTrainingUpload() {
-    if (this.isProcessing) {
-      this.logger.warn(
-        'Previous batch processing is still running. Skipping this cron tick.',
-      );
-      return;
-    }
+  @Cron('0 */180 * * * *')
+  /**
+   * Cron job để chạy định kỳ và gửi dữ liệu tương tác để train ALS model cho AI service
+   * @description Luồng xử lý:
+   * - Kiểm tra Redis lock đã có job đang chạy hay chưa, nếu có thì skip
+   * - Lấy thông tin lần cuối chạy job (lastCreatedAt, lastId) từ DB hoặc cache
+   * - Query các tương tác mới nhất từ DB dựa trên lastCreatedAt và lastId
+   * - Upload các tương tác này lên storage xong thì gửi message qua queue để AI service nhận và xử lý training
+   */
+  async handleBatchTrainingUpload() {
+    // Check lock
+    const lockKey = 'interaction:training:lock';
 
-    this.isProcessing = true;
-    this.logger.log('Starting batch interaction fetch for AI training...');
-    try {
-      // // 1. Process Seed Data First
-      // await this.processSeedRatings();
+    const callback = async () => {
+      this.logger.log('Starting batch interaction fetch for AI training...');
 
-      // // 2. Process Actual App Interactions
-      // await this.processAppInteractions();
-
+      // lấy checkpoint mới nhất nếu có
+      const checkpoint = await this.redisService.hgetall(this.checkpointKey);
       this.logger.log(
-        `Finished sending all interactions (Seed + App) for AI training.`,
+        `Fetched checkpoint from Redis: ${JSON.stringify(checkpoint)}`,
       );
-    } catch (error) {
-      this.logger.error('Failed to run interaction batch cron job', error);
-    } finally {
-      this.isProcessing = false;
-    }
+      let lastCreatedAt: string | null = null;
+      let lastId: number | null = null;
+
+      if (checkpoint.lastCreatedAt && checkpoint.lastId) {
+        try {
+          lastCreatedAt = checkpoint.lastCreatedAt
+            ? checkpoint.lastCreatedAt
+            : null;
+          lastId = checkpoint.lastId ? parseInt(checkpoint.lastId, 10) : null;
+        } catch (error) {
+          this.logger.error(
+            'Failed to parse checkpoint from Redis, ignoring and starting fresh.',
+            error,
+          );
+        }
+      }
+
+      try {
+        // // 1. Process Seed Data First
+        // await this.processSeedRatings();
+
+        // Process Actual App Interactions
+        await this.processAppInteractions(lastCreatedAt, lastId);
+
+        // Publish Training Request
+        const correlationId = crypto.randomUUID();
+        await this.interactionProducer.publishTrainingRequest(
+          {
+            folder: 'interactions',
+          },
+          correlationId,
+        );
+
+        this.logger.log(
+          `correlationId=${correlationId} - Đã gửi yêu cầu training cho AI service`,
+        );
+      } catch (error) {
+        this.logger.error('Failed to run interaction batch cron job', error);
+        throw error; // rethrow to ensure the lock is released
+      }
+    };
+
+    await this.redisLockService.runWithLock(lockKey, 60, callback);
   }
 
   private async processSeedRatings() {
@@ -81,7 +132,7 @@ export class InteractionCronService {
       );
 
       // Publish to RabbitMQ
-      this.interactionProducer.publishTrainingBatch(formattedBatch);
+      await this.interactionProducer.publishTrainingBatch(formattedBatch);
 
       processedCount += seedRatings.length;
       offset += chunkSize;
@@ -92,45 +143,124 @@ export class InteractionCronService {
     this.logger.log(`Completed sending ${processedCount} total Seed Ratings.`);
   }
 
-  private async processAppInteractions() {
+  /**
+   * @description Luồng xử lý chi tiết bao gồm:
+   * - Lấy cả tương tác mới nhất dựa trên createdAt và id lần cuối đã gửi
+   * - lastId được lưu trong DB hoặc cache
+   * - gửi các tương tác mới nhất này lên storage R2/S3
+   * - Sau đó gửi thông tin metadata qua queue để AI service xử lý
+   * - AI service sẽ lấy folder ở R2/S3 và xử lý batch training
+   * - AI service training thành công sẽ tự lưu model lên storage và thông báo cho các AI service khác cập nhật lại model mới
+   * - Thông báo cập nhật model có thể là Redis pub/sub hoặc queue có thể broadcast cho nhiều instance
+   *
+   * @returns
+   */
+  private async processAppInteractions(
+    lastCreatedAt: string | null,
+    lastId: number | null,
+  ) {
     this.logger.log('Starting to fetch and send App Interactions...');
 
-    // In a real scenario, you might fetch interactions since the last sync time.
-    // For now, we'll fetch a batch. Assuming repo has a method or we just fetch max.
-    const paginationDto = { page: 1, limit: 50000 };
-    const result = await this.repo.findAll(paginationDto);
-    const interactions = result.data;
+    // Nếu là null thì lấy hết
+    const limit = 10000;
+    let hasMore = true;
+    let lastProcessedCreatedAt = lastCreatedAt;
+    let lastProcessedId = lastId;
 
-    if (interactions.length === 0) {
-      this.logger.log('No app interactions found to send.');
-      return;
+    while (hasMore) {
+      const { data: interactions, nextCursor } =
+        await this.interactionRepo.findLatestByCreatedAtAndId(
+          lastProcessedCreatedAt,
+          lastProcessedId,
+          limit,
+        );
+
+      if (interactions.length === 0 || !nextCursor) {
+        this.logger.log('No more new interactions to process.');
+        hasMore = false;
+        return;
+      }
+
+      this.logger.log(
+        `Fetched ${interactions.length} new interactions from DB for training.`,
+      );
+
+      // upload lên storage
+      const firstId = interactions[0].id;
+      await this.uploadInteractionsToStorage(
+        interactions,
+        firstId,
+        nextCursor.lastId,
+        'interactions',
+      );
+
+      // Update the last processed timestamps
+      lastProcessedCreatedAt = nextCursor.lastCreatedAt;
+      lastProcessedId = nextCursor.lastId;
+
+      // save checkpoint lên redis
+      const checkpoint: Record<string, string> = {
+        lastCreatedAt: lastProcessedCreatedAt,
+        lastId: String(lastProcessedId),
+      };
+      const checkpointTtlSeconds = 24 * 60 * 60; // 1 day
+
+      await this.redisService.hset(
+        this.checkpointKey,
+        checkpoint,
+        checkpointTtlSeconds,
+      );
+
+      this.logger.log(
+        `Đã lưu checkpoint mới lên redis: ${JSON.stringify(checkpoint)}`,
+      );
     }
+  }
+
+  private async uploadInteractionsToStorage(
+    interactions: Interaction[],
+    firstId: number,
+    lastId: number,
+    folder: string = 'interactions',
+  ): Promise<string> {
+    this.logger.log(
+      `Creating buffer for batch interactions from id ${firstId} to ${lastId} to storage...`,
+    );
+    const buffer = this.createBatchBuffer(interactions);
+
+    const fileName = `${folder}/interactions_${firstId}_${lastId}.jsonl`;
+
+    // gửi lên storage
+    this.logger.log(
+      `Uploading batch interactions from id ${firstId} to ${lastId} to storage...`,
+    );
+    const url = await this.storageService.uploadBuffer(
+      buffer,
+      fileName,
+      'application/jsonl',
+    );
 
     this.logger.log(
-      `Found ${interactions.length} app interactions. Formatting and sending to queue...`,
+      `Đã upload batch interactions từ id ${firstId} đến ${lastId} lên storage: ${url}`,
     );
 
-    // Format data for AI Service
-    const formattedInteractions: InteractionCreatedPayload[] = interactions.map(
-      i => ({
-        userId: i.user?.id,
-        movieId: i.movie?.id,
-        action: i.type?.toLowerCase(),
-        score: i.score,
-        removed: false,
-        createdAt: i.createdAt,
-      }),
-    );
+    return url;
+  }
 
-    // Split into chunks if too large.
-    const chunkSize = 10000;
-    for (let i = 0; i < formattedInteractions.length; i += chunkSize) {
-      const chunk = formattedInteractions.slice(i, i + chunkSize);
-      this.interactionProducer.publishTrainingBatch(chunk);
-    }
+  private createBatchBuffer(interactions: Interaction[]): Buffer {
+    const content = interactions
+      .map(item =>
+        JSON.stringify({
+          userId: item.user.id,
+          movieId: item.movie.id,
+          action: item.type.toLowerCase(),
+          score: item.score,
+          removed: false,
+          createdAt: item.createdAt.toISOString(),
+        }),
+      )
+      .join('\n');
 
-    this.logger.log(
-      `Completed sending ${interactions.length} App Interactions.`,
-    );
+    return Buffer.from(content + '\n', 'utf-8');
   }
 }

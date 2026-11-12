@@ -7,7 +7,6 @@ import { InteractionProducer } from '@/infrastructure/messaging/producers/intera
 import { MovieInteractionStatsService } from '@/modules/interactions/movie-interaction-stats.service';
 import {
   Interaction,
-  InteractionScoreMap,
   InteractionType,
 } from '@/modules/interactions/entities/interaction.entity';
 import { Comment } from './entities/comment.entity';
@@ -67,7 +66,7 @@ describe('CommentsService', () => {
   afterEach(() => jest.restoreAllMocks());
 
   describe('create', () => {
-    it('tạo comment + interaction comment (score band 4) trong 1 transaction', async () => {
+    it('tạo comment + interaction comment (score 0 — implicit feedback) trong 1 transaction', async () => {
       await service.create('user-1', {
         movieId: 3,
         content: 'Phim hay',
@@ -86,7 +85,7 @@ describe('CommentsService', () => {
         Interaction,
         expect.objectContaining({
           type: InteractionType.COMMENT,
-          score: InteractionScoreMap[InteractionType.COMMENT],
+          score: 0,
           movie: { id: 3 },
           user: { id: 'user-1' },
         }),
@@ -107,8 +106,10 @@ describe('CommentsService', () => {
           movieId: 3,
           type: InteractionType.COMMENT,
           action: 'added',
-          score: 4,
+          score: 0,
+          likeCount: 1,
           commentCount: 4,
+          viewCount: 7,
         }),
       );
       expect(producer.publishInteractionCreated).toHaveBeenCalledWith(
@@ -116,7 +117,7 @@ describe('CommentsService', () => {
           userId: 'user-1',
           movieId: 3,
           action: InteractionType.COMMENT,
-          score: 4,
+          score: null,
           removed: false,
         }),
       );

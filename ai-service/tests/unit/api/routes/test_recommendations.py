@@ -6,7 +6,7 @@ Mỗi endpoint được test qua ``fastapi.testclient.TestClient`` trên một a
 ChromaDB/embedding model.
 
 Bao phủ: happy path (envelope + pagination), validate query (422), lỗi nghiệp
-vụ (HTTPException 403/404) và lỗi service (500).
+vụ (HTTPException 401/404) và lỗi service (500).
 """
 
 import asyncio
@@ -53,17 +53,13 @@ SIMILAR_RESULTS = [
     },
 ]
 
+
 HYBRID_RESULTS = [
     {
-        "id": 31,
-        "similarityScore": 0.88,
-        "rank": 1,
-        "hybridScore": 0.77,
-        "evidences": "cf+semantic",
-        "title": "Movie D",
-        "titleVi": "Phim D",
-        "overview": "overview d",
-        "overviewVi": "mo ta d",
+        "movie_id": 31,
+        "fused_rank": 1,
+        "rrf_score": 0.88,
+        "model_ranks": [1, 2, 3],
     }
 ]
 
@@ -127,7 +123,10 @@ class TestSemanticSearchEndpoint:
             "page": 1,
             "limit": 10,
         }
-        assert "phim hành động" in body["message"]
+        assert (
+            body["message"]
+            == "Tim kiem ngu nghia thanh cong cho tu khoa 'phim hành động'"
+        )
 
     def test_passes_keyword_and_topk_to_service(self, client_factory, service):
         client_factory().get(
@@ -137,18 +136,22 @@ class TestSemanticSearchEndpoint:
         service.semantic_search.assert_awaited_once_with(query="space", top_k=3)
 
     def test_custom_topk_sets_limit(self, client_factory):
-        body = client_factory().get(
-            f"{PREFIX}/semantic-search", params={"keyword": "space", "topK": 3}
-        ).json()
+        body = (
+            client_factory()
+            .get(f"{PREFIX}/semantic-search", params={"keyword": "space", "topK": 3})
+            .json()
+        )
 
         assert body["pagination"]["limit"] == 3
 
     def test_empty_result_gives_zero_pages(self, client_factory, service):
         service.semantic_search.return_value = []
 
-        body = client_factory().get(
-            f"{PREFIX}/semantic-search", params={"keyword": "nothing"}
-        ).json()
+        body = (
+            client_factory()
+            .get(f"{PREFIX}/semantic-search", params={"keyword": "nothing"})
+            .json()
+        )
 
         assert body["result"] == []
         assert body["pagination"]["total"] == 0
@@ -218,9 +221,7 @@ class TestGetSimilarMoviesEndpoint:
         service.similar_movies.assert_awaited_once_with(movie_id=7, top_k=5)
 
     def test_topk_sets_limit(self, client_factory):
-        body = client_factory().get(
-            f"{PREFIX}/similar/7", params={"topK": 5}
-        ).json()
+        body = client_factory().get(f"{PREFIX}/similar/7", params={"topK": 5}).json()
 
         assert body["pagination"]["limit"] == 5
 
@@ -232,9 +233,7 @@ class TestGetSimilarMoviesEndpoint:
         response = client_factory().get(f"{PREFIX}/similar/999")
 
         assert response.status_code == 404
-        assert response.json() == {
-            "detail": "Khong tim thay vector cho movieId=999"
-        }
+        assert response.json() == {"detail": "Khong tim thay vector cho movieId=999"}
 
     def test_non_integer_movie_id_returns_422(self, client_factory):
         response = client_factory().get(f"{PREFIX}/similar/not-a-number")
@@ -243,9 +242,7 @@ class TestGetSimilarMoviesEndpoint:
 
     @pytest.mark.parametrize("top_k", [0, 101])
     def test_topk_out_of_range_returns_422(self, client_factory, top_k):
-        response = client_factory().get(
-            f"{PREFIX}/similar/7", params={"topK": top_k}
-        )
+        response = client_factory().get(f"{PREFIX}/similar/7", params={"topK": top_k})
 
         assert response.status_code == 422
 
@@ -263,10 +260,10 @@ class TestGetSimilarMoviesEndpoint:
 
 
 class TestSearchEndpoint:
-    """Endpoint hiện có 2 bug (xem báo cáo); test ghi nhận hành vi hiện tại."""
+    """``SearchRequest`` hiện được gửi qua JSON body (GET body)."""
 
     def test_get_with_query_parameters_returns_422_body_required(self, client_factory):
-        """BUG 1: ``SearchRequest`` không được annotate ``Query()``.
+        """``SearchRequest`` không được annotate ``Query()``.
 
         FastAPI coi model là request body ⇒ gọi GET kèm query string bị 422
         ``body: Field required``.
@@ -296,34 +293,30 @@ class TestSearchEndpoint:
         assert response.status_code == 422
         assert response.json()["detail"][0]["loc"] == ["body", "page_size"]
 
-    def test_body_request_returns_500_due_to_pageSize_attribute(
-        self, client_factory, service
-    ):
-        """BUG 2: route đọc ``request.pageSize`` nhưng schema chỉ có ``page_size``.
-
-        Vì vậy kể cả khi gửi JSON body hợp lệ, endpoint vẫn 500 (AttributeError)
-        và service không được gọi.
-        """
+    def test_body_request_returns_semantic_results(self, client_factory, service):
         response = client_factory().request(
             "GET", f"{PREFIX}/search", json={"query": "phim"}
         )
 
-        assert response.status_code == 500
-        service.semantic_search.assert_not_awaited()
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        assert body["result"] == SEMANTIC_RESULTS
+        assert body["pagination"] == {
+            "total": 2,
+            "totalPages": 1,
+            "page": 1,
+            "limit": 10,
+        }
+        assert body["message"] == "Semantic search completed"
+        service.semantic_search.assert_awaited_once_with(query="phim", top_k=10)
 
-    def test_function_paginates_when_pageSize_is_available(self, service):
-        """Hành vi mong đợi của ``search`` sau khi sửa bug ``pageSize``.
-
-        Gọi trực tiếp hàm (không qua FastAPI) với request có thuộc tính
-        ``pageSize`` để kiểm tra logic phân trang.
-        """
+    def test_function_paginates_with_page_size(self, service):
         request = SimpleNamespace(
-            query="phim", model="semantic", page=2, pageSize=3
+            query="phim", model="semantic", page=2, page_size=3
         )
         app_request = SimpleNamespace(
-            app=SimpleNamespace(
-                state=SimpleNamespace(recommend_service=service)
-            )
+            app=SimpleNamespace(state=SimpleNamespace(recommend_service=service))
         )
 
         # Route trả Pydantic model (không phải dict) → đọc bằng attribute.
@@ -340,11 +333,9 @@ class TestSearchEndpoint:
         service.semantic_search.assert_awaited_once_with(query="phim", top_k=3)
 
     def test_function_returns_empty_pagination_for_unsupported_model(self, service):
-        request = SimpleNamespace(query="phim", model="bm25", page=1, pageSize=10)
+        request = SimpleNamespace(query="phim", model="bm25", page=1, page_size=10)
         app_request = SimpleNamespace(
-            app=SimpleNamespace(
-                state=SimpleNamespace(recommend_service=service)
-            )
+            app=SimpleNamespace(state=SimpleNamespace(recommend_service=service))
         )
 
         body = asyncio.run(recommendations.search(request, app_request))
@@ -356,16 +347,13 @@ class TestSearchEndpoint:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# GET /hybrid-search
+# GET /hybrid
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 class TestHybridSearchEndpoint:
     def test_returns_paginated_recommendations(self, client_factory, current_user):
-        response = client_factory(current_user).get(
-            f"{PREFIX}/hybrid-search",
-            params={"userId": "user-1", "keyword": "action"},
-        )
+        response = client_factory(current_user).get(f"{PREFIX}/hybrid")
 
         assert response.status_code == 200
         body = response.json()
@@ -375,112 +363,92 @@ class TestHybridSearchEndpoint:
             "total": 1,
             "totalPages": 1,
             "page": 1,
-            "limit": 10,
+            "limit": 100,
         }
-        assert "userId=user-1" in body["message"]
+        assert body["message"] == "Gợi ý 1 phim cho userId=user-1 thành công"
 
-    def test_passes_user_and_topk_to_service(self, client_factory, current_user, service):
+    def test_uses_authenticated_user_and_topk(
+        self, client_factory, current_user, service
+    ):
         client_factory(current_user).get(
-            f"{PREFIX}/hybrid-search",
-            params={"userId": "user-1", "keyword": "action", "topK": 5},
+            f"{PREFIX}/hybrid",
+            params={"topK": 5},
         )
 
         service.hybrid_recommendation.assert_awaited_once_with(
-            user_uuid="user-1", top_k=5
+            user_id="user-1", top_k=5
         )
 
-    def test_preserves_page_and_limit(self, client_factory, current_user, service):
+    def test_topk_sets_pagination_limit(self, client_factory, current_user, service):
         service.hybrid_recommendation.return_value = list(HYBRID_RESULTS) * 3
 
-        body = client_factory(current_user).get(
-            f"{PREFIX}/hybrid-search",
-            params={
-                "userId": "user-1",
-                "keyword": "action",
-                "page": 2,
-                "pageSize": 2,
-            },
-        ).json()
+        body = (
+            client_factory(current_user)
+            .get(f"{PREFIX}/hybrid", params={"topK": 2})
+            .json()
+        )
 
+        assert body["result"] == list(HYBRID_RESULTS) * 3
         assert body["pagination"] == {
             "total": 3,
             "totalPages": 2,
-            "page": 2,
+            "page": 1,
             "limit": 2,
         }
 
-    def test_empty_result_uses_not_found_message(self, client_factory, current_user, service):
+    def test_empty_result_uses_not_found_message(
+        self, client_factory, current_user, service
+    ):
         service.hybrid_recommendation.return_value = []
 
-        body = client_factory(current_user).get(
-            f"{PREFIX}/hybrid-search",
-            params={"userId": "user-1", "keyword": "action"},
-        ).json()
+        body = client_factory(current_user).get(f"{PREFIX}/hybrid").json()
 
         assert body["result"] == []
         assert body["pagination"]["total"] == 0
         assert body["message"] == "Không tìm thấy gợi ý cho userId=user-1"
 
-    def test_forbidden_when_user_does_not_match(self, client_factory, current_user, service):
+    def test_spoofed_user_id_query_is_ignored(
+        self, client_factory, current_user, service
+    ):
         response = client_factory(current_user).get(
-            f"{PREFIX}/hybrid-search",
-            params={"userId": "another-user", "keyword": "action"},
+            f"{PREFIX}/hybrid", params={"userId": "another-user"}
         )
 
-        assert response.status_code == 403
-        assert response.json() == {
-            "detail": "Không có quyền truy cập gợi ý của người khác"
-        }
-        assert response.headers["WWW-Authenticate"] == "Bearer"
-        service.hybrid_recommendation.assert_not_awaited()
+        assert response.status_code == 200
+        service.hybrid_recommendation.assert_awaited_once_with(
+            user_id="user-1", top_k=100
+        )
 
     def test_requires_authentication(self, client_factory):
-        response = client_factory().get(
-            f"{PREFIX}/hybrid-search",
-            params={"userId": "user-1", "keyword": "action"},
-        )
+        response = client_factory().get(f"{PREFIX}/hybrid")
 
         assert response.status_code == 401
         assert response.json() == {"detail": "Chưa đăng nhập"}
 
-    def test_missing_keyword_returns_422(self, client_factory, current_user):
-        response = client_factory(current_user).get(
-            f"{PREFIX}/hybrid-search", params={"userId": "user-1"}
-        )
-
-        assert response.status_code == 422
-
-    def test_missing_user_id_returns_422(self, client_factory, current_user):
-        response = client_factory(current_user).get(
-            f"{PREFIX}/hybrid-search", params={"keyword": "action"}
-        )
-
-        assert response.status_code == 422
-
     @pytest.mark.parametrize("top_k", [0, 1001])
     def test_topk_out_of_range_returns_422(self, client_factory, current_user, top_k):
         response = client_factory(current_user).get(
-            f"{PREFIX}/hybrid-search",
-            params={"userId": "user-1", "keyword": "action", "topK": top_k},
+            f"{PREFIX}/hybrid", params={"topK": top_k}
         )
 
         assert response.status_code == 422
 
-    def test_page_size_above_limit_returns_422(self, client_factory, current_user):
+    def test_topk_max_boundary_is_accepted(
+        self, client_factory, current_user, service
+    ):
         response = client_factory(current_user).get(
-            f"{PREFIX}/hybrid-search",
-            params={"userId": "user-1", "keyword": "action", "pageSize": 101},
+            f"{PREFIX}/hybrid", params={"topK": 1000}
         )
 
-        assert response.status_code == 422
+        assert response.status_code == 200
+        service.hybrid_recommendation.assert_awaited_once_with(
+            user_id="user-1", top_k=1000
+        )
 
     def test_service_error_returns_500(self, client_factory, current_user, service):
         service.hybrid_recommendation.side_effect = RuntimeError("boom")
 
-        response = client_factory(current_user).get(
-            f"{PREFIX}/hybrid-search",
-            params={"userId": "user-1", "keyword": "action"},
-        )
+        response = client_factory(current_user).get(f"{PREFIX}/hybrid")
 
         assert response.status_code == 500
 
@@ -512,16 +480,18 @@ class TestHybridSearchDebugEndpoint:
         client_factory().get(f"{PREFIX}/hybrid/no-auth", params={"userId": "user-9"})
 
         service.hybrid_recommendation.assert_awaited_once_with(
-            user_uuid="user-9", top_k=10
+            user_id="user-9", top_k=10
         )
 
     def test_custom_topk_is_forwarded(self, client_factory, service):
-        body = client_factory().get(
-            f"{PREFIX}/hybrid/no-auth", params={"userId": "user-9", "topK": 3}
-        ).json()
+        body = (
+            client_factory()
+            .get(f"{PREFIX}/hybrid/no-auth", params={"userId": "user-9", "topK": 3})
+            .json()
+        )
 
         service.hybrid_recommendation.assert_awaited_once_with(
-            user_uuid="user-9", top_k=3
+            user_id="user-9", top_k=3
         )
         assert body["pagination"]["limit"] == 3
 

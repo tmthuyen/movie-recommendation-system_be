@@ -196,7 +196,7 @@ export class InteractionsService {
     return { success: true };
   }
 
-  private publishAndBroadcast(
+  private async publishAndBroadcast(
     userId: string,
     movieId: number,
     type: InteractionType,
@@ -225,7 +225,7 @@ export class InteractionsService {
 
     // Nếu remove khỏi publish queue
     if (action !== 'removed') {
-      this.interactionProducer.publishInteractionCreated({
+      await this.interactionProducer.publishInteractionCreated({
         userId,
         movieId,
         action: type,

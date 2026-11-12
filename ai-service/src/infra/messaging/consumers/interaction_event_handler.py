@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -16,6 +17,8 @@ from infra.messaging.event_schemas import (
     InteractionAction,
     InteractionCreatedEvent,
     InteractionCreatedPayload,
+    InteractionListPayload,
+    TrainingBatchEvent,
 )
 from infra.storage.storage_service import storage_service
 from services.movie_vector_service import MovieVectorService
@@ -37,20 +40,32 @@ class InteractionEventHandler:
         self.user_vector_service = user_vector_service
         self.movie_vector_service = movie_vector_service
 
-    async def handle(
-        self, event_type: str, payload: dict[str, Any], event: DomainEvent
-    ) -> None:
+    async def handle(self, event: dict[str, Any]) -> None:
         """
         Handle incoming interaction events from RabbitMQ.
         """
+        event_obj = DomainEvent.model_validate(event)
+        event_type = event_obj.eventType
+        payload_obj = event_obj.payload
+
         logger.info(
-            f"[InteractionEventHandler] Xử lý sự kiện {json.dumps(event.model_dump(), indent=2)}"
+            f"[InteractionEventHandler] Xử lý sự kiện event_type={event_type} | event_id={event_obj.eventId} | correlation_id={event_obj.correlationId}"
         )
 
         if event_type in ("interaction.created", "interaction.event"):
+            validated_payload = InteractionCreatedPayload.model_validate(payload_obj)
+            payload = validated_payload.model_dump()
             await self._handle_interaction_created(payload)
         elif event_type == "training.batch":
+            validated_payload = InteractionListPayload.model_validate(payload_obj)
+            payload = validated_payload.model_dump()
             await self._handle_training_batch(payload)
+        elif event_type == "training.request":
+            logger.info(
+                f"[InteractionEventHandler] Received training request event. Triggering retraining."
+            )
+            # gọi hàm train trong background
+            asyncio.create_task(self.training_scheduler.train_main_model())
         else:
             logger.warning(
                 f"[InteractionEventHandler] Unsupported event type: {event_type}"
@@ -78,17 +93,16 @@ class InteractionEventHandler:
         df.to_parquet(local_path, index=False)
 
         r2_key = f"interactions/{file_name}"
-        success = storage_service.upload_file(str(local_path), r2_key)
+        # success = storage_service.upload_file(str(local_path), r2_key)
 
-        if success:
-            logger.info(f"Successfully uploaded training batch to R2: {r2_key}")
-            # Trigger retrain asynchronously in the background
-            import asyncio
+        # if success:
+        #     logger.info(f"Successfully uploaded training batch to R2: {r2_key}")
+        #     # Trigger retrain asynchronously in the background
 
-            asyncio.create_task(self.training_scheduler.train_main_model())
-        else:
-            logger.error(f"Failed to upload training batch to R2: {r2_key}")
-            raise RuntimeError(f"Failed to upload batch {r2_key} to storage")
+        #     asyncio.create_task(self.training_scheduler.train_main_model())
+        # else:
+        #     logger.error(f"Failed to upload training batch to R2: {r2_key}")
+        #     raise RuntimeError(f"Failed to upload batch {r2_key} to storage")
 
         try:
             os.remove(local_path)
@@ -143,7 +157,7 @@ class InteractionEventHandler:
             return float(rating)
 
         scores = {
-            InteractionAction.VIEW: 1.0,
+            InteractionAction.CLICK: 1.0,
             InteractionAction.LIKE: 5.0,
             InteractionAction.COMMENT: 2.0,
             InteractionAction.RATING: 0.0,

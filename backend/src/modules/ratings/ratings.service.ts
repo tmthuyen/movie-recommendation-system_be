@@ -104,7 +104,7 @@ export class RatingsService {
       movieStats: { voteCount, voteAverage },
     });
 
-    this.interactionProducer.publishInteractionCreated({
+    await this.interactionProducer.publishInteractionCreated({
       userId,
       movieId,
       action: InteractionType.RATING,

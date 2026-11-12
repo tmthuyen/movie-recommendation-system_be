@@ -45,6 +45,8 @@ Bảng theo dõi danh sách plan trong `docs/plans/`. Dùng để xác định `
 | 25 | V25_backend_cache-layer.md | backend | cache-layer | Cache Redis: movie/genre/country/interaction/recommendation | 🟡 Đang triển khai; load-more (cursor) tách sang V27 |
 | 26 | V26_frontend_movie-search-filter.md | frontend | movie-search-filter | Search + filter phim từ DB, URL sync, UI responsive/modern | ✅ Hoàn thành 2026-11-07 (slider năm + toolbar grid; draft + nút "Áp dụng" — không auto-call API; QA responsive thủ công) |
 | 27 | V27_backend_similar-load-more.md | backend | similar-load-more | Cursor API load-more phim tương tự + frontend infinite scroll (API-first) | 🟡 Backend + frontend P6–P10 đã implement/verify; smoke runtime pending |
+| 28 | V28_backend_stale-tests-sync.md | backend | stale-tests-sync | Đồng bộ test backend NestJS với hành vi hiện tại | ✅ Hoàn thành 2026-11-12 |
+| 29 | V29_testing_ai-service-fix-failing-tests.md | testing | ai-service-fix-failing-tests | Sửa test AI-service fail do lệch API hiện tại | ✅ Hoàn thành 2026-11-12 (554 passed) |
 
 ## Ghi chú legacy
 
@@ -55,11 +57,11 @@ Bảng theo dõi danh sách plan trong `docs/plans/`. Dùng để xác định `
 
 ## Cách tính next_index
 
-`max(index) = 27` → `next_index = 28`
+`max(index) = 29` → `next_index = 30`
 
 ## next_index
 
-`28`
+`30`
 
 ## Cách xác định index khi tạo plan mới
 

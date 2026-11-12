@@ -207,7 +207,7 @@ class TestVectorStoreFacade:
             SimpleNamespace(vector_db_provider="memory", vector_db_enabled=False)
         )
 
-        run(store.upsert(1, [1.0], {"a": 1}))
+        run(store.upsert(movie_id=1, id=None, vector=[1.0], payload={"a": 1}))
         assert run(store.query([1.0])) == []
         assert run(store.get_by_id(1)) is None
         run(store.close())
@@ -218,13 +218,36 @@ class TestVectorStoreFacade:
             SimpleNamespace(vector_db_provider="memory", vector_db_enabled=True)
         )
         run(store.start())
-        run(store.upsert(1, [1.0, 0.0], {"a": 1}))
+        run(store.upsert(movie_id=1, id=None, vector=[1.0, 0.0], payload={"a": 1}))
 
         results = run(store.query([1.0, 0.0], top_k=1))
 
         assert results[0]["id"] == 1
         assert results[0]["payload"] == {"a": 1}
         run(store.close())
+
+    def test_upsert_with_external_id_delegates_to_backend(self):
+        store = VectorStore(
+            SimpleNamespace(vector_db_provider="memory", vector_db_enabled=True)
+        )
+        store.backend = MagicMock()
+        store.backend.upsert = AsyncMock()
+
+        run(
+            store.upsert(
+                movie_id=None,
+                id="user-1",
+                vector=[1.0],
+                payload={"a": 1},
+            )
+        )
+
+        store.backend.upsert.assert_awaited_once_with(
+            movie_id="user-1",
+            vector=[1.0],
+            payload={"a": 1},
+            collection_name=None,
+        )
 
     def test_collection_counts_for_memory_store(self):
         settings = SimpleNamespace(
@@ -237,7 +260,7 @@ class TestVectorStoreFacade:
         )
         store = VectorStore(settings)
         run(store.start())
-        run(store.upsert(1, [1.0], {}))
+        run(store.upsert(movie_id=1, id=None, vector=[1.0], payload={}))
 
         counts = run(store.collection_counts())
 
@@ -290,13 +313,20 @@ class TestVectorStoreFacade:
 
 
 class TestTrainingScheduler:
+    @staticmethod
+    def make_scheduler(redis_store=None):
+        return TrainingScheduler(
+            SimpleNamespace(model_train_enabled=False),
+            redis_store=redis_store or MagicMock(),
+        )
+
     def test_start_disabled_does_not_create_scheduler(self):
-        scheduler = TrainingScheduler(SimpleNamespace(model_train_enabled=False))
+        scheduler = self.make_scheduler()
         run(scheduler.start())
         assert scheduler.scheduler is None
 
     def test_enqueue_returns_job_name_and_creates_task(self, monkeypatch):
-        scheduler = TrainingScheduler(SimpleNamespace(model_train_enabled=False))
+        scheduler = self.make_scheduler()
         created = []
 
         def fake_create_task(coro):
@@ -311,40 +341,54 @@ class TestTrainingScheduler:
         assert name == "training-main-queued"
         assert len(created) == 1
 
-    def test_train_without_app_state_resets_flag(self):
-        scheduler = TrainingScheduler(SimpleNamespace(model_train_enabled=False))
-        run(scheduler.train_main_model())
-        assert scheduler.is_training is False
-
-    def test_train_skips_when_already_running(self):
-        scheduler = TrainingScheduler(SimpleNamespace(model_train_enabled=False))
-        scheduler.is_training = True
-        run(scheduler.train_main_model())
-        assert scheduler.is_training is True
-
-    def test_train_runs_pipeline_when_app_state_has_vector_store(self, monkeypatch):
+    def test_train_uses_redis_store_and_resets_flag(self, monkeypatch):
         service = MagicMock()
         service.run_training_pipeline = AsyncMock()
         service_factory = MagicMock(return_value=service)
         monkeypatch.setattr(
             "src.core.integrations.ModelTrainingService", service_factory
         )
-        app_state = SimpleNamespace(vector_store=object())
-        scheduler = TrainingScheduler(
-            SimpleNamespace(model_train_enabled=False), app_state=app_state
-        )
+        redis_store = MagicMock(name="redis_store")
+        scheduler = self.make_scheduler(redis_store)
 
         run(scheduler.train_main_model())
 
-        service_factory.assert_called_once_with(vector_store=app_state.vector_store)
+        service_factory.assert_called_once_with(redis_store=redis_store)
         service.run_training_pipeline.assert_awaited_once()
         assert scheduler.is_training is False
 
+    def test_train_skips_when_already_running(self, monkeypatch):
+        service_factory = MagicMock()
+        monkeypatch.setattr(
+            "src.core.integrations.ModelTrainingService", service_factory
+        )
+        scheduler = self.make_scheduler()
+        scheduler.is_training = True
+
+        run(scheduler.train_main_model())
+
+        service_factory.assert_not_called()
+        assert scheduler.is_training is True
+
+    def test_train_propagates_failure_and_resets_flag(self, monkeypatch):
+        service = MagicMock()
+        service.run_training_pipeline = AsyncMock(side_effect=RuntimeError("boom"))
+        service_factory = MagicMock(return_value=service)
+        monkeypatch.setattr(
+            "src.core.integrations.ModelTrainingService", service_factory
+        )
+        scheduler = self.make_scheduler()
+
+        with pytest.raises(RuntimeError, match="boom"):
+            run(scheduler.train_main_model())
+
+        assert scheduler.is_training is False
+
     def test_close_calls_scheduler_shutdown(self):
-        scheduler = TrainingScheduler(SimpleNamespace(model_train_enabled=False))
+        scheduler = self.make_scheduler()
         scheduler.scheduler = MagicMock()
         run(scheduler.close())
         scheduler.scheduler.shutdown.assert_called_once_with(wait=False)
 
     def test_close_without_scheduler_is_noop(self):
-        run(TrainingScheduler(SimpleNamespace(model_train_enabled=False)).close())
+        run(self.make_scheduler().close())

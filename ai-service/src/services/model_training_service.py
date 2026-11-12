@@ -1,43 +1,39 @@
 import glob
 import json
-import logging
 import os
-from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Tuple
+from typing import Any, Tuple
 
-import numpy as np
 import pandas as pd
-import pyarrow.parquet as pq
-import scipy.sparse as sparse
 
 # Use implicit library for ALS
 from implicit.als import AlternatingLeastSquares
 
 from core.config import get_settings
+from infra.messaging.event_schemas import InteractionAction
+from infra.redis.redis_service import RedisStore
 from infra.storage.storage_service import storage_service
+from services.IALSRecommendationService import ALS_Implicit
+from utils.logger import setup_logger
 
-if TYPE_CHECKING:
-    from core.integrations import VectorStore
-
-logger = logging.getLogger(__name__)
+logger = setup_logger(name="FastAPI-Recommendations")
 
 
 class ModelTrainingService:
-    def __init__(self, vector_store: "VectorStore"):
+    def __init__(self, redis_store: RedisStore):
         self.settings = get_settings()
-        self.vector_store = vector_store
+        self.redis_store = redis_store
 
         # Paths
         self.data_dir = Path("data/training")
-        self.parquet_dir = self.data_dir / "interactions_parquet"
+        self.interaction_dir = self.data_dir / "interactions"
         self.models_dir = self.data_dir / "models"
 
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        self.parquet_dir.mkdir(exist_ok=True)
+        self.interaction_dir.mkdir(exist_ok=True)
         self.models_dir.mkdir(exist_ok=True)
 
-    async def run_training_pipeline(self) -> bool:
+    async def run_training_pipeline(self):
         """Run the full end-to-end retraining pipeline using implicit ALS."""
         logger.info("Starting ALS Retraining Pipeline (Phase 4)...")
         try:
@@ -45,68 +41,114 @@ class ModelTrainingService:
             await self._download_training_data()
 
             # 2. Preprocess Data & Create Sparse Matrix
-            user_item_matrix, user_mapping, movie_mapping, full_df = (
-                self._preprocess_data()
-            )
+            user_mapping, movie_mapping, full_df = self._preprocess_data()
 
             # 3. Train ALS Model
-            if user_item_matrix is not None:
-                model = self._train_model(user_item_matrix)
 
-                # 4. Update ChromaDB with new vectors
-                await self._update_chroma_vectors(model, user_mapping, movie_mapping)
+            model = self._train_model(
+                train_df=full_df,
+                num_users=len(user_mapping),
+                num_items=len(movie_mapping),
+            )
 
-                # 5. Upload Model & Mapping to R2
-                self._upload_artifacts(model, user_mapping, movie_mapping)
-
-                # 6. Aggregate to Master Data and Delete old batches
-                self._manage_r2_data(full_df)
+            # 5. Upload Model & Mapping to R2
+            self._upload_artifacts(model, user_mapping, movie_mapping)
 
             # 7. Cleanup
-            self._cleanup_local_data()
+            # self._cleanup_local_data()
+
+            # Thông báo đã có model mới cho các instance khác và instance này biết để cập nhật model mới
+            await self.redis_store.publish(
+                "model.updated",
+                {
+                    "modelKey": "models/als_model.npz",
+                    "mappingKey": "models/mappings.json",
+                },
+            )
+            logger.info(
+                "Đã thông báo cho các instance khác về model mới. Các instance sẽ cập nhật model mới."
+            )
 
             logger.info("Retraining Pipeline completed successfully.")
-            return True
         except Exception as e:
             logger.error(f"Training pipeline failed: {e}")
-            return False
+            raise e
 
     async def _download_training_data(self):
         logger.info("Downloading interaction data from R2...")
         # Tải danh sách file từ R2
         files = storage_service.list_files("interactions/")
-        self.r2_parquet_files = [f for f in files if f.endswith(".parquet")]
 
-        if not self.r2_parquet_files:
-            logger.warning("No parquet files found in R2 under interactions/ prefix.")
+        # jsonl
+        self.storage_interaction_files = [f for f in files if f.endswith(".jsonl")]
 
-        for s3_key in self.r2_parquet_files:
-            local_path = self.parquet_dir / os.path.basename(s3_key)
+        if not self.storage_interaction_files:
+            logger.warning("No files found in R2 under interactions/ prefix.")
+
+        for s3_key in self.storage_interaction_files:
+            local_path = self.interaction_dir / os.path.basename(s3_key)
             storage_service.download_file(s3_key, str(local_path))
             logger.info(f"Downloaded {s3_key} to {local_path}")
+
+    def _get_action_score(self, action: str, rating: float | None = None) -> float:
+        """Tính score dựa trên action và rating (nếu có)."""
+        if action == InteractionAction.RATING and rating is not None:
+            return float(rating)
+
+        scores = {
+            InteractionAction.CLICK: 1.0,
+            InteractionAction.LIKE: 5.0,
+            InteractionAction.COMMENT: 2.0,
+            InteractionAction.RATING: 0.0,
+        }
+        return scores.get(action.lower(), 1.0)
 
     def _preprocess_data(self) -> Tuple[Any, dict, dict, pd.DataFrame]:
         logger.info("Preprocessing data and creating mappings...")
 
-        parquet_files = glob.glob(str(self.parquet_dir / "*.parquet"))
+        interaction_files = glob.glob(str(self.interaction_dir / "*.jsonl"))
 
-        if not parquet_files:
-            logger.warning("No local parquet files to process. Skipping training.")
+        if not interaction_files:
+            logger.warning("No local jsonl files to process. Skipping training.")
             return None, {}, {}
 
-        # Đọc tất cả các file parquet
+        # Đọc tất cả các file jsonl
         df_list = []
-        for file in parquet_files:
+        for file in interaction_files:
             try:
-                df = pd.read_parquet(file)
+                df = pd.read_json(file, lines=True)
                 df_list.append(df)
             except Exception as e:
-                logger.error(f"Failed to read parquet file {file}: {e}")
+                logger.error(f"Failed to read jsonl file {file}: {e}")
 
         if not df_list:
             return None, {}, {}
 
-        full_df = pd.concat(df_list, ignore_index=True)
+        full_df = pd.DataFrame()
+        full_df = pd.concat([full_df] + df_list, ignore_index=True)
+
+        # sắp xếp
+        # Lọc dữ liệu: loại trùng chỉ lấy mới nhất, loại bỏ các cột có action null
+        # 15h, 16h thì lấy tương tác lúc 16h (mới nhất)
+        full_df = full_df.dropna(subset=["action"])
+        full_df["createdAt"] = pd.to_datetime(full_df["createdAt"])
+        full_df = full_df.sort_values("createdAt", ascending=True).drop_duplicates(
+            subset=["userId", "movieId", "action"], keep="last"
+        )
+
+        # EDA
+        logger.info("Performing EDA...")
+        statistics = {
+            "total_interactions": len(full_df),
+            "unique_users": full_df["userId"].nunique(),
+            "unique_movies": full_df["movieId"].nunique(),
+            "average_score": full_df["score"].mean(),
+            "min_score": full_df["score"].min(),
+            "max_score": full_df["score"].max(),
+        }
+        logger.info(f"DataFrame statistics:\n{statistics}")
+
+        logger.info("EDA complete.")
 
         # Cần cột userId và movieId. Nếu thiếu, bỏ qua
         if "userId" not in full_df.columns or "movieId" not in full_df.columns:
@@ -122,87 +164,49 @@ class ModelTrainingService:
 
         # Chuyển đổi DataFrame sang Indices
         full_df["user_idx"] = full_df["userId"].astype(str).map(user_mapping)
-        full_df["movie_idx"] = full_df["movieId"].astype(str).map(movie_mapping)
+        full_df["item_idx"] = full_df["movieId"].astype(str).map(movie_mapping)
 
-        # Rating (seed) → score backend (band 5) → mặc định 1.0
-        if "rating" in full_df.columns:
-            ratings = full_df["rating"].astype(float).values
-        elif "score" in full_df.columns:
-            ratings = (
-                pd.to_numeric(full_df["score"], errors="coerce")
-                .fillna(1.0)
-                .clip(lower=0.1, upper=5.0)
-                .values
-            )
-        else:
-            ratings = np.ones(len(full_df), dtype=float)
-
-        rows = full_df["user_idx"].values
-        cols = full_df["movie_idx"].values
-
-        # Tạo ma trận thưa User-Item
-        user_item_matrix = sparse.csr_matrix(
-            (ratings, (rows, cols)), shape=(len(user_mapping), len(movie_mapping))
+        # Tính score cho từng tương tác
+        full_df["score"] = full_df.apply(
+            lambda row: self._get_action_score(
+                action=row["action"], rating=row.get("score")
+            ),
+            axis=1,
         )
-
-        logger.info(f"Created User-Item matrix with shape {user_item_matrix.shape}")
 
         # Lưu full_df lại để dùng cho bước merge master data
-        return user_item_matrix, user_mapping, movie_mapping, full_df
+        return user_mapping, movie_mapping, full_df
 
     def _train_model(
-        self, user_item_matrix: sparse.csr_matrix
-    ) -> AlternatingLeastSquares:
+        self,
+        train_df: pd.DataFrame,
+        num_users: int,
+        num_items: int,
+    ) -> ALS_Implicit:
         logger.info("Training Implicit ALS Model...")
+        settings = get_settings()
 
-        model = AlternatingLeastSquares(
-            factors=self.settings.cf_vector_size,
-            regularization=0.1,
-            iterations=20,
-            use_gpu=False,
+        model = ALS_Implicit(
+            train_frame=train_df,
+            num_users=num_users,
+            num_items=num_items,
+            factors=settings.cf_num_factors,
+            alpha=settings.cf_alpha,
+            regularization=settings.cf_regularization,
+            iterations=settings.cf_iterations,
+            random_state=settings.cf_random_state,
         )
-
-        # Implicit >= 0.6.0 mong đợi ma trận User-Item cho quá trình huấn luyện
-        model.fit(user_item_matrix)
 
         logger.info("ALS Model training complete.")
         return model
 
-    async def _update_chroma_vectors(
-        self, model: AlternatingLeastSquares, user_mapping: dict, movie_mapping: dict
-    ):
-        logger.info("Syncing new CF vectors to ChromaDB...")
-
-        user_factors = model.user_factors
-        item_factors = model.item_factors
-
-        for user_uuid, idx in user_mapping.items():
-            vec = user_factors[idx].tolist()
-            await self.vector_store.upsert(
-                movie_id=int(idx),
-                vector=vec,
-                payload={"user_uuid": user_uuid, "updated_from": "batch_train"},
-                collection_name=self.settings.vector_user_cf_collection,
-            )
-
-        for movie_id_str, idx in movie_mapping.items():
-            vec = item_factors[idx].tolist()
-            m_id = int(float(movie_id_str))  # Handle strings like '100.0'
-            await self.vector_store.upsert(
-                movie_id=m_id,
-                vector=vec,
-                payload={"movieId": m_id, "updated_from": "batch_train"},
-                collection_name=self.settings.vector_movie_cf_collection,
-            )
-        logger.info("ChromaDB sync complete.")
-
     def _upload_artifacts(
-        self, model: AlternatingLeastSquares, user_mapping: dict, movie_mapping: dict
+        self, model: ALS_Implicit, user_mapping: dict, movie_mapping: dict
     ):
         logger.info("Saving and Uploading new Model and Mapping to R2...")
 
         model_path = self.models_dir / "als_model.npz"
-        model.save(str(model_path))
+        model.save(path=str(model_path))
 
         mapping_path = self.models_dir / "mappings.json"
         with open(mapping_path, "w") as f:
@@ -212,29 +216,11 @@ class ModelTrainingService:
         storage_service.upload_file(str(mapping_path), "models/mappings.json")
         logger.info("Artifacts uploaded to R2 successfully.")
 
-    def _manage_r2_data(self, full_df: pd.DataFrame):
-        """Gộp các file batch mới vào master data và xóa các batch cũ trên R2."""
-        logger.info("Managing R2 dataset files...")
-        master_path = self.parquet_dir / "master_interactions.parquet"
-        full_df.to_parquet(master_path, index=False)
-
-        # Ghi đè file master lên R2
-        storage_service.upload_file(
-            str(master_path), "interactions/master_interactions.parquet"
-        )
-
-        # Xóa các file batch cũ (trừ file master)
-        for s3_key in self.r2_parquet_files:
-            if "master_interactions.parquet" not in s3_key:
-                storage_service.delete_file(s3_key)
-
-        logger.info("Successfully merged to master and cleaned up old batches on R2.")
-
     def _cleanup_local_data(self):
         logger.info("Cleaning up local training data...")
 
         files_to_delete = []
-        files_to_delete.extend(glob.glob(str(self.parquet_dir / "*.parquet")))
+        files_to_delete.extend(glob.glob(str(self.interaction_dir / "*.parquet")))
         files_to_delete.extend(glob.glob(str(self.models_dir / "*")))
 
         for f in files_to_delete:

@@ -8,7 +8,7 @@ from botocore.exceptions import ClientError
 
 from core.config import get_settings
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(name="FastAPI-Recommendations")
 
 
 class StorageService:

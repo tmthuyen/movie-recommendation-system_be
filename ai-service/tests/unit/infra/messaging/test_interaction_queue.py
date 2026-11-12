@@ -15,9 +15,15 @@ def run(coro):
 
 
 class FakeMessage:
-    def __init__(self, body: bytes, routing_key: str | None = "interaction.event"):
+    def __init__(
+        self,
+        body: bytes,
+        routing_key: str | None = "interaction.event",
+        correlation_id: str | None = None,
+    ):
         self.body = body
         self.routing_key = routing_key
+        self.correlation_id = correlation_id
         self.ack_count = 0
         self.nack_calls: list[bool] = []
 
@@ -50,12 +56,15 @@ class TestHandleMessageAck:
         run(queue._handle_message(message))
 
         handler.handle.assert_awaited_once_with(
-            "interaction.created", {"userId": "u-1", "movieId": 2}
+            event={
+                "eventType": "interaction.created",
+                "payload": {"userId": "u-1", "movieId": 2},
+            }
         )
         assert message.ack_count == 1
         assert message.nack_calls == []
 
-    def test_missing_payload_is_passed_as_empty_dict(self):
+    def test_missing_payload_is_passed_as_full_body(self):
         queue = InteractionQueue(make_settings())
         handler = MagicMock()
         handler.handle = AsyncMock()
@@ -64,10 +73,12 @@ class TestHandleMessageAck:
 
         run(queue._handle_message(message))
 
-        handler.handle.assert_awaited_once_with("interaction.event", {})
+        handler.handle.assert_awaited_once_with(
+            event={"eventType": "interaction.event"}
+        )
         assert message.ack_count == 1
 
-    def test_missing_event_type_is_passed_as_empty_string(self):
+    def test_missing_event_type_is_nacked_without_requeue(self):
         queue = InteractionQueue(make_settings())
         handler = MagicMock()
         handler.handle = AsyncMock()
@@ -76,7 +87,9 @@ class TestHandleMessageAck:
 
         run(queue._handle_message(message))
 
-        handler.handle.assert_awaited_once_with("", {})
+        handler.handle.assert_not_awaited()
+        assert message.ack_count == 0
+        assert message.nack_calls == [False]
 
 
 class TestHandleMessageNack:

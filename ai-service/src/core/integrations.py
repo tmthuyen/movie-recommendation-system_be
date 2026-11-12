@@ -9,12 +9,13 @@ from qdrant_client.models import Distance, PointStruct, VectorParams
 from redis.asyncio import Redis
 
 from api.schemas import TrainRequest
+from infra.redis.redis_service import RedisStore
 from services.model_training_service import ModelTrainingService
 from utils import setup_logger
 
 from .config import Settings
 
-logger = setup_logger(name="FastAPI-Recommendations", filename=__name__)
+logger = setup_logger(name="FastAPI-Recommendations")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -541,11 +542,11 @@ class VectorStore:
 
 
 class TrainingScheduler:
-    def __init__(self, settings: Settings, app_state: Any = None) -> None:
+    def __init__(self, settings: Settings, redis_store: RedisStore) -> None:
         self.settings = settings
         self.scheduler: AsyncIOScheduler | None = None
-        self.app_state = app_state
         self.is_training = False
+        self.redis_store = redis_store
 
     async def start(self) -> None:
         if not self.settings.model_train_enabled:
@@ -561,7 +562,7 @@ class TrainingScheduler:
             month=month,
             day_of_week=day_of_week,
         )
-        self.scheduler.start()
+        # self.scheduler.start()
 
     async def enqueue(self, request: TrainRequest) -> str:
         logger.info(
@@ -578,14 +579,14 @@ class TrainingScheduler:
 
         self.is_training = True
         logger.info("Main model training job started")
-        if self.app_state and hasattr(self.app_state, "vector_store"):
-            svc = ModelTrainingService(vector_store=self.app_state.vector_store)
+        svc = ModelTrainingService(redis_store=self.redis_store)
+        try:
             await svc.run_training_pipeline()
-        else:
-            logger.error(
-                "Cannot run training pipeline: vector_store not found in app_state"
-            )
-        self.is_training = False
+        except Exception:
+            logger.exception("Training failed")
+            raise
+        finally:
+            self.is_training = False
 
     async def close(self) -> None:
         if self.scheduler:

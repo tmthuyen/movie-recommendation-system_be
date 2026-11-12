@@ -14,6 +14,7 @@ class MappingService:
     def __init__(self):
         self.user_to_idx: Dict[str, int] = {}
         self.idx_to_user: Dict[int, str] = {}
+        self.idx_to_item: Dict[int, int] = {}
         # Movies are mapped 1-1 with their integer IDs in this architecture
 
     def load_mapping_from_file(self, file_path: str) -> bool:
@@ -28,8 +29,10 @@ class MappingService:
 
             # The JSON has {"users": {"uuid": idx, ...}, "movies": {"id_str": idx, ...}}
             users_dict = data.get("users", {})
+            movies_dict = data.get("movies", {})
             self.user_to_idx = {str(k): int(v) for k, v in users_dict.items()}
             self.idx_to_user = {int(v): str(k) for k, v in self.user_to_idx.items()}
+            self.idx_to_item = {int(v): int(k) for k, v in movies_dict.items()}
             logger.info(f"Loaded {len(self.user_to_idx)} user mappings successfully.")
             return True
         except Exception as e:
@@ -49,6 +52,10 @@ class MappingService:
     def get_user_uuid(self, user_idx: int) -> Optional[str]:
         """Convert internal integer index back to string UUID."""
         return self.idx_to_user.get(user_idx)
+
+    def get_item_id(self, item_idx: int) -> Optional[int]:
+        """Convert internal integer index back to movie ID."""
+        return self.idx_to_item.get(item_idx)
 
 
 mapping_service = MappingService()

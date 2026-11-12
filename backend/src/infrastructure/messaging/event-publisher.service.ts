@@ -29,7 +29,7 @@ export class EventPublisherService {
     payload: TPayload,
     correlationId?: string,
     routingKey?: string,
-  ): void {
+  ): Promise<void> {
     this.logger.log(
       `Sự kiện: type=${eventType}, exchange=${exchange}, routingKey=${routingKey ?? eventType} | correlationId=${correlationId}`,
     );
@@ -51,18 +51,19 @@ export class EventPublisherService {
     };
 
     // Sử dụng publish tới Exchange được chỉ định
-    this.channelWrapper
+    return this.channelWrapper
       .publish(exchange, routingKey ?? eventType, event, {
         persistent: true,
         headers,
       })
+      .then(() => {
+        // log
+        this.logger.log(
+          `Đã publish sự kiện type=${eventType} | traceId=${traceId} | correlationId=${correlationId} | eventId=${event.eventId}`,
+        );
+      })
       .catch((error: Error) => {
         this.logger.error(`Failed to publish ${eventType}: ${error.message}`);
       });
-
-    // log
-    this.logger.log(
-      `Đã publish sự kiện [Type=${eventType}] | [TraceID=${traceId}] | [CorrelationID=${correlationId}] | [EventID=${event.eventId}]]`,
-    );
   }
 }
