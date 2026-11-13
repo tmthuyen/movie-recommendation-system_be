@@ -26,6 +26,7 @@ SEMANTIC_RESULTS = [
     {
         "id": 11,
         "similarityScore": 0.9123,
+        "score": 0.9123,
         "title": "Movie A",
         "titleVi": "Phim A",
         "overview": "overview a",
@@ -34,6 +35,7 @@ SEMANTIC_RESULTS = [
     {
         "id": 12,
         "similarityScore": 0.8123,
+        "score": 0.8123,
         "title": "Movie B",
         "titleVi": "Phim B",
         "overview": "overview b",
@@ -45,6 +47,7 @@ SIMILAR_RESULTS = [
     {
         "id": 21,
         "similarityScore": 0.95,
+        "score": 0.95,
         "rank": 1,
         "title": "Movie C",
         "titleVi": "Phim C",
@@ -423,7 +426,7 @@ class TestHybridSearchEndpoint:
         response = client_factory().get(f"{PREFIX}/hybrid")
 
         assert response.status_code == 401
-        assert response.json() == {"detail": "Chưa đăng nhập"}
+        assert response.json() == {"detail": "Bạn chưa đăng nhập"}
 
     @pytest.mark.parametrize("top_k", [0, 1001])
     def test_topk_out_of_range_returns_422(self, client_factory, current_user, top_k):

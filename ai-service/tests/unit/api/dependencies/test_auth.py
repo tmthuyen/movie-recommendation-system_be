@@ -42,7 +42,7 @@ class TestGetCurrentUserDependency:
 
         error = exc_info.value
         assert error.status_code == 401
-        assert error.detail == "Chưa đăng nhập"
+        assert error.detail == "Bạn chưa đăng nhập"
         assert error.headers == {"WWW-Authenticate": "Bearer"}
 
     def test_existing_user_is_returned(self):

@@ -23,7 +23,7 @@ export class MovieProducer {
     //   )} with [Trace ID] : ${correlationId}`,
     // );
     this.logger.debug(
-      `Publishing movie.created event with movie id: ${payload.movieId} with [Trace ID] : ${correlationId}`,
+      `[trace_id=${correlationId}] Publishing movie.created event with movie id: ${payload.movieId}`,
     );
 
     await this.eventPublisher.publish(

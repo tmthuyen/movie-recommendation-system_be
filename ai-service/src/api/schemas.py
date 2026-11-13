@@ -59,6 +59,7 @@ class ErrorResponse(ApiResponse[None]):
 class SimilarMoviesResponse(BaseModel):
     id: int
     similarityScore: float
+    score: float | None = None
     rank: int | None = None
     title: str
     titleVi: str | None = None

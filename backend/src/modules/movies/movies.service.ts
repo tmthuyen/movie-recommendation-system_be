@@ -27,7 +27,10 @@ import {
   PaginatedResult,
   ResultWithPagination,
 } from '@/common/dtos/paginated-result.interface';
-import { ICacheService } from '@/infrastructure/cache/redis-cache.service';
+import {
+  CACHE_SERVICE,
+  type ICacheService,
+} from '@/infrastructure/cache/redis-cache.service';
 import {
   CacheKeys,
   CacheTtl,
@@ -38,7 +41,7 @@ import {
   MovieListCacheSchema,
   MovieSearchCacheSchema,
 } from '@/infrastructure/cache/cache.schemas';
-import { parseIdUtils } from '@/common/utlils/parseIdUtils';
+import { parseIdUtils } from '@/common/utils/parseIdUtils';
 
 @Injectable()
 export class MoviesService {
@@ -59,7 +62,7 @@ export class MoviesService {
     private readonly eventsGateway: EventsGateway,
     private readonly interactionProducer: InteractionProducer,
     private readonly statsService: MovieInteractionStatsService,
-    @Inject(ICacheService) private readonly cache: ICacheService,
+    @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
   ) {}
 
   private mapDtoToEntity(dto: any) {

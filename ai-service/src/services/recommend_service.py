@@ -46,12 +46,12 @@ def _format_item(item: dict[str, Any]) -> dict[str, Any]:
         if (title_vi and str(title_vi).strip() not in ("nan", "None", ""))
         else title_en
     )
+    score = round(float(item.get("raw_cosine_score", item.get("score", 0.0))), 4)
     result = {
         "id": item.get("id"),
         "movieId": item.get("id"),
-        "similarityScore": round(
-            float(item.get("raw_cosine_score", item.get("score", 0.0))), 4
-        ),
+        "similarityScore": score,
+        "score": score,
         "title": display_title,
         "titleVi": title_vi if str(title_vi) not in ("nan", "None") else None,
         "overview": meta.get("overview"),
@@ -107,7 +107,18 @@ class RecommendService:
         """Semantic Search: Tìm phim dựa trên truy vấn tìm kiếm"""
         vector = await self._emb.encode_async(query, is_query=True)
         raw_results = await self._vs.query(vector, top_k=top_k)
-        return [_format_item(item) for item in raw_results]
+
+        for idx, item in enumerate(raw_results):
+            item["rank"] = idx + 1  # rank bắt đầu từ 1
+
+        # format
+        formatted_results = [_format_item(item) for item in raw_results]
+
+        logger.info(
+            f"[RecommendService] Found {len(raw_results)} semantic search results (Top-{top_k})"
+        )
+
+        return formatted_results
 
     async def similar_movies(
         self, movie_id: int, top_k: int = 50
@@ -327,7 +338,16 @@ class RecommendService:
             top_n=top_k * 2,
         )
 
-        return detailed_fused
+        # Canonical fields dùng chung cho backend: id / rank / score.
+        return [
+            {
+                **item,
+                "id": item["movie_id"],
+                "rank": item["fused_rank"],
+                "score": item["rrf_score"],
+            }
+            for item in detailed_fused
+        ]
 
         # # 3. Combine and Rerank
         # combined_scores = {}

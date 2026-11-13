@@ -1,3 +1,5 @@
+import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
 import { AppException } from '@/common/custom-exception/app-exception';
 import {
   ResultWithCursorPagination,
@@ -15,7 +17,7 @@ import {
   fingerprintIds,
   hydrateCursorPage,
   resolveCursorOffset,
-} from '@/common/utlils/cursor-pagination.util';
+} from '@/common/utils/cursor-pagination.util';
 import { Movie } from '@/modules/movies/entities/movie.entity';
 import { MoviesService } from '@/modules/movies/movies.service';
 import {
@@ -23,15 +25,14 @@ import {
   SimilarMovieResponseDto,
 } from '@/modules/recommendations/dtos/movie-response-with-score.dto';
 import {
-  HybridFromAiServiceResponse,
   HybridFromAiServiceResponseSchema,
   SimilarFromAiServiceResponse,
   SimilarFromAiServiceResponseSchema,
 } from '@/modules/recommendations/interfaces/ai-service-response.interfaces';
-import { ConfigService } from '@nestjs/config';
-import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
-import { plainToInstance } from 'class-transformer';
-import { ICacheService } from '@/infrastructure/cache/redis-cache.service';
+import {
+  CACHE_SERVICE,
+  type ICacheService,
+} from '@/infrastructure/cache/redis-cache.service';
 import {
   CacheKeys,
   CacheTtl,
@@ -41,6 +42,7 @@ import {
   RecommendationItemSchema,
   RecommendationSnapshotSchema,
 } from '@/infrastructure/cache/cache.schemas';
+import { RedisService } from '@/infrastructure/redis/redis.service';
 import { z } from 'zod';
 
 const AI_SERVICE_URL =
@@ -67,12 +69,21 @@ export interface IRecommendationsService {
   semanticSearch(
     keyword: string,
     topK?: number,
-  ): Promise<ResultWithPagination<any>>;
+  ): Promise<ResultWithPagination<SimilarMovieResponseDto>>;
+  semanticSearchByCursor(
+    keyword: string,
+    query: CursorQueryDto,
+  ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>>;
   hybridSearch(
     userId: string,
     accessToken: string,
     topK?: number,
-  ): Promise<ResultWithPagination<any>>;
+  ): Promise<ResultWithPagination<HybridMovieResponseDto>>;
+  hybridSearchByCursor(
+    userId: string,
+    accessToken: string,
+    query: CursorQueryDto,
+  ): Promise<ResultWithCursorPagination<HybridMovieResponseDto>>;
 }
 @Injectable()
 export class RecommendationsService implements IRecommendationsService {
@@ -81,14 +92,10 @@ export class RecommendationsService implements IRecommendationsService {
 
   constructor(
     private readonly movieService: MoviesService,
-    @Inject(ICacheService) private readonly cache: ICacheService,
-    config: ConfigService,
+    @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
+    private readonly redis: RedisService,
   ) {
-    const configured = Number(config.get<string>('RECOMMENDATION_WINDOW'));
-    this.window =
-      Number.isFinite(configured) && configured > 0
-        ? configured
-        : RECOMMENDATION_WINDOW;
+    this.window = RECOMMENDATION_WINDOW;
   }
 
   async getSimilarMovies(
@@ -106,23 +113,24 @@ export class RecommendationsService implements IRecommendationsService {
     );
 
     let { key, items } = await this.getSnapshot(movieId);
-    let page = await this.hydrate(items.slice(0, requested));
+    let result = await this.hydrate(
+      items.slice(0, requested),
+      SimilarMovieResponseDto,
+    );
 
     // Snapshot thiếu nhiều phim: xoá cache và tải lại một lần.
     const expected = Math.min(requested, items.length);
-    if (
-      expected > 0 &&
-      page.result.length < expected * (1 - MAX_MISSING_RATIO)
-    ) {
+    if (expected > 0 && result.length < expected * (1 - MAX_MISSING_RATIO)) {
       await this.cache.del(key);
       ({ key, items } = await this.getSnapshot(movieId));
-      page = await this.hydrate(
+      result = await this.hydrate(
         items.slice(0, Math.min(requested, items.length)),
+        SimilarMovieResponseDto,
       );
     }
 
     return {
-      result: page.result,
+      result,
       pagination: {
         page: 1,
         limit: requested,
@@ -160,7 +168,7 @@ export class RecommendationsService implements IRecommendationsService {
       items,
       offset,
       limit,
-      hydrate: async chunk => (await this.hydrate(chunk)).result,
+      hydrate: chunk => this.hydrate(chunk, SimilarMovieResponseDto),
     });
 
     return {
@@ -179,108 +187,255 @@ export class RecommendationsService implements IRecommendationsService {
   async semanticSearch(
     keyword: string,
     topK?: number,
-  ): Promise<ResultWithPagination<any>> {
-    return this.hybridSearch(keyword, '', topK);
+  ): Promise<ResultWithPagination<SimilarMovieResponseDto>> {
+    this.logger.log(`Semantic search: keyword="${keyword}", topK=${topK}`);
+
+    const requested = Math.min(
+      Math.max(Number(topK) || DEFAULT_TOP_K, 1),
+      this.window,
+    );
+    const key = `cache:recommendation:semantic:${encodeURIComponent(keyword)}:k${this.window}`;
+    const { items, total } = await this.readWindow(
+      key,
+      () => this.loadSemanticFromAi(keyword),
+      0,
+      requested,
+    );
+
+    return {
+      result: await this.hydrate(items, SimilarMovieResponseDto),
+      pagination: { page: 1, limit: requested, total, totalPages: 1 },
+    };
+  }
+
+  async semanticSearchByCursor(
+    keyword: string,
+    query: CursorQueryDto,
+  ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>> {
+    this.logger.log(
+      `Semantic search (cursor): keyword="${keyword}", limit=${query.limit}, cursor=${query.cursor ?? 0}`,
+    );
+
+    const limit = clampCursorLimit(
+      query.limit,
+      DEFAULT_CURSOR_LIMIT,
+      MAX_CURSOR_LIMIT,
+    );
+    const afterRank = Math.max(0, Number(query.cursor) || 0);
+    const key = `cache:recommendation:semantic:${encodeURIComponent(keyword)}:k${this.window}`;
+    const { items, total } = await this.readWindow(
+      key,
+      () => this.loadSemanticFromAi(keyword),
+      afterRank,
+      limit,
+    );
+
+    const lastRank =
+      items.length > 0 ? items[items.length - 1].rank : afterRank;
+    const hasMore = lastRank < total;
+
+    return {
+      result: await this.hydrate(items, SimilarMovieResponseDto),
+      pagination: {
+        limit,
+        total,
+        hasMore,
+        nextCursor: hasMore ? lastRank : null,
+      },
+    };
   }
 
   async hybridSearch(
     userId: string,
     accessToken: string,
     topK?: number,
-  ): Promise<ResultWithPagination<any>> {
-    this.logger.log(`Nhận request gợi ý cho userId=${userId}, topK=${topK}`);
-    let parsedResponse: HybridFromAiServiceResponse | null = null;
-    try {
-      const res = await fetch(
-        `${AI_SERVICE_URL}/hybrid?userId=${userId}&topK=${topK}`,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-          },
-        },
-      );
+  ): Promise<ResultWithPagination<HybridMovieResponseDto>> {
+    this.logger.log(`For-you: userId=${userId}, topK=${topK}`);
 
-      const raw = await res.json();
-      parsedResponse = HybridFromAiServiceResponseSchema.parse(raw);
+    const requested = Math.min(
+      Math.max(Number(topK) || DEFAULT_TOP_K, 1),
+      this.window,
+    );
+    const key = `cache:recommendation:for-you:${userId}:k${this.window}`;
+    const { items, total } = await this.readWindow(
+      key,
+      () => this.loadForYouFromAi(accessToken),
+      0,
+      requested,
+    );
+
+    return {
+      result: await this.hydrate(items, HybridMovieResponseDto),
+      pagination: { page: 1, limit: requested, total, totalPages: 1 },
+    };
+  }
+
+  async hybridSearchByCursor(
+    userId: string,
+    accessToken: string,
+    query: CursorQueryDto,
+  ): Promise<ResultWithCursorPagination<HybridMovieResponseDto>> {
+    this.logger.log(
+      `For-you (cursor): userId=${userId}, limit=${query.limit}, cursor=${query.cursor ?? 0}`,
+    );
+
+    const limit = clampCursorLimit(
+      query.limit,
+      DEFAULT_CURSOR_LIMIT,
+      MAX_CURSOR_LIMIT,
+    );
+    const afterRank = Math.max(0, Number(query.cursor) || 0);
+    const key = `cache:recommendation:for-you:${userId}:k${this.window}`;
+    const { items, total } = await this.readWindow(
+      key,
+      () => this.loadForYouFromAi(accessToken),
+      afterRank,
+      limit,
+    );
+
+    const lastRank =
+      items.length > 0 ? items[items.length - 1].rank : afterRank;
+    const hasMore = lastRank < total;
+
+    return {
+      result: await this.hydrate(items, HybridMovieResponseDto),
+      pagination: {
+        limit,
+        total,
+        hasMore,
+        nextCursor: hasMore ? lastRank : null,
+      },
+    };
+  }
+
+  /**
+   * Đọc một trang từ Redis sorted set (score = rank).
+   * Key chưa có → gọi loader một lần, ghi ZSET rồi đọc lại.
+   */
+  private async readWindow(
+    key: string,
+    loader: () => Promise<RecommendationItem[]>,
+    afterRank: number,
+    limit: number,
+  ): Promise<{ items: RecommendationItem[]; total: number }> {
+    let raw = await this.redis.zrangeByScore(
+      key,
+      `(${afterRank}`,
+      '+inf',
+      limit,
+    );
+
+    if (raw.length === 0 && (await this.redis.zcard(key)) === 0) {
+      const items = await loader();
+      await this.redis.zadd(
+        key,
+        items.map(item => ({
+          score: item.rank,
+          member: JSON.stringify(item),
+        })),
+        CacheTtl.recommendation,
+      );
+      raw = await this.redis.zrangeByScore(key, `(${afterRank}`, '+inf', limit);
+    }
+
+    return {
+      items: raw.map(member =>
+        RecommendationItemSchema.parse(JSON.parse(member)),
+      ),
+      total: await this.redis.zcard(key),
+    };
+  }
+
+  private async callAiService<T>(
+    path: string,
+    schema: z.ZodType<T>,
+    accessToken?: string,
+  ): Promise<T> {
+    const res = await fetch(`${AI_SERVICE_URL}${path}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+    });
+
+    if (!res.ok) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'Lỗi khi gọi AI service',
+        'The AI service returned an error.',
+        'AI_SERVICE_ERROR',
+      );
+    }
+
+    try {
+      return schema.parse(await res.json());
     } catch (error) {
       this.logger.error(
-        `Lỗi khi gọi AI service cho hybrid search: ${
+        `Dữ liệu trả về không hợp lệ từ AI service: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
-      // throw new AppException(
-      //   HttpStatus.BAD_REQUEST,
-      //   'Lỗi khi gọi AI service cho hybrid search',
-      //   'Error occurred while calling AI service for hybrid search.',
-      //   'AI_SERVICE_ERROR',
-      // );
-    }
-
-    if (!parsedResponse || !parsedResponse.result) {
-      this.logger.error(
-        `Dữ liệu trả về không hợp lệ từ AI service cho hybrid search: ${JSON.stringify(
-          parsedResponse,
-        )}`,
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'Dữ liệu trả về không hợp lệ từ AI service',
+        'The AI service did not return a valid response.',
+        'AI_SERVICE_ERROR',
       );
-      // throw new AppException(
-      //   HttpStatus.BAD_REQUEST,
-      //   'Dữ liệu trả về không hợp lệ từ AI service cho hybrid search',
-      //   'The AI service did not return a valid response for hybrid search.',
-      //   'AI_SERVICE_ERROR',
-      // );
+    }
+  }
 
-      return {
-        result: [],
-        pagination: {
-          page: 1,
-          limit: topK || DEFAULT_TOP_K,
-          total: 0,
-          totalPages: 1,
-        },
-      };
+  private async loadSemanticFromAi(
+    keyword: string,
+  ): Promise<RecommendationItem[]> {
+    const raw = await this.callAiService(
+      `/semantic-search?keyword=${encodeURIComponent(keyword)}&topK=${this.window}`,
+      SimilarFromAiServiceResponseSchema,
+    );
+
+    return this.toSnapshot(
+      raw.result.map(item => ({
+        id: item.id,
+        score: item.score ?? item.similarityScore,
+      })),
+    );
+  }
+
+  private async loadForYouFromAi(
+    accessToken: string,
+  ): Promise<RecommendationItem[]> {
+    const raw = await this.callAiService(
+      `/hybrid?topK=${this.window}`,
+      HybridFromAiServiceResponseSchema,
+      accessToken,
+    );
+
+    return this.toSnapshot(
+      raw.result.map(item => ({
+        id: item.id ?? item.movie_id,
+        score: item.score ?? item.rrf_score,
+      })),
+    );
+  }
+
+  /** Khử trùng id, gán rank 1..n và cắt theo window. */
+  private toSnapshot(
+    items: Array<{ id: number; score: number }>,
+  ): RecommendationItem[] {
+    const seen = new Set<number>();
+    const snapshot: RecommendationItem[] = [];
+
+    for (const item of items) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      snapshot.push({
+        id: item.id,
+        score: item.score,
+        rank: snapshot.length + 1,
+      });
+      if (snapshot.length >= this.window) break;
     }
 
-    // map id
-    const movieIds = parsedResponse.result.map(item => item.movie_id);
-
-    // lấy dữ liệu phim từ DB
-    const movies = await this.movieService.findByIds(movieIds);
-
-    // map movie id to movie
-    const movieMap = new Map<number, Movie>();
-    for (const movie of movies) {
-      movieMap.set(Number(movie.id), movie);
-    }
-
-    // map kết quả
-    const mappedData = parsedResponse.result
-      .map(item => {
-        const movie = movieMap.get(Number(item.movie_id));
-        if (!movie) {
-          this.logger.warn(
-            `Movie with id ${item.movie_id} not found in database, skipping.`,
-          );
-          return null;
-        }
-
-        return {
-          ...movie,
-          hybridScore: item.rrf_score,
-          rank: item.fused_rank,
-        };
-      })
-      .filter((item): item is NonNullable<typeof item> => item !== null);
-
-    // chuyển đổi sang DTO
-    const result = plainToInstance(HybridMovieResponseDto, mappedData, {
-      excludeExtraneousValues: true,
-    });
-
-    return {
-      result,
-      pagination: parsedResponse.pagination,
-    };
+    return snapshot;
   }
 
   private async getSnapshot(movieId: number): Promise<{
@@ -365,10 +520,11 @@ export class RecommendationsService implements IRecommendationsService {
   }
 
   /** Ghép id trong snapshot với dữ liệu phim trong DB. */
-  private async hydrate(items: RecommendationItem[]): Promise<{
-    result: SimilarMovieResponseDto[];
-  }> {
-    if (items.length === 0) return { result: [] };
+  private async hydrate<T>(
+    items: RecommendationItem[],
+    dtoClass: new () => T,
+  ): Promise<T[]> {
+    if (items.length === 0) return [];
 
     const itemIds = items.map(item => item.id);
 
@@ -379,24 +535,8 @@ export class RecommendationsService implements IRecommendationsService {
 
     const movieById = new Map<number, Movie>();
     for (const movie of movies) {
-      //  check type of movie.id
-      let id = movie.id;
-      if (typeof movie.id !== 'number') {
-        id = Number(movie.id);
-      }
-      movieById.set(id, movie);
+      movieById.set(Number(movie.id), movie);
     }
-
-    // this.logger.log(`
-    //   item.id: ${items[0]?.id} - type: ${typeof items[0]?.id}
-    //   movie.id: ${movies[0]?.id} - type: ${typeof movies[0]?.id}
-    // `);
-
-    // this.logger.log(`
-    //   Movie Rec: ${itemIds.join(', ')}\n
-    //   Movie DB: ${movies.map(m => m.id).join(', ')}\n
-    //   Movie Map: ${Array.from(movieById.keys()).join(', ')}
-    //   `);
 
     const mappedData = items
       .map(item => {
@@ -410,16 +550,14 @@ export class RecommendationsService implements IRecommendationsService {
         }
         return {
           ...movie,
-          similarityScore: item.score,
+          score: item.score,
           rank: item.rank,
         };
       })
       .filter((item): item is NonNullable<typeof item> => item !== null);
 
-    const result = plainToInstance(SimilarMovieResponseDto, mappedData, {
+    return plainToInstance(dtoClass, mappedData, {
       excludeExtraneousValues: true,
     });
-
-    return { result };
   }
 }

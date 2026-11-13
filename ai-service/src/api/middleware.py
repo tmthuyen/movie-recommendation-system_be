@@ -43,7 +43,7 @@ def setup_middleware(app: FastAPI) -> None:
         # req id
         trace_id, req_id, kong_id = get_correlation_id(request)
         logger.info(
-            f"[Trace ID]: {trace_id} - [Request ID]: {req_id} - [Kong ID]: {kong_id}"
+            f"[trace_id={trace_id}] - [request_id={req_id}] - [kong_id={kong_id}]"
         )
 
         start_time = time.perf_counter()
@@ -54,7 +54,7 @@ def setup_middleware(app: FastAPI) -> None:
         method = request.method
         path = request.url.path
 
-        logger.info(f"[{trace_id}] {method} - {path} - {process_time:.2f}s")
+        logger.info(f"[trace_id={trace_id}] {method} - {path} - {process_time:.2f}s")
 
         return response
 
@@ -66,6 +66,7 @@ def setup_middleware(app: FastAPI) -> None:
     ):
         # Mặc định request chưa authenticated
         request.state.user = None
+        request.state.auth_error = None
 
         authorization = request.headers.get("Authorization")
 
@@ -78,31 +79,12 @@ def setup_middleware(app: FastAPI) -> None:
         #
         parts = authorization.split(" ", 1)
 
-        if len(parts) != 2:
-            return JSONResponse(
-                status_code=401,
-                content={
-                    "statusCode": 401,
-                    "message": "Token không hợp lệ",
-                    "data": None,
-                    "errorCode": "INVALID_AUTHORIZATION",
-                },
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+        if len(parts) != 2 or parts[0].lower() != "bearer":
+            request.state.auth_error = "INVALID_AUTHORIZATION"
+            logger.error(f"[Token] Invalid authorization header")
+            return await call_next(request)
 
-        scheme, token = parts
-
-        if scheme.lower() != "bearer":
-            return JSONResponse(
-                status_code=401,
-                content={
-                    "statusCode": 401,
-                    "message": "Token không hợp lệ",
-                    "data": None,
-                    "errorCode": "INVALID_AUTHORIZATION",
-                },
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+        token = parts[1]
 
         logger.info("[Token] received")
 
@@ -118,16 +100,9 @@ def setup_middleware(app: FastAPI) -> None:
             user_id = payload.get("sub")
 
             if not user_id:
-                return JSONResponse(
-                    status_code=401,
-                    content={
-                        "statusCode": 401,
-                        "message": "Token không hợp lệ",
-                        "data": None,
-                        "errorCode": "INVALID_TOKEN",
-                    },
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
+                request.state.auth_error = "INVALID_TOKEN"
+                logger.error(f"[Token] Invalid token: missing sub")
+                return await call_next(request)
 
             # Parse JWT → CurrentUser
             user = CurrentUser(
@@ -140,29 +115,16 @@ def setup_middleware(app: FastAPI) -> None:
 
             # Lưu user vào request context
             request.state.user = user
+            request.state.auth_error = None
 
         except ExpiredSignatureError:
-            return JSONResponse(
-                status_code=401,
-                content={
-                    "statusCode": 401,
-                    "message": "Token đã hết hạn",
-                    "data": None,
-                    "errorCode": "TOKEN_EXPIRED",
-                },
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
+            request.state.auth_error = "TOKEN_EXPIRED"
+            logger.error(f"[Token] Token expired")
         except JWTError:
-            return JSONResponse(
-                status_code=401,
-                content={
-                    "statusCode": 401,
-                    "message": "Token không hợp lệ",
-                    "data": None,
-                    "errorCode": "INVALID_TOKEN",
-                },
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+            request.state.auth_error = "INVALID_TOKEN"
+            logger.error(f"[Token] Invalid token")
+        except Exception as e:
+            request.state.auth_error = "INVALID_TOKEN"
+            logger.error(f"[Token] Error decoding token: {e}")
 
         return await call_next(request)

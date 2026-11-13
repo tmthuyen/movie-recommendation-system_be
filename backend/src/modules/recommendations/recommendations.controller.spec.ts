@@ -9,7 +9,9 @@ describe('RecommendationsController', () => {
     getSimilarMovies: jest.Mock;
     getSimilarMoviesByCursor: jest.Mock;
     semanticSearch: jest.Mock;
+    semanticSearchByCursor: jest.Mock;
     hybridSearch: jest.Mock;
+    hybridSearchByCursor: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -17,7 +19,9 @@ describe('RecommendationsController', () => {
       getSimilarMovies: jest.fn(),
       getSimilarMoviesByCursor: jest.fn(),
       semanticSearch: jest.fn(),
+      semanticSearchByCursor: jest.fn(),
       hybridSearch: jest.fn(),
+      hybridSearchByCursor: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -120,13 +124,70 @@ describe('RecommendationsController', () => {
     ).toHaveBeenCalledWith(12, { limit: 12 });
   });
 
-  it('GET /semantic-search hiện là stub trả {status,message,data:[]} (không envelope)', () => {
-    const res = controller.semanticSearch('hành động', 10);
+  it('GET /semantic-search gọi service và trả envelope chuẩn', async () => {
+    recommendationsService.semanticSearch.mockResolvedValue({
+      result: [{ id: 5, title: 'Phim', similarityScore: 0.9, score: 0.9 }],
+      pagination: { page: 1, limit: 10, total: 1, totalPages: 1 },
+    });
 
+    const res = await controller.semanticSearch('hành động', undefined, 10);
+
+    expect(recommendationsService.semanticSearch).toHaveBeenCalledWith(
+      'hành động',
+      10,
+    );
     expect(res).toEqual({
-      status: 'success',
+      success: true,
+      statusCode: 200,
       message: expect.any(String),
-      data: [],
+      result: [{ id: 5, title: 'Phim', similarityScore: 0.9, score: 0.9 }],
+      pagination: { page: 1, limit: 10, total: 1, totalPages: 1 },
+    });
+  });
+
+  it('GET /semantic-search nhận alias query khi thiếu keyword', async () => {
+    recommendationsService.semanticSearch.mockResolvedValue({
+      result: [],
+      pagination: { page: 1, limit: 10, total: 0, totalPages: 0 },
+    });
+
+    await controller.semanticSearch(undefined, 'hành động', 10);
+
+    expect(recommendationsService.semanticSearch).toHaveBeenCalledWith(
+      'hành động',
+      10,
+    );
+  });
+
+  it('GET /semantic-search thiếu từ khoá thì trả 400', async () => {
+    await expect(
+      controller.semanticSearch(undefined, undefined, 10),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('GET /semantic-search/cursor trả envelope + pagination cursor', async () => {
+    recommendationsService.semanticSearchByCursor.mockResolvedValue({
+      result: [{ id: 5, title: 'Phim', similarityScore: 0.9, score: 0.9 }],
+      pagination: { limit: 12, total: 20, hasMore: true, nextCursor: 12 },
+    });
+
+    const res = await controller.semanticSearchByCursor(
+      'hành động',
+      undefined,
+      '0',
+      12,
+    );
+
+    expect(recommendationsService.semanticSearchByCursor).toHaveBeenCalledWith(
+      'hành động',
+      { cursor: '0', limit: 12 },
+    );
+    expect(res).toEqual({
+      success: true,
+      statusCode: 200,
+      message: expect.any(String),
+      result: [{ id: 5, title: 'Phim', similarityScore: 0.9, score: 0.9 }],
+      pagination: { limit: 12, total: 20, hasMore: true, nextCursor: 12 },
     });
   });
 
@@ -148,10 +209,37 @@ describe('RecommendationsController', () => {
       10,
     );
     expect(res).toEqual({
-      status: 'success',
+      success: true,
+      statusCode: 200,
       message: expect.any(String),
       result: [{ id: 5, title: 'Phim', score: 0.9 }],
       pagination: { page: 1, limit: 10, total: 1, totalPages: 1 },
+    });
+  });
+
+  it('GET /for-you/cursor gọi service và trả pagination cursor', async () => {
+    recommendationsService.hybridSearchByCursor.mockResolvedValue({
+      result: [{ id: 5, title: 'Phim', score: 0.9 }],
+      pagination: { limit: 12, total: 20, hasMore: true, nextCursor: 12 },
+    });
+    const req = {
+      user: { sub: 'user-1' },
+      headers: { authorization: 'Bearer access-token' },
+    } as unknown as Request;
+
+    const res = await controller.hybridSearchByCursor(req, undefined, 12);
+
+    expect(recommendationsService.hybridSearchByCursor).toHaveBeenCalledWith(
+      'user-1',
+      'access-token',
+      { cursor: undefined, limit: 12 },
+    );
+    expect(res).toEqual({
+      success: true,
+      statusCode: 200,
+      message: expect.any(String),
+      result: [{ id: 5, title: 'Phim', score: 0.9 }],
+      pagination: { limit: 12, total: 20, hasMore: true, nextCursor: 12 },
     });
   });
 });

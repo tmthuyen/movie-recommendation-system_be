@@ -95,22 +95,89 @@ export class RecommendationsController {
 
   // /api/recommendations/semantic-search?keyword=...&topK=10
   @Get('/semantic-search')
-  semanticSearch(
-    @Query('keyword') keyword: string,
+  @ApiOperation({ summary: 'Tìm phim theo ngữ nghĩa (topK)' })
+  @ApiQuery({ name: 'keyword', required: false, type: String })
+  @ApiQuery({ name: 'query', required: false, type: String })
+  @ApiQuery({ name: 'topK', required: false, type: Number, example: 10 })
+  async semanticSearch(
+    @Query('keyword') keyword?: string,
+    @Query('query') query?: string,
     @Query('topK') topK?: number,
   ) {
+    const searchKeyword = keyword ?? query;
+    if (!searchKeyword) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'Thiếu từ khoá tìm kiếm.',
+        'keyword is required.',
+        'VALIDATION_ERROR',
+      );
+    }
+
+    const res = await this.recommendationsService.semanticSearch(
+      searchKeyword,
+      Number(topK),
+    );
+
     return {
-      status: 'success',
-      message:
-        'This endpoint is a placeholder for semantic search recommendation.',
-      data: [],
+      success: true,
+      statusCode: 200,
+      message: 'Danh sách phim theo ngữ nghĩa đã được lấy thành công.',
+      result: res.result,
+      pagination: res.pagination,
     };
   }
 
-  // /api/recommendations/hybrid?topK=20
+  // /api/recommendations/semantic-search/cursor?keyword=...&limit=12&cursor=12
+  @Get('/semantic-search/cursor')
+  @ApiOperation({
+    summary: 'Load-more tìm kiếm ngữ nghĩa bằng cursor',
+    description:
+      'Cursor là rank cuối cùng của trang trước. Trang đầu bỏ trống cursor.',
+  })
+  @ApiQuery({ name: 'keyword', required: false, type: String })
+  @ApiQuery({ name: 'query', required: false, type: String })
+  @ApiQuery({ name: 'cursor', required: false, type: Number, example: 12 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 12 })
+  async semanticSearchByCursor(
+    @Query('keyword') keyword?: string,
+    @Query('query') searchQuery?: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: number,
+  ) {
+    const searchKeyword = keyword ?? searchQuery;
+    if (!searchKeyword) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'Thiếu từ khoá tìm kiếm.',
+        'keyword is required.',
+        'VALIDATION_ERROR',
+      );
+    }
+
+    const res = await this.recommendationsService.semanticSearchByCursor(
+      searchKeyword,
+      {
+        cursor,
+        limit: limit === undefined ? undefined : Number(limit),
+      },
+    );
+
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Danh sách phim theo ngữ nghĩa đã được lấy thành công.',
+      result: res.result,
+      pagination: res.pagination,
+    };
+  }
+
+  // /api/recommendations/for-you?topK=20
   @UseGuards(JwtAuthGuard)
   @Get('/for-you')
-  async hybridSearch(@Req() req: Request, @Query('topK') topK: number) {
+  @ApiOperation({ summary: 'Gợi ý phim cá nhân hoá (topK)' })
+  @ApiQuery({ name: 'topK', required: false, type: Number, example: 20 })
+  async hybridSearch(@Req() req: Request, @Query('topK') topK?: number) {
     const { sub } = req.user as JwtPayload;
 
     const accessToken = req.headers['authorization']?.split(' ')[1];
@@ -122,14 +189,62 @@ export class RecommendationsController {
         'UNAUTHORIZED',
       );
     }
+
     const res = await this.recommendationsService.hybridSearch(
       sub,
       accessToken,
-      topK,
+      Number(topK),
     );
+
     return {
-      status: 'success',
-      message: 'This endpoint is a placeholder for hybrid recommendation.',
+      success: true,
+      statusCode: 200,
+      message: 'Danh sách phim gợi ý đã được lấy thành công.',
+      result: res.result,
+      pagination: res.pagination,
+    };
+  }
+
+  // /api/recommendations/for-you/cursor?limit=12&cursor=12
+  @UseGuards(JwtAuthGuard)
+  @Get('/for-you/cursor')
+  @ApiOperation({
+    summary: 'Load-more gợi ý cá nhân hoá bằng cursor',
+    description:
+      'Cursor là rank cuối cùng của trang trước. Trang đầu bỏ trống cursor.',
+  })
+  @ApiQuery({ name: 'cursor', required: false, type: Number, example: 12 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 12 })
+  async hybridSearchByCursor(
+    @Req() req: Request,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: number,
+  ) {
+    const { sub } = req.user as JwtPayload;
+
+    const accessToken = req.headers['authorization']?.split(' ')[1];
+    if (!accessToken) {
+      throw new AppException(
+        HttpStatus.UNAUTHORIZED,
+        'Access token is missing in the request headers.',
+        'The access token is required to access this endpoint.',
+        'UNAUTHORIZED',
+      );
+    }
+
+    const res = await this.recommendationsService.hybridSearchByCursor(
+      sub,
+      accessToken,
+      {
+        cursor,
+        limit: limit === undefined ? undefined : Number(limit),
+      },
+    );
+
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Danh sách phim gợi ý đã được lấy thành công.',
       result: res.result,
       pagination: res.pagination,
     };

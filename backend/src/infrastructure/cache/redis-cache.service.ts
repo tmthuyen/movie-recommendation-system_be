@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { RedisService } from '@/infrastructure/redis/redis.service';
 
-export const ICacheService = Symbol('ICacheService');
+export const CACHE_SERVICE = 'CACHE_SERVICE';
 // interface
 export interface CacheLoadOptions<T> {
   /** Key cache, bắt đầu bằng `cache:`. */
