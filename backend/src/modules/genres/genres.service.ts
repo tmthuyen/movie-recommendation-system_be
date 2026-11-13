@@ -5,7 +5,10 @@ import { IGenreRepository } from './genres.repository';
 import { PaginationDto } from '@/common/dtos/pagination.dto';
 import { PaginatedResult } from '@/common/dtos/paginated-result.interface';
 import { Genre } from './entities/genre.entity';
-import { ICacheService } from '@/infrastructure/cache/redis-cache.service';
+import {
+  CACHE_SERVICE,
+  type ICacheService,
+} from '@/infrastructure/cache/redis-cache.service';
 import { CacheKeys, CacheTtl } from '@/infrastructure/cache/cache.keys';
 import { GenreListCacheSchema } from '@/infrastructure/cache/cache.schemas';
 
@@ -15,7 +18,7 @@ export class GenresService {
   constructor(
     @Inject(IGenreRepository)
     private readonly repo: IGenreRepository,
-    @Inject(ICacheService) private readonly cache: ICacheService,
+    @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
   ) {}
 
   async create(createGenreDto: CreateGenreDto) {

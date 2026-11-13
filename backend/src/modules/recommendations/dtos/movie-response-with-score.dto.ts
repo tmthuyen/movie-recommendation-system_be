@@ -3,7 +3,7 @@ import { Expose } from 'class-transformer';
 
 export class SimilarMovieResponseDto extends MovieResponseDto {
   @Expose()
-  similarityScore: number;
+  score: number;
 
   @Expose()
   rank?: number;
@@ -11,7 +11,7 @@ export class SimilarMovieResponseDto extends MovieResponseDto {
 
 export class HybridMovieResponseDto extends MovieResponseDto {
   @Expose()
-  hybridScore: number;
+  score: number;
 
   @Expose()
   rank?: number;

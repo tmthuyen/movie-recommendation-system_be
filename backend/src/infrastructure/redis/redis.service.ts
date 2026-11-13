@@ -118,6 +118,35 @@ export class RedisService implements OnModuleDestroy {
     return this.redisClient.lpop(key);
   }
 
+  // sorted set
+  async zadd(
+    key: string,
+    entries: Array<{ score: number; member: string }>,
+    ttlSeconds: number,
+  ): Promise<void> {
+    if (entries.length === 0) return;
+
+    const args = entries.flatMap(entry => [entry.score, entry.member]);
+    await this.redisClient
+      .multi()
+      .zadd(key, ...args)
+      .expire(key, ttlSeconds)
+      .exec();
+  }
+
+  async zrangeByScore(
+    key: string,
+    min: string | number,
+    max: string | number,
+    limit: number,
+  ): Promise<string[]> {
+    return this.redisClient.zrangebyscore(key, min, max, 'LIMIT', 0, limit);
+  }
+
+  async zcard(key: string): Promise<number> {
+    return this.redisClient.zcard(key);
+  }
+
   onModuleDestroy() {
     this.redisClient.disconnect();
   }

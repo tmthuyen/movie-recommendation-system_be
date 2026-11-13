@@ -20,15 +20,31 @@ type RedisMock = Record<
   | 'lrange'
   | 'lrem'
   | 'lpop'
+  | 'multi'
+  | 'zrangebyscore'
+  | 'zcard'
   | 'disconnect',
   jest.Mock
 >;
 
 describe('RedisService', () => {
   let client: RedisMock;
+  let multi: {
+    zadd: jest.Mock;
+    expire: jest.Mock;
+    exec: jest.Mock;
+  };
   let service: RedisService;
 
   beforeEach(() => {
+    multi = {
+      zadd: jest.fn(),
+      expire: jest.fn(),
+      exec: jest.fn().mockResolvedValue([]),
+    };
+    multi.zadd.mockReturnValue(multi);
+    multi.expire.mockReturnValue(multi);
+
     client = {
       set: jest.fn().mockResolvedValue('OK'),
       get: jest.fn().mockResolvedValue(null),
@@ -47,6 +63,9 @@ describe('RedisService', () => {
       lrange: jest.fn().mockResolvedValue([]),
       lrem: jest.fn().mockResolvedValue(1),
       lpop: jest.fn().mockResolvedValue(null),
+      multi: jest.fn(() => multi),
+      zrangebyscore: jest.fn().mockResolvedValue([]),
+      zcard: jest.fn().mockResolvedValue(0),
       disconnect: jest.fn(),
     };
 
@@ -172,6 +191,52 @@ describe('RedisService', () => {
       expect(client.lrange).toHaveBeenCalledWith('queue', 0, -1);
       expect(client.lrem).toHaveBeenCalledWith('queue', 1, 'a');
       expect(client.lpop).toHaveBeenCalledWith('queue');
+    });
+  });
+
+  describe('sorted set', () => {
+    it('zadd ghi nhiều entry trong một multi kèm expire', async () => {
+      await service.zadd(
+        'rec:semantic:k100',
+        [
+          { score: 1, member: '{"id":1,"rank":1,"score":0.9}' },
+          { score: 2, member: '{"id":2,"rank":2,"score":0.8}' },
+        ],
+        900,
+      );
+
+      expect(multi.zadd).toHaveBeenCalledWith(
+        'rec:semantic:k100',
+        1,
+        '{"id":1,"rank":1,"score":0.9}',
+        2,
+        '{"id":2,"rank":2,"score":0.8}',
+      );
+      expect(multi.expire).toHaveBeenCalledWith('rec:semantic:k100', 900);
+      expect(multi.exec).toHaveBeenCalledTimes(1);
+    });
+
+    it('zrangeByScore truyền LIMIT 0 limit', async () => {
+      client.zrangebyscore.mockResolvedValue(['a', 'b']);
+
+      await expect(
+        service.zrangeByScore('rec:semantic:k100', '(2', '+inf', 12),
+      ).resolves.toEqual(['a', 'b']);
+      expect(client.zrangebyscore).toHaveBeenCalledWith(
+        'rec:semantic:k100',
+        '(2',
+        '+inf',
+        'LIMIT',
+        0,
+        12,
+      );
+    });
+
+    it('zcard trả số phần tử trong set', async () => {
+      client.zcard.mockResolvedValue(5);
+
+      await expect(service.zcard('rec:semantic:k100')).resolves.toBe(5);
+      expect(client.zcard).toHaveBeenCalledWith('rec:semantic:k100');
     });
   });
 

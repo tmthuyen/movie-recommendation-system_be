@@ -18,7 +18,10 @@ export interface CursorPagination {
   limit: number;
   total: number;
   hasMore: boolean;
-  nextCursor: string | null;
+  /**
+   * Similar dùng cursor opaque (string); semantic/for-you dùng rank (number).
+   */
+  nextCursor: string | number | null;
 }
 
 export interface ResultWithCursorPagination<T> {

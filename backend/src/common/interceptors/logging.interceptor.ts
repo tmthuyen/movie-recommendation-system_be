@@ -31,7 +31,7 @@ export class LoggingInterceptor implements NestInterceptor {
       this.logger.warn('Missing request ID or kong ID');
     }
 
-    this.logger.log(`[Trace ID]: ${traceID} - [Kong ID]: ${kongID}`);
+    this.logger.log(`[trace_id=${traceID}] - [kong_id=${kongID}]`);
     this.logger.log(`→ ${method} ${originalUrl} - ${ip} - ${userAgent}`);
 
     return next.handle().pipe(

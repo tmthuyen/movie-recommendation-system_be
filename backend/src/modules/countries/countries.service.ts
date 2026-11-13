@@ -9,7 +9,10 @@ import { CreateCountryDto } from './dto/create-country.dto';
 import { UpdateCountryDto } from './dto/update-country.dto';
 import { ICountryRepository } from './countries.repository';
 import { PaginationDto } from '@/common/dtos/pagination.dto';
-import { ICacheService } from '@/infrastructure/cache/redis-cache.service';
+import {
+  CACHE_SERVICE,
+  type ICacheService,
+} from '@/infrastructure/cache/redis-cache.service';
 import { CacheKeys, CacheTtl } from '@/infrastructure/cache/cache.keys';
 import { CountryListCacheSchema } from '@/infrastructure/cache/cache.schemas';
 
@@ -20,7 +23,7 @@ export class CountriesService {
   constructor(
     @Inject(ICountryRepository)
     private readonly repo: ICountryRepository,
-    @Inject(ICacheService) private readonly cache: ICacheService,
+    @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
   ) {}
 
   async create(createCountryDto: CreateCountryDto) {

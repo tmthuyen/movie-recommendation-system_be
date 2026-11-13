@@ -1,17 +1,76 @@
 import { AppException } from '@/common/custom-exception/app-exception';
 import { HttpStatus } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { RecommendationsService } from './recommendations.service';
 import { MoviesService } from '@/modules/movies/movies.service';
 import { FakeCacheService } from '@/infrastructure/cache/testing/fake-cache.service';
+import { RedisService } from '@/infrastructure/redis/redis.service';
 import {
   encodeCursor,
   fingerprintIds,
-} from '@/common/utlils/cursor-pagination.util';
+} from '@/common/utils/cursor-pagination.util';
+
+/** Redis sorted set tối giản cho test (score = rank). */
+function createFakeRedis() {
+  const store = new Map<string, Array<{ score: number; member: string }>>();
+
+  return {
+    zadd: jest.fn(
+      (
+        key: string,
+        entries: Array<{ score: number; member: string }>,
+      ): Promise<void> => {
+        const current = store.get(key) ?? [];
+        for (const entry of entries) {
+          const index = current.findIndex(item => item.member === entry.member);
+          if (index >= 0) current[index] = entry;
+          else current.push(entry);
+        }
+        store.set(key, current);
+        return Promise.resolve();
+      },
+    ),
+    zrangeByScore: jest.fn(
+      (
+        key: string,
+        min: string | number,
+        max: string | number,
+        limit: number,
+      ): Promise<string[]> => {
+        const exclusive = typeof min === 'string' && min.startsWith('(');
+        const minValue = Number(
+          typeof min === 'string' ? min.replace('(', '') : min,
+        );
+        const maxValue =
+          max === '+inf'
+            ? Number.POSITIVE_INFINITY
+            : Number(typeof max === 'string' ? max.replace('(', '') : max);
+
+        return Promise.resolve(
+          [...(store.get(key) ?? [])]
+            .sort((a, b) => a.score - b.score)
+            .filter(item =>
+              exclusive ? item.score > minValue : item.score >= minValue,
+            )
+            .filter(item => item.score <= maxValue)
+            .slice(0, limit)
+            .map(item => item.member),
+        );
+      },
+    ),
+    zcard: jest.fn((key: string): Promise<number> =>
+      Promise.resolve(store.get(key)?.length ?? 0),
+    ),
+  };
+}
 
 describe('RecommendationsService', () => {
   let service: RecommendationsService;
   let cache: FakeCacheService;
+  let redis: {
+    zadd: jest.Mock;
+    zrangeByScore: jest.Mock;
+    zcard: jest.Mock;
+  };
   let movieService: { findOne: jest.Mock; findByIds: jest.Mock };
 
   const buildAiResponse = (overrides: Record<string, unknown> = {}) => ({
@@ -70,10 +129,12 @@ describe('RecommendationsService', () => {
 
     cache = new FakeCacheService();
 
+    redis = createFakeRedis();
+
     service = new RecommendationsService(
       movieService as unknown as MoviesService,
       cache,
-      { get: () => '100' } as unknown as ConfigService,
+      redis,
     );
   });
 
@@ -96,12 +157,12 @@ describe('RecommendationsService', () => {
       expect(res.result).toHaveLength(2);
       expect(res.result[0]).toMatchObject({
         id: 1,
-        similarityScore: 0.92,
+        score: 0.92,
         rank: 1,
       });
       expect(res.result[1]).toMatchObject({
         id: 2,
-        similarityScore: 0.81,
+        score: 0.81,
         rank: 2,
       });
     });
@@ -366,51 +427,97 @@ describe('RecommendationsService', () => {
     });
   });
 
-  describe('semanticSearch & semanticSearchByCursor', () => {
-    it('gọi ai-service /semantic-search, hydrate từ DB và cache snapshot', async () => {
-      const fetchMock = mockFetchJson(buildAiResponseForIds([1, 2, 3]));
+  describe('semanticSearch', () => {
+    const buildSemanticResponse = (ids: number[]) => ({
+      result: ids.map(id => ({
+        id,
+        title: `Phim ${id}`,
+        similarityScore: 1 - id / 100,
+        score: 1 - id / 100,
+      })),
+      pagination: { total: ids.length, totalPages: 1, page: 1, limit: 100 },
+    });
 
-      const res = await service.semanticSearch('du hành vũ trụ', 2);
+    it('gọi ai-service với keyword + topK=window, map score/rank', async () => {
+      const fetchMock = mockFetchJson(buildSemanticResponse([1, 2]));
 
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const res = await service.semanticSearch('hành động', 1);
+
       const calledUrl = fetchMock.mock.calls[0][0] as string;
       expect(calledUrl).toContain('/semantic-search?keyword=');
       expect(calledUrl).toContain('topK=100');
-      expect(res.result.map(item => item.id)).toEqual([1, 2]);
+      expect(res.result).toHaveLength(1);
+      expect(res.result[0]).toMatchObject({
+        id: 1,
+        score: 0.99,
+        rank: 1,
+      });
       expect(res.pagination).toEqual({
         page: 1,
-        limit: 2,
-        total: 3,
+        limit: 1,
+        total: 2,
         totalPages: 1,
       });
-
-      // Lần 2 dùng cache
-      await service.semanticSearch('du hành vũ trụ', 2);
-      expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
-    it('semanticSearchByCursor phân trang qua nextCursor không gọi lại AI', async () => {
-      const fetchMock = mockFetchJson(buildAiResponseForIds([1, 2, 3, 4]));
+    it('trang sau đọc ZSET, không gọi ai-service lần nữa', async () => {
+      const fetchMock = mockFetchJson(buildSemanticResponse([1, 2, 3, 4, 5]));
 
-      const page1 = await service.semanticSearchByCursor('siêu anh hùng', {
+      const page1 = await service.semanticSearchByCursor('hành động', {
         limit: 2,
       });
-      const page2 = await service.semanticSearchByCursor('siêu anh hùng', {
+      const page2 = await service.semanticSearchByCursor('hành động', {
         limit: 2,
-        cursor: page1.pagination.nextCursor as string,
+        cursor: String(page1.pagination.nextCursor),
+      });
+      const page3 = await service.semanticSearchByCursor('hành động', {
+        limit: 2,
+        cursor: String(page2.pagination.nextCursor),
       });
 
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(page1.result.map(item => item.id)).toEqual([1, 2]);
-      expect(page1.pagination.hasMore).toBe(true);
       expect(page2.result.map(item => item.id)).toEqual([3, 4]);
-      expect(page2.pagination.hasMore).toBe(false);
+      expect(page3.result.map(item => item.id)).toEqual([5]);
+      expect(page3.pagination).toEqual({
+        limit: 2,
+        total: 5,
+        hasMore: false,
+        nextCursor: null,
+      });
     });
 
-    it('từ khóa rỗng → 400 INVALID_KEYWORD', async () => {
-      await expect(service.semanticSearch('   ')).rejects.toMatchObject({
+    it('cursor là rank (số) — nextCursor = rank cuối trang', async () => {
+      mockFetchJson(buildSemanticResponse([1, 2, 3]));
+
+      const page1 = await service.semanticSearchByCursor('hành động', {
+        limit: 2,
+      });
+
+      expect(page1.pagination).toEqual({
+        limit: 2,
+        total: 3,
+        hasMore: true,
+        nextCursor: 2,
+      });
+    });
+
+    it('limit vượt max bị clamp về 50', async () => {
+      mockFetchJson(buildSemanticResponse([1, 2, 3]));
+
+      const res = await service.semanticSearchByCursor('hành động', {
+        limit: 100,
+      });
+
+      expect(res.pagination.limit).toBe(50);
+    });
+
+    it('ai-service trả lỗi HTTP → AppException AI_SERVICE_ERROR', async () => {
+      mockFetchJson({ detail: 'boom' }, 500);
+
+      await expect(service.semanticSearch('hành động')).rejects.toMatchObject({
         statusCode: HttpStatus.BAD_REQUEST,
-        errorCode: 'INVALID_KEYWORD',
+        errorCode: 'AI_SERVICE_ERROR',
       });
     });
   });
@@ -448,13 +555,19 @@ describe('RecommendationsService', () => {
     it('searchLexicalSemanticRerankByCursor hỗ trợ load-more bằng cursor', async () => {
       const fetchMock = mockFetchJson(buildAiResponseForIds([2, 1, 3]));
 
-      const page1 = await service.searchLexicalSemanticRerankByCursor('marvel', {
-        limit: 2,
-      });
-      const page2 = await service.searchLexicalSemanticRerankByCursor('marvel', {
-        limit: 2,
-        cursor: page1.pagination.nextCursor as string,
-      });
+      const page1 = await service.searchLexicalSemanticRerankByCursor(
+        'marvel',
+        {
+          limit: 2,
+        },
+      );
+      const page2 = await service.searchLexicalSemanticRerankByCursor(
+        'marvel',
+        {
+          limit: 2,
+          cursor: page1.pagination.nextCursor as string,
+        },
+      );
 
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(page1.result.map(item => item.id)).toEqual([2, 1]);

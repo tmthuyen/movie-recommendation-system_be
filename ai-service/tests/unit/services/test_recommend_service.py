@@ -194,6 +194,7 @@ class TestFormatItem:
             "id": 7,
             "movieId": 7,
             "similarityScore": 0.1235,
+            "score": 0.1235,
             "title": "Dune Vi",
             "titleVi": "Dune Vi",
             "overview": "A desert planet",

@@ -1,6 +1,9 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
-import { ICacheService } from '@/infrastructure/cache/redis-cache.service';
+import {
+  CACHE_SERVICE,
+  type ICacheService,
+} from '@/infrastructure/cache/redis-cache.service';
 import { CacheKeys, CacheTtl } from '@/infrastructure/cache/cache.keys';
 import { InteractionStatsCacheSchema } from '@/infrastructure/cache/cache.schemas';
 
@@ -33,7 +36,7 @@ interface MovieInteractionStatsRow {
 export class MovieInteractionStatsService {
   constructor(
     private readonly dataSource: DataSource,
-    @Inject(ICacheService) private readonly cache: ICacheService,
+    @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
   ) {}
 
   async getStats(
