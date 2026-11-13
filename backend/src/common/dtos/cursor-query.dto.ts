@@ -21,6 +21,20 @@ export class CursorQueryDto {
   cursor?: string;
 
   @ApiPropertyOptional({
+    description: 'Từ khóa tìm kiếm.',
+  })
+  @IsOptional()
+  @IsString()
+  keyword?: string;
+
+  @ApiPropertyOptional({
+    description: 'Alias từ khóa tìm kiếm (query).',
+  })
+  @IsOptional()
+  @IsString()
+  query?: string;
+
+  @ApiPropertyOptional({
     description: 'Số item mỗi trang.',
     default: DEFAULT_CURSOR_LIMIT,
     minimum: 1,

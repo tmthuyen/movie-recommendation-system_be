@@ -182,8 +182,8 @@ async function bootstrap() {
 
         const countryData = processedCountries[i];
         const country = manager.create(Country, {
-          en_name: countryData.en_name,
-          vi_name: countryData.vi_name,
+          enName: countryData.en_name,
+          viName: countryData.vi_name || countryData.en_name,
           code: countryData.code,
           region: countryData.region,
           subregion: countryData.subregion,
@@ -215,3 +215,4 @@ bootstrap().catch(err => {
 });
 
 // run code: npx ts-node -r tsconfig-paths/register src/seed/country.seed.ts
+

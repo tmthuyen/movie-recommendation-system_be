@@ -37,6 +37,7 @@ import {
   RecommendationItemSchema,
   RecommendationSnapshotSchema,
 } from '@/infrastructure/cache/cache.schemas';
+import { createHash } from 'crypto';
 import { z } from 'zod';
 
 const AI_SERVICE_URL =
@@ -50,6 +51,13 @@ const MAX_MISSING_RATIO = 0.3;
 
 type RecommendationItem = z.infer<typeof RecommendationItemSchema>;
 
+function hashKeyword(keyword: string): string {
+  return createHash('sha1')
+    .update(keyword.trim().toLowerCase())
+    .digest('hex')
+    .slice(0, 12);
+}
+
 export const IRecommendationsService = Symbol('IRecommendationsService');
 export interface IRecommendationsService {
   getSimilarMovies(
@@ -60,9 +68,25 @@ export interface IRecommendationsService {
     movieId: number,
     query: CursorQueryDto,
   ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>>;
-  semanticSearch(keyword: string, topK?: number): Promise<any>;
+  semanticSearch(
+    keyword: string,
+    topK?: number,
+  ): Promise<ResultWithPagination<SimilarMovieResponseDto>>;
+  semanticSearchByCursor(
+    keyword: string,
+    query: CursorQueryDto,
+  ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>>;
+  searchLexicalSemanticRerank(
+    keyword: string,
+    topK?: number,
+  ): Promise<ResultWithPagination<SimilarMovieResponseDto>>;
+  searchLexicalSemanticRerankByCursor(
+    keyword: string,
+    query: CursorQueryDto,
+  ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>>;
   hybridSearch(hybridSearchQuery: HybridSearchQuery): Promise<any>;
 }
+
 @Injectable()
 export class RecommendationsService implements IRecommendationsService {
   private readonly logger = new Logger(RecommendationsService.name);
@@ -165,9 +189,214 @@ export class RecommendationsService implements IRecommendationsService {
     };
   }
 
-  async semanticSearch(keyword: string, topK?: number): Promise<any> {}
+  async semanticSearch(
+    keyword: string,
+    topK?: number,
+  ): Promise<ResultWithPagination<SimilarMovieResponseDto>> {
+    const cleanKeyword = (keyword ?? '').trim();
+    if (!cleanKeyword) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'Từ khóa tìm kiếm không được để trống.',
+        'Keyword must not be empty.',
+        'INVALID_KEYWORD',
+      );
+    }
 
-  async hybridSearch(hybridSearchQuery: HybridSearchQuery): Promise<any> {}
+    const requested = Math.min(
+      Math.max(Number(topK) || DEFAULT_TOP_K, 1),
+      this.window,
+    );
+
+    let { key, items } = await this.getSemanticSnapshot(cleanKeyword);
+    let page = await this.hydrate(items.slice(0, requested));
+
+    const expected = Math.min(requested, items.length);
+    if (
+      expected > 0 &&
+      page.result.length < expected * (1 - MAX_MISSING_RATIO)
+    ) {
+      await this.cache.del(key);
+      ({ key, items } = await this.getSemanticSnapshot(cleanKeyword));
+      page = await this.hydrate(
+        items.slice(0, Math.min(requested, items.length)),
+      );
+    }
+
+    return {
+      result: page.result,
+      pagination: {
+        page: 1,
+        limit: requested,
+        total: items.length,
+        totalPages: items.length > 0 ? 1 : 0,
+      },
+    };
+  }
+
+  async semanticSearchByCursor(
+    keyword: string,
+    query: CursorQueryDto,
+  ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>> {
+    const cleanKeyword = (keyword ?? '').trim();
+    if (!cleanKeyword) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'Từ khóa tìm kiếm không được để trống.',
+        'Keyword must not be empty.',
+        'INVALID_KEYWORD',
+      );
+    }
+
+    const limit = clampCursorLimit(
+      query.limit,
+      DEFAULT_CURSOR_LIMIT,
+      MAX_CURSOR_LIMIT,
+    );
+    const { items, version, fingerprint } =
+      await this.getSemanticSnapshot(cleanKeyword);
+    const scope = buildCursorScope('semantic', hashKeyword(cleanKeyword));
+
+    const offset = resolveCursorOffset(
+      query.cursor,
+      { version, scope, fingerprint },
+      items.length,
+    );
+
+    const page = await hydrateCursorPage({
+      items,
+      offset,
+      limit,
+      hydrate: async chunk => (await this.hydrate(chunk)).result,
+    });
+
+    return {
+      result: page.result,
+      pagination: buildCursorPagination({
+        limit,
+        total: items.length,
+        offset: page.nextOffset,
+        version,
+        scope,
+        fingerprint,
+      }),
+    };
+  }
+
+  async searchLexicalSemanticRerank(
+    keyword: string,
+    topK?: number,
+  ): Promise<ResultWithPagination<SimilarMovieResponseDto>> {
+    const cleanKeyword = (keyword ?? '').trim();
+    if (!cleanKeyword) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'Từ khóa tìm kiếm không được để trống.',
+        'Keyword must not be empty.',
+        'INVALID_KEYWORD',
+      );
+    }
+
+    const requested = Math.min(
+      Math.max(Number(topK) || DEFAULT_TOP_K, 1),
+      this.window,
+    );
+
+    let { key, items } = await this.getLexicalRerankSnapshot(cleanKeyword);
+    let page = await this.hydrate(items.slice(0, requested));
+
+    const expected = Math.min(requested, items.length);
+    if (
+      expected > 0 &&
+      page.result.length < expected * (1 - MAX_MISSING_RATIO)
+    ) {
+      await this.cache.del(key);
+      ({ key, items } = await this.getLexicalRerankSnapshot(cleanKeyword));
+      page = await this.hydrate(
+        items.slice(0, Math.min(requested, items.length)),
+      );
+    }
+
+    return {
+      result: page.result,
+      pagination: {
+        page: 1,
+        limit: requested,
+        total: items.length,
+        totalPages: items.length > 0 ? 1 : 0,
+      },
+    };
+  }
+
+  async searchLexicalSemanticRerankByCursor(
+    keyword: string,
+    query: CursorQueryDto,
+  ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>> {
+    const cleanKeyword = (keyword ?? '').trim();
+    if (!cleanKeyword) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'Từ khóa tìm kiếm không được để trống.',
+        'Keyword must not be empty.',
+        'INVALID_KEYWORD',
+      );
+    }
+
+    const limit = clampCursorLimit(
+      query.limit,
+      DEFAULT_CURSOR_LIMIT,
+      MAX_CURSOR_LIMIT,
+    );
+    const { items, version, fingerprint } =
+      await this.getLexicalRerankSnapshot(cleanKeyword);
+    const scope = buildCursorScope(
+      'lexical-rerank',
+      hashKeyword(cleanKeyword),
+    );
+
+    const offset = resolveCursorOffset(
+      query.cursor,
+      { version, scope, fingerprint },
+      items.length,
+    );
+
+    const page = await hydrateCursorPage({
+      items,
+      offset,
+      limit,
+      hydrate: async chunk => (await this.hydrate(chunk)).result,
+    });
+
+    return {
+      result: page.result,
+      pagination: buildCursorPagination({
+        limit,
+        total: items.length,
+        offset: page.nextOffset,
+        version,
+        scope,
+        fingerprint,
+      }),
+    };
+  }
+
+  async hybridSearch(hybridSearchQuery: HybridSearchQuery): Promise<any> {
+    if (hybridSearchQuery?.keyword) {
+      return this.searchLexicalSemanticRerank(
+        hybridSearchQuery.keyword,
+        hybridSearchQuery.topK,
+      );
+    }
+    return {
+      result: [],
+      pagination: {
+        page: hybridSearchQuery?.page ?? 1,
+        limit: hybridSearchQuery?.pageSize ?? DEFAULT_TOP_K,
+        total: 0,
+        totalPages: 0,
+      },
+    };
+  }
 
   private async getSnapshot(movieId: number): Promise<{
     key: string;
@@ -195,6 +424,62 @@ export class RecommendationsService implements IRecommendationsService {
     };
   }
 
+  private async getSemanticSnapshot(keyword: string): Promise<{
+    key: string;
+    items: RecommendationItem[];
+    version: number;
+    fingerprint: string;
+  }> {
+    const version = await this.cache.getCounter(CacheKeys.movie.listVersion());
+    const key = CacheKeys.recommendation.semantic(
+      keyword,
+      this.window,
+      version,
+    );
+
+    const items = await this.cache.getOrLoad<RecommendationItem[]>({
+      key,
+      schema: RecommendationSnapshotSchema,
+      ttlSeconds: CacheTtl.recommendation,
+      loader: () => this.loadSemanticSnapshotFromAi(keyword, this.window),
+    });
+
+    return {
+      key,
+      items,
+      version,
+      fingerprint: fingerprintIds(items.map(item => item.id)),
+    };
+  }
+
+  private async getLexicalRerankSnapshot(keyword: string): Promise<{
+    key: string;
+    items: RecommendationItem[];
+    version: number;
+    fingerprint: string;
+  }> {
+    const version = await this.cache.getCounter(CacheKeys.movie.listVersion());
+    const key = CacheKeys.recommendation.lexicalRerank(
+      keyword,
+      this.window,
+      version,
+    );
+
+    const items = await this.cache.getOrLoad<RecommendationItem[]>({
+      key,
+      schema: RecommendationSnapshotSchema,
+      ttlSeconds: CacheTtl.recommendation,
+      loader: () => this.loadLexicalRerankSnapshotFromAi(keyword, this.window),
+    });
+
+    return {
+      key,
+      items,
+      version,
+      fingerprint: fingerprintIds(items.map(item => item.id)),
+    };
+  }
+
   /** Lấy snapshot từ ai-service và chuẩn hoá `rank` về 1..n. */
   private async loadSnapshotFromAi(
     movieId: number,
@@ -203,14 +488,83 @@ export class RecommendationsService implements IRecommendationsService {
     const res = await fetch(
       `${AI_SERVICE_URL}/similar/${movieId}?topK=${window}`,
     );
+    return this.parseAiSnapshotResponse(
+      res,
+      'Dữ liệu trả về phim liên quan không hợp lệ từ AI service',
+      'The AI service did not return a valid response for similar movies.',
+    );
+  }
 
+  /** Lấy snapshot semantic search từ ai-service. */
+  private async loadSemanticSnapshotFromAi(
+    keyword: string,
+    window: number,
+  ): Promise<RecommendationItem[]> {
+    const url = `${AI_SERVICE_URL}/semantic-search?keyword=${encodeURIComponent(
+      keyword,
+    )}&topK=${window}`;
+    const res = await fetch(url);
+    return this.parseAiSnapshotResponse(
+      res,
+      'Dữ liệu trả về tìm kiếm ngữ nghĩa không hợp lệ từ AI service',
+      'The AI service did not return a valid response for semantic search.',
+    );
+  }
+
+  /** Tìm ứng viên Lexical từ PostgreSQL rồi gửi sang AI-Service rerank với Semantic. */
+  private async loadLexicalRerankSnapshotFromAi(
+    keyword: string,
+    window: number,
+  ): Promise<RecommendationItem[]> {
+    let lexicalIds: number[] = [];
+    if (typeof (this.movieService as any).search === 'function') {
+      try {
+        const lexRes = await (this.movieService as any).search({
+          keyword,
+          page: 1,
+          limit: Math.min(window, 50),
+          sort: 'releaseDate:DESC',
+        });
+        if (lexRes && Array.isArray(lexRes.result)) {
+          lexicalIds = lexRes.result
+            .map((m: { id: number }) => Number(m.id))
+            .filter((id: number) => Number.isFinite(id) && id > 0);
+        }
+      } catch (err) {
+        this.logger.warn(
+          `Không thể lấy lexical candidates từ PostgreSQL cho keyword="${keyword}": ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    }
+
+    const res = await fetch(`${AI_SERVICE_URL}/search/rerank`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        keyword,
+        lexicalIds,
+        topK: window,
+        candidateK: window,
+      }),
+    });
+
+    return this.parseAiSnapshotResponse(
+      res,
+      'Dữ liệu trả về rerank tìm kiếm không hợp lệ từ AI service',
+      'The AI service did not return a valid response for lexical-semantic rerank.',
+    );
+  }
+
+  private async parseAiSnapshotResponse(
+    res: Response,
+    viMessage: string,
+    enMessage: string,
+  ): Promise<RecommendationItem[]> {
     let parsedResponse: SimilarFromAiServiceResponse;
     try {
       const raw = await res.json();
-      // this.logger.log(
-      //   `Dữ liệu trả về từ AI service (status=${res.status}): ${JSON.stringify(raw)}`,
-      // );
-
       parsedResponse = SimilarFromAiServiceResponseSchema.parse(raw);
     } catch (error) {
       this.logger.error(
@@ -220,8 +574,8 @@ export class RecommendationsService implements IRecommendationsService {
       );
       throw new AppException(
         HttpStatus.BAD_REQUEST,
-        'Dữ liệu trả về phim liên quan không hợp lệ từ AI service',
-        'The AI service did not return a valid response for similar movies.',
+        viMessage,
+        enMessage,
         'AI_SERVICE_ERROR',
       );
     }
@@ -230,7 +584,7 @@ export class RecommendationsService implements IRecommendationsService {
       throw new AppException(
         HttpStatus.BAD_REQUEST,
         'Dữ liệu trả về không hợp lệ từ AI service',
-        'The AI service did not return a valid response for similar movies.',
+        enMessage,
         'AI_SERVICE_ERROR',
       );
     }
@@ -265,24 +619,12 @@ export class RecommendationsService implements IRecommendationsService {
 
     const movieById = new Map<number, Movie>();
     for (const movie of movies) {
-      //  check type of movie.id
       let id = movie.id;
       if (typeof movie.id !== 'number') {
         id = Number(movie.id);
       }
       movieById.set(id, movie);
     }
-
-    // this.logger.log(`
-    //   item.id: ${items[0]?.id} - type: ${typeof items[0]?.id}
-    //   movie.id: ${movies[0]?.id} - type: ${typeof movies[0]?.id}
-    // `);
-
-    // this.logger.log(`
-    //   Movie Rec: ${itemIds.join(', ')}\n
-    //   Movie DB: ${movies.map(m => m.id).join(', ')}\n
-    //   Movie Map: ${Array.from(movieById.keys()).join(', ')}
-    //   `);
 
     const mappedData = items
       .map(item => {

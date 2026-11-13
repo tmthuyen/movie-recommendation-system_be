@@ -121,6 +121,22 @@ export const CacheKeys = {
       ),
     similarVersion: (movieId: number) =>
       buildKey('recommendation', 'ver', 'similar', movieId),
+    semantic: (keyword: string, window: number, version: number) =>
+      buildKey(
+        'recommendation',
+        'semantic',
+        `q${hashFilters({ keyword: keyword.trim().toLowerCase() })}`,
+        `k${window}`,
+        `v${version}`,
+      ),
+    lexicalRerank: (keyword: string, window: number, version: number) =>
+      buildKey(
+        'recommendation',
+        'lexical-rerank',
+        `q${hashFilters({ keyword: keyword.trim().toLowerCase() })}`,
+        `k${window}`,
+        `v${version}`,
+      ),
     globalVersion: () => buildKey('recommendation', 'ver', 'global'),
   },
 } as const;

@@ -8,6 +8,9 @@ describe('RecommendationsController', () => {
     getSimilarMovies: jest.Mock;
     getSimilarMoviesByCursor: jest.Mock;
     semanticSearch: jest.Mock;
+    semanticSearchByCursor: jest.Mock;
+    searchLexicalSemanticRerank: jest.Mock;
+    searchLexicalSemanticRerankByCursor: jest.Mock;
     hybridSearch: jest.Mock;
   };
 
@@ -16,6 +19,9 @@ describe('RecommendationsController', () => {
       getSimilarMovies: jest.fn(),
       getSimilarMoviesByCursor: jest.fn(),
       semanticSearch: jest.fn(),
+      semanticSearchByCursor: jest.fn(),
+      searchLexicalSemanticRerank: jest.fn(),
+      searchLexicalSemanticRerankByCursor: jest.fn(),
       hybridSearch: jest.fn(),
     };
 
@@ -119,18 +125,87 @@ describe('RecommendationsController', () => {
     ).toHaveBeenCalledWith(12, { limit: 12 });
   });
 
-  it('GET /semantic-search hiện là stub trả {status,message,data:[]} (không envelope)', () => {
-    const res = controller.semanticSearch('hành động', 10);
+  it('GET /semantic-search trả envelope chuẩn + result/pagination từ service', async () => {
+    recommendationsService.semanticSearch.mockResolvedValue({
+      result: [{ id: 1, title: 'Phim', similarityScore: 0.85, rank: 1 }],
+      pagination: { page: 1, limit: 10, total: 1, totalPages: 1 },
+    });
 
+    const res = await controller.semanticSearch('hành động', 10);
+
+    expect(recommendationsService.semanticSearch).toHaveBeenCalledWith(
+      'hành động',
+      10,
+    );
     expect(res).toEqual({
-      status: 'success',
+      success: true,
+      statusCode: 200,
       message: expect.any(String),
-      data: [],
+      result: [{ id: 1, title: 'Phim', similarityScore: 0.85, rank: 1 }],
+      pagination: { page: 1, limit: 10, total: 1, totalPages: 1 },
     });
   });
 
-  it('GET /hybrid-search hiện là stub trả {status,message,data:[]}', () => {
-    const res = controller.hybridSearch({
+  it('GET /semantic-search/cursor trả envelope + pagination cursor', async () => {
+    recommendationsService.semanticSearchByCursor.mockResolvedValue({
+      result: [{ id: 1, title: 'Phim', similarityScore: 0.85, rank: 1 }],
+      pagination: {
+        limit: 12,
+        total: 10,
+        hasMore: false,
+        nextCursor: null,
+      },
+    });
+
+    const res = await controller.semanticSearchByCursor('hành động', undefined, {
+      limit: 12,
+    });
+
+    expect(recommendationsService.semanticSearchByCursor).toHaveBeenCalledWith(
+      'hành động',
+      { limit: 12 },
+    );
+    expect(res).toEqual({
+      success: true,
+      statusCode: 200,
+      message: expect.any(String),
+      result: [{ id: 1, title: 'Phim', similarityScore: 0.85, rank: 1 }],
+      pagination: {
+        limit: 12,
+        total: 10,
+        hasMore: false,
+        nextCursor: null,
+      },
+    });
+  });
+
+  it('GET /search-rerank trả envelope chuẩn + result/pagination từ service', async () => {
+    recommendationsService.searchLexicalSemanticRerank.mockResolvedValue({
+      result: [{ id: 2, title: 'Phim B', similarityScore: 0.91, rank: 1 }],
+      pagination: { page: 1, limit: 10, total: 1, totalPages: 1 },
+    });
+
+    const res = await controller.searchLexicalSemanticRerank('vũ trụ', 10);
+
+    expect(
+      recommendationsService.searchLexicalSemanticRerank,
+    ).toHaveBeenCalledWith('vũ trụ', 10);
+    expect(res).toEqual({
+      success: true,
+      statusCode: 200,
+      message: expect.any(String),
+      result: [{ id: 2, title: 'Phim B', similarityScore: 0.91, rank: 1 }],
+      pagination: { page: 1, limit: 10, total: 1, totalPages: 1 },
+    });
+  });
+
+  it('GET /hybrid-search trả envelope chuẩn từ service', async () => {
+    recommendationsService.hybridSearch.mockResolvedValue({
+      result: [{ id: 3, title: 'Phim C', similarityScore: 0.88, rank: 1 }],
+      pagination: { page: 1, limit: 10, total: 1, totalPages: 1 },
+    });
+
+    const res = await controller.hybridSearch({
       userId: 'user-1',
       keyword: 'hành động',
       topK: 10,
@@ -139,9 +214,11 @@ describe('RecommendationsController', () => {
     });
 
     expect(res).toEqual({
-      status: 'success',
+      success: true,
+      statusCode: 200,
       message: expect.any(String),
-      data: [],
+      result: [{ id: 3, title: 'Phim C', similarityScore: 0.88, rank: 1 }],
+      pagination: { page: 1, limit: 10, total: 1, totalPages: 1 },
     });
   });
 });

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -26,6 +27,7 @@ from services.mapping_service import mapping_service
 from services.recommend_service import RecommendService
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -67,16 +69,25 @@ async def lifespan(application: FastAPI):
     # 4. Khoi tao MessageQueue -> inject handler -> bat dau consume
     mq = MessageQueue(settings)
     mq.set_handler(event_handler)
-    await mq.start()
+    try:
+        await mq.start()
+    except Exception as exc:
+        logger.warning("Khong the ket noi RabbitMQ (bo qua de tiep tuc chay API): %s", exc)
 
     # 4.5. Khoi tao InteractionQueue
     interaction_mq = InteractionQueue(settings)
     interaction_mq.set_handler(interaction_handler)
-    await interaction_mq.start()
+    try:
+        await interaction_mq.start()
+    except Exception as exc:
+        logger.warning("Khong the ket noi InteractionQueue (bo qua): %s", exc)
 
     # 5. Cac service khac
     redis_store = RedisStore(settings)
-    await redis_store.start()
+    try:
+        await redis_store.start()
+    except Exception as exc:
+        logger.warning("Khong the ket noi Redis (bo qua): %s", exc)
 
     # 6. Load mapping (User UUID <-> Idx) from R2 storage on startup
     Path("data/training/models").mkdir(parents=True, exist_ok=True)
@@ -167,3 +178,7 @@ setup_middleware(app)
 
 # Setup Prometheus monitoring
 configure_monitoring(app=app)
+
+# Alias for uvicorn
+application = app
+

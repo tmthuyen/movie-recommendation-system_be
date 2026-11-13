@@ -19,7 +19,6 @@ export class RecommendationsController {
     @Param('id') movieId: number,
     @Query('topK') topK?: number,
   ) {
-    // receive log
     this.logger.log(
       `Received request for similar movies of movieId=${movieId} with topK=${topK}`,
     );
@@ -80,27 +79,146 @@ export class RecommendationsController {
     };
   }
 
-  // /api/recommendations/semantic-search?keyword=...&topK=10
+  // /api/recommendations/semantic-search?keyword=...&topK=10 (hoặc query=...)
   @Get('/semantic-search')
-  semanticSearch(
-    @Query('keyword') keyword: string,
+  @ApiOperation({
+    summary: 'Tìm kiếm phim theo ngữ nghĩa (Semantic Search)',
+  })
+  async semanticSearch(
+    @Query('keyword') keyword?: string,
     @Query('topK') topK?: number,
+    @Query('query') queryAlias?: string,
   ) {
+    const searchKeyword =
+      keyword || queryAlias || cursorQuery?.keyword || cursorQuery?.query || '';
+    this.logger.log(
+      `Received request for semantic search keyword="${searchKeyword}", topK=${topK}`,
+    );
+
+    const res = await this.recommendationsService.semanticSearch(
+      searchKeyword,
+      Number(topK),
+    );
+
     return {
-      status: 'success',
-      message:
-        'This endpoint is a placeholder for semantic search recommendation.',
-      data: [],
+      success: true,
+      statusCode: 200,
+      message: 'Tìm kiếm phim theo ngữ nghĩa thành công.',
+      result: res.result,
+      pagination: res.pagination,
+    };
+  }
+
+  // /api/recommendations/semantic-search/cursor?keyword=...&limit=12&cursor=...
+  @Get('/semantic-search/cursor')
+  @ApiOperation({
+    summary: 'Load-more tìm kiếm ngữ nghĩa (Semantic Search) bằng cursor',
+    description:
+      'Trang đầu bỏ trống cursor. Dùng nextCursor trong pagination cho trang kế.',
+  })
+  async semanticSearchByCursor(
+    @Query('keyword') keyword?: string,
+    @Query('query') queryAlias?: string,
+    @Query() cursorQuery?: CursorQueryDto,
+  ) {
+    const searchKeyword =
+      keyword || queryAlias || cursorQuery?.keyword || cursorQuery?.query || '';
+    this.logger.log(
+      `Received request for semantic search by cursor keyword="${searchKeyword}", limit=${cursorQuery?.limit}`,
+    );
+
+    const res = await this.recommendationsService.semanticSearchByCursor(
+      searchKeyword,
+      cursorQuery ?? {},
+    );
+
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Tìm kiếm phim theo ngữ nghĩa thành công.',
+      result: res.result,
+      pagination: res.pagination,
+    };
+  }
+
+  // /api/recommendations/search-rerank?keyword=...&topK=10
+  @Get('/search-rerank')
+  @ApiOperation({
+    summary: 'Tìm kiếm kết hợp Lexical (PostgreSQL) + Semantic Rerank (AI)',
+  })
+  async searchLexicalSemanticRerank(
+    @Query('keyword') keyword?: string,
+    @Query('topK') topK?: number,
+    @Query('query') queryAlias?: string,
+  ) {
+    const searchKeyword =
+      keyword || queryAlias || cursorQuery?.keyword || cursorQuery?.query || '';
+    this.logger.log(
+      `Received request for lexical+semantic rerank keyword="${searchKeyword}", topK=${topK}`,
+    );
+
+    const res = await this.recommendationsService.searchLexicalSemanticRerank(
+      searchKeyword,
+      Number(topK),
+    );
+
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Tìm kiếm kết hợp từ khóa và ngữ nghĩa thành công.',
+      result: res.result,
+      pagination: res.pagination,
+    };
+  }
+
+  // /api/recommendations/search-rerank/cursor?keyword=...&limit=12&cursor=...
+  @Get('/search-rerank/cursor')
+  @ApiOperation({
+    summary: 'Load-more tìm kiếm kết hợp Lexical + Semantic Rerank bằng cursor',
+  })
+  async searchLexicalSemanticRerankByCursor(
+    @Query('keyword') keyword?: string,
+    @Query('query') queryAlias?: string,
+    @Query() cursorQuery?: CursorQueryDto,
+  ) {
+    const searchKeyword =
+      keyword || queryAlias || cursorQuery?.keyword || cursorQuery?.query || '';
+    this.logger.log(
+      `Received request for lexical+semantic rerank cursor keyword="${searchKeyword}", limit=${cursorQuery?.limit}`,
+    );
+
+    const res =
+      await this.recommendationsService.searchLexicalSemanticRerankByCursor(
+        searchKeyword,
+        cursorQuery ?? {},
+      );
+
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Tìm kiếm kết hợp từ khóa và ngữ nghĩa thành công.',
+      result: res.result,
+      pagination: res.pagination,
     };
   }
 
   // /api/recommendations/hybrid-search?userId=...&keyword=...&topK=10&page=1&pageSize=10
   @Get('/hybrid-search')
-  hybridSearch(@Query() hybridSearchQuery: HybridSearchQuery) {
+  async hybridSearch(@Query() hybridSearchQuery: HybridSearchQuery) {
+    const res =
+      await this.recommendationsService.hybridSearch(hybridSearchQuery);
+
     return {
-      status: 'success',
-      message: 'This endpoint is a placeholder for hybrid recommendation.',
-      data: [],
+      success: true,
+      statusCode: 200,
+      message: 'Tìm kiếm lai (Hybrid Search) thành công.',
+      result: res?.result ?? [],
+      pagination: res?.pagination ?? {
+        page: hybridSearchQuery?.page ?? 1,
+        limit: hybridSearchQuery?.pageSize ?? 10,
+        total: 0,
+        totalPages: 0,
+      },
     };
   }
 }

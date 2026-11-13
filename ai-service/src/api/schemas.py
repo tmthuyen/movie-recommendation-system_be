@@ -84,6 +84,22 @@ class SearchRequest(BaseModel):
     page_size: int = Field(default=10, ge=1, le=100)
 
 
+class LexicalSemanticRerankRequest(BaseModel):
+    keyword: str = Field(
+        min_length=1, max_length=500, description="Từ khóa tìm kiếm của người dùng"
+    )
+    lexicalIds: list[int] = Field(
+        default_factory=list,
+        description="Danh sách movie ID tìm được từ PostgreSQL (Lexical Search)",
+    )
+    topK: int = Field(
+        default=100, ge=1, le=200, description="Số lượng kết quả trả về sau rerank"
+    )
+    candidateK: int = Field(
+        default=100, ge=10, le=200, description="Kích thước pool ứng viên Semantic"
+    )
+
+
 class HybridRequest(BaseModel):
     userId: str = Field(
         min_length=1, max_length=100, description="Mã định danh người dùng (UUID)"

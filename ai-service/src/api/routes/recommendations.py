@@ -7,6 +7,7 @@ from api.schemas import (
     ApiResponse,
     CurrentUser,
     HybridRequest,
+    LexicalSemanticRerankRequest,
     PaginatedResponse,
     SearchRequest,
     SimilarMoviesResponse,
@@ -70,6 +71,28 @@ async def semantic_search(
         page=1,
         limit=topK,
         message=f"Tim kiem ngu nghia thanh cong cho tu khoa '{keyword}'",
+    )
+
+
+@router.post("/search/rerank", response_model=PaginatedResponse[list[dict]])
+async def search_lexical_semantic_rerank(
+    body: LexicalSemanticRerankRequest,
+    app_request: Request,
+) -> PaginatedResponse[list[dict]]:
+    """Ket hop danh sach Lexical (tu PostgreSQL) voi Semantic Search (Vector DB) bang RRF."""
+    svc = await _get_recommend_service(app_request)
+    data = await svc.search_lexical_semantic_rerank(
+        query=body.keyword,
+        lexical_ids=body.lexicalIds,
+        top_k=body.topK,
+        candidate_k=body.candidateK,
+    )
+    return paginated(
+        data=data,
+        total=len(data),
+        page=1,
+        limit=body.topK,
+        message=f"Rerank lexical + semantic thanh cong cho tu khoa '{body.keyword}'",
     )
 
 

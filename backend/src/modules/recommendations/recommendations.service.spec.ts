@@ -365,4 +365,93 @@ describe('RecommendationsService', () => {
       );
     });
   });
+
+  describe('semanticSearch & semanticSearchByCursor', () => {
+    it('gọi ai-service /semantic-search, hydrate từ DB và cache snapshot', async () => {
+      const fetchMock = mockFetchJson(buildAiResponseForIds([1, 2, 3]));
+
+      const res = await service.semanticSearch('du hành vũ trụ', 2);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const calledUrl = fetchMock.mock.calls[0][0] as string;
+      expect(calledUrl).toContain('/semantic-search?keyword=');
+      expect(calledUrl).toContain('topK=100');
+      expect(res.result.map(item => item.id)).toEqual([1, 2]);
+      expect(res.pagination).toEqual({
+        page: 1,
+        limit: 2,
+        total: 3,
+        totalPages: 1,
+      });
+
+      // Lần 2 dùng cache
+      await service.semanticSearch('du hành vũ trụ', 2);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('semanticSearchByCursor phân trang qua nextCursor không gọi lại AI', async () => {
+      const fetchMock = mockFetchJson(buildAiResponseForIds([1, 2, 3, 4]));
+
+      const page1 = await service.semanticSearchByCursor('siêu anh hùng', {
+        limit: 2,
+      });
+      const page2 = await service.semanticSearchByCursor('siêu anh hùng', {
+        limit: 2,
+        cursor: page1.pagination.nextCursor as string,
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(page1.result.map(item => item.id)).toEqual([1, 2]);
+      expect(page1.pagination.hasMore).toBe(true);
+      expect(page2.result.map(item => item.id)).toEqual([3, 4]);
+      expect(page2.pagination.hasMore).toBe(false);
+    });
+
+    it('từ khóa rỗng → 400 INVALID_KEYWORD', async () => {
+      await expect(service.semanticSearch('   ')).rejects.toMatchObject({
+        statusCode: HttpStatus.BAD_REQUEST,
+        errorCode: 'INVALID_KEYWORD',
+      });
+    });
+  });
+
+  describe('searchLexicalSemanticRerank & searchLexicalSemanticRerankByCursor', () => {
+    it('kết hợp kết quả lexical từ movieService.search rồi gọi POST /search/rerank của AI', async () => {
+      (movieService as any).search = jest.fn().mockResolvedValue({
+        result: [{ id: 1 }, { id: 3 }],
+      });
+      const fetchMock = mockFetchJson(buildAiResponseForIds([3, 1, 2]));
+
+      const res = await service.searchLexicalSemanticRerank('hành tinh cát', 2);
+
+      expect((movieService as any).search).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [calledUrl, options] = fetchMock.mock.calls[0];
+      expect(calledUrl).toContain('/search/rerank');
+      expect(options.method).toBe('POST');
+      expect(JSON.parse(options.body)).toMatchObject({
+        keyword: 'hành tinh cát',
+        lexicalIds: [1, 3],
+        topK: 100,
+      });
+      expect(res.result.map(item => item.id)).toEqual([3, 1]);
+    });
+
+    it('searchLexicalSemanticRerankByCursor hỗ trợ load-more bằng cursor', async () => {
+      const fetchMock = mockFetchJson(buildAiResponseForIds([2, 1, 3]));
+
+      const page1 = await service.searchLexicalSemanticRerankByCursor('marvel', {
+        limit: 2,
+      });
+      const page2 = await service.searchLexicalSemanticRerankByCursor('marvel', {
+        limit: 2,
+        cursor: page1.pagination.nextCursor as string,
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(page1.result.map(item => item.id)).toEqual([2, 1]);
+      expect(page2.result.map(item => item.id)).toEqual([3]);
+      expect(page2.pagination.hasMore).toBe(false);
+    });
+  });
 });

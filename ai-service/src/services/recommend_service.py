@@ -1,36 +1,32 @@
 """
 services/recommend_service.py
-Business-logic layer for all AI recommendation operations.
+Business-logic layer for core AI recommendation operations:
+- Semantic Search (Text-to-Item)
+- Similar Movies (Item-to-Item pure vector similarity)
+- Hybrid Recommendation (User Collaborative Filtering + Semantic Profile)
+
+Genre-based reranking và Search Lexical+Semantic reranking đã được tách sang
+`genre_rerank_service.py` và `search_rerank_service.py`.
 """
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
-from api.schemas import SimilarMoviesResponse
 from core.integrations import VectorStore
+from data.data_loader import build_search_text as _build_search_text
 from services.embedding_service import EmbeddingService
+from services.genre_rerank_service import GenreRerankService
 from services.mapping_service import mapping_service
+from services.search_rerank_service import SearchRerankService
 from utils import setup_logger
-from utils.genre_utils import extract_genres, rerank_similar_candidates
+from utils.genre_utils import extract_genres
 
 logger = setup_logger(name=__name__, filename=__name__)
 
 
-# Reuse the exact corpus text builder used by DataLoader; no index rebuild here.
-from data.data_loader import build_search_text as _build_search_text
-
-
 def _format_item(item: dict[str, Any]) -> dict[str, Any]:
-    """Format kết gợi phim
-
-    Args:
-        item (dict[str, Any]): dữ liệu phim và metadata
-
-    Returns:
-        dict[str, Any]: _description_
-    """
+    """Chuẩn hóa kết quả gợi ý phim trả về cho API."""
     meta = item.get("payload") or {}
     title_vi = meta.get("title_vi")
     title_en = meta.get("title")
@@ -58,6 +54,8 @@ def _format_item(item: dict[str, Any]) -> dict[str, Any]:
         result["rankingScore"] = round(float(item["score"]), 4)
         if item.get("genre_similarity") is not None:
             result["genreSimilarity"] = round(float(item["genre_similarity"]), 4)
+    if "rrf_score" in item:
+        result["rrfScore"] = round(float(item["rrf_score"]), 6)
     return result
 
 
@@ -65,51 +63,47 @@ class RecommendService:
     def __init__(
         self, vector_store: VectorStore, embedding_service: EmbeddingService
     ) -> None:
-        """Gợi ý phim tương tự (Content Search), nội dung liên quan cho user dựa trên tương tác (CF)
-
-        Args:
-            vector_store (VectorStore): Nơi lưu trữ vector
-            embedding_service (EmbeddingService): Embedding text -> vector
-        """
+        """Gợi ý phim theo ngữ nghĩa (Semantic Search), phim tương tự (Item-to-Item) và Hybrid CF."""
         self._vs = vector_store
         self._emb = embedding_service
+        self._genre_reranker = GenreRerankService(vector_store)
+        self._search_reranker = SearchRerankService(vector_store, embedding_service)
         self.cf_weight = 0.6
         self.semantic_weight = 0.4
 
     async def semantic_search(
         self, query: str, top_k: int = 10
     ) -> list[dict[str, Any]]:
-        """Semantic Search: Tìm phim dựa trên truy vấn tìm kiếm"""
+        """Semantic Search: Tìm phim dựa trên truy vấn tìm kiếm tự nhiên."""
         vector = await self._emb.encode_async(query, is_query=True)
         raw_results = await self._vs.query(vector, top_k=top_k)
+        for idx, item in enumerate(raw_results):
+            if item.get("rank") is None:
+                item["rank"] = idx + 1
         return [_format_item(item) for item in raw_results]
 
     async def similar_movies(
         self, movie_id: int, top_k: int = 10
     ) -> list[dict[str, Any]]:
-        """Semantic Search: Gợi ý phim tương tự dựa trên movieId và vector similarity"""
+        """Item-to-Item: Gợi ý phim tương tự thuần vector similarity (Cosine)."""
         target = await self._vs.get_by_id(movie_id=movie_id)
         if not target or not target.get("vector"):
             logger.warning(
                 f"Khong tim thay vector cho movieId={movie_id}: target={target}"
             )
             raise ValueError(f"Khong tim thay vector cho movieId={movie_id}")
+
         raw_results = await self._vs.query(vector=target["vector"], top_k=top_k + 1)
         filtered = [item for item in raw_results if item.get("id") != movie_id][:top_k]
 
-        # rank với score giảm dần
         filtered.sort(key=lambda x: x.get("score", 0), reverse=True)
         for idx, item in enumerate(filtered):
-            item["rank"] = idx + 1  # rank bắt đầu từ 1
-
-        # format
-        formatted_results = [_format_item(item) for item in filtered]
+            item["rank"] = idx + 1
 
         logger.info(
             f"Found {len(filtered)} similar movies for movieId={movie_id} (Top-{top_k})"
         )
-
-        return formatted_results
+        return [_format_item(item) for item in filtered]
 
     async def similar_movies_rerank(
         self,
@@ -119,45 +113,30 @@ class RecommendService:
         genre_weight: float = 0.3,
         candidate_k: int = 100,
     ) -> list[dict[str, Any]]:
-        """
-        Gợi ý danh sách phim tương tự mới dựa trên vector similarity và genre-aware reranking.
-        """
-        target = await self._vs.get_by_id(movie_id)
-        vector = target.get("vector") if target else None
-        if vector is None or len(vector) == 0:
-            raise ValueError(f"Khong tim thay vector cho movieId={movie_id}")
-
-        target_meta = target.get("payload") or {}
-        target_genres = extract_genres(target_meta.get("genres"))
-
-        # Candidate Retrieval: Lấy pool ứng viên Top-50/100 từ vector store
-        # +1 accounts for the source movie occupying an ANN result slot.
-        pool_size = max(candidate_k, top_k) + 1
-        raw_results = await self._vs.query(vector=vector, top_k=pool_size)
-
-        # Loại bỏ phim gốc và khử trùng lặp movieId
-        seen_ids: set[int] = set()
-        candidates: list[dict[str, Any]] = []
-        for item in raw_results:
-            try:
-                cid = int(item.get("id"))
-            except (TypeError, ValueError, OverflowError):
-                continue
-            if cid == movie_id or cid in seen_ids:
-                continue
-            seen_ids.add(cid)
-            # Normalize IDs, so mixed string/int IDs cannot bypass deduplication.
-            candidates.append({**item, "id": cid})
-
-        # Genre-aware Reranking theo chế độ yêu cầu
-        reranked = rerank_similar_candidates(
-            candidates=candidates,
-            target_genres=target_genres,
+        """Ủy quyền sang GenreRerankService (đã tách riêng khỏi luồng similar cơ bản)."""
+        reranked = await self._genre_reranker.rerank_similar_by_genre(
+            movie_id=movie_id,
+            top_k=top_k,
             mode=mode,
             genre_weight=genre_weight,
-            top_k=top_k,
+            candidate_k=candidate_k,
         )
+        return [_format_item(item) for item in reranked]
 
+    async def search_lexical_semantic_rerank(
+        self,
+        query: str,
+        lexical_ids: list[int] | None = None,
+        top_k: int = 10,
+        candidate_k: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Kết hợp kết quả tìm kiếm Lexical (PostgreSQL) và Semantic (Vector DB) qua RRF."""
+        reranked = await self._search_reranker.rerank_lexical_and_semantic(
+            query=query,
+            lexical_ids=lexical_ids,
+            top_k=top_k,
+            candidate_k=candidate_k,
+        )
         return [_format_item(item) for item in reranked]
 
     async def hybrid_recommendation(
@@ -225,7 +204,6 @@ class RecommendService:
         combined_scores = {}
         evidences = {}
 
-        # Normalize scores (assuming cosine similarity [0,1] or similar)
         for item in cf_results:
             mid = item["id"]
             cf_score = item["score"]
@@ -246,25 +224,19 @@ class RecommendService:
                 f"Phù hợp với sở thích về nội dung và thể loại phim của bạn (Điểm Semantic: {round(sem_score*100, 1)}%)"
             ]
 
-        # Sort by combined score
         sorted_mids = sorted(
             combined_scores.keys(), key=lambda k: combined_scores[k], reverse=True
         )[:top_k]
 
-        # 4. Format Results
         final_results = []
         for mid in sorted_mids:
-            # Get full movie info from semantic collection
             movie_info = await self._vs.get_by_id(
                 mid, collection_name=self._vs.settings.vector_collection
             )
             if movie_info:
-                # Add the original score to movie_info so _format_item parses it correctly
                 movie_info["score"] = combined_scores[mid]
                 formatted = _format_item(movie_info)
                 formatted["hybridScore"] = combined_scores[mid]
-
-                # Combine evidences into a nice readable string
                 formatted["evidences"] = evidences[mid]
                 final_results.append(formatted)
 
