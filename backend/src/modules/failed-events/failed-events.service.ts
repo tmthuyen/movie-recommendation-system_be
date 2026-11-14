@@ -1,9 +1,12 @@
 import { Injectable, NotFoundException, Inject, Logger } from '@nestjs/common';
 import { IFailedEventRepository } from './failed-events.repository';
-import { FailedEventStatus } from './entities/failed-event.entity';
+import { FailedEvent, FailedEventStatus } from './entities/failed-event.entity';
 import { EventPublisherService } from '@/infrastructure/messaging/event-publisher.service';
 import { MESSAGE_BUS_CONFIG } from '@/infrastructure/messaging/messaging.constants';
 import { FailedEventDto } from './dtos/failed-event.dto';
+import { FailedEventSearchDto } from './dtos/failed-event-search.dto';
+import { ResultWithPagination } from '@/common/dtos/paginated-result.interface';
+import { PaginationUtils } from '@/common/utils/search.util';
 
 @Injectable()
 export class FailedEventsService {
@@ -15,14 +18,30 @@ export class FailedEventsService {
     private readonly eventPublisher: EventPublisherService,
   ) {}
 
-  async findAll(page: number, limit: number, status?: string) {
-    const [data, total] = await this.repo.findAndCount({ page, limit, status });
-    return {
-      data,
-      total,
+  async findAll(
+    request: FailedEventSearchDto,
+  ): Promise<ResultWithPagination<FailedEvent>> {
+    const page = Math.max(request.page ?? 1, 1);
+    const limit = Math.min(Math.max(request.limit ?? 10, 1), 100);
+
+    const filters = [...(request.filters ?? [])];
+    if (
+      request.status &&
+      !filters.some(filter => filter.toLowerCase().startsWith('status:'))
+    ) {
+      filters.push(`status:eq:${request.status}`);
+    }
+
+    const [data, total] = await this.repo.search({
+      ...request,
       page,
       limit,
-      totalPages: Math.ceil(total / limit),
+      filters,
+    });
+
+    return {
+      result: data,
+      pagination: PaginationUtils.getPaginationMeta(page, limit, total),
     };
   }
 

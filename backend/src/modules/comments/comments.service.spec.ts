@@ -141,16 +141,32 @@ describe('CommentsService', () => {
   });
 
   describe('đọc / sửa / xoá', () => {
-    it('findByMovie uỷ quyền kèm parentId', async () => {
-      repo.findByMovie.mockResolvedValue({ data: [], meta: {} });
+    it('findAll trả {result, pagination}', async () => {
+      repo.findAll.mockResolvedValue([[{ id: 1 }], 3]);
 
-      await service.findByMovie(3, { page: 1, limit: 10 }, 2);
+      const result = await service.findAll({ page: 2, limit: 2 });
+
+      expect(repo.findAll).toHaveBeenCalledWith({ page: 2, limit: 2 });
+      expect(result).toEqual({
+        result: [{ id: 1 }],
+        pagination: { total: 3, page: 2, limit: 2, totalPages: 2 },
+      });
+    });
+
+    it('findByMovie uỷ quyền kèm parentId', async () => {
+      repo.findByMovie.mockResolvedValue([[], 0]);
+
+      const result = await service.findByMovie(3, { page: 1, limit: 10 }, 2);
 
       expect(repo.findByMovie).toHaveBeenCalledWith(
         3,
         { page: 1, limit: 10 },
         2,
       );
+      expect(result).toEqual({
+        result: [],
+        pagination: { total: 0, page: 1, limit: 10, totalPages: 0 },
+      });
     });
 
     it('findOne ném NotFoundException khi không có comment', async () => {

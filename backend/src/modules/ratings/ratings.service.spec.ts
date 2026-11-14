@@ -186,12 +186,29 @@ describe('RatingsService', () => {
       expect(repo.remove).toHaveBeenCalledWith(3);
     });
 
-    it('findByMovie uỷ quyền cho repository', async () => {
-      repo.findByMovie.mockResolvedValue({ data: [] });
+    it('findAll chuẩn hoá page/limit và trả {result, pagination}', async () => {
+      const data = [{ id: 1 }];
+      repo.findAll.mockResolvedValue([data, 11]);
 
-      await service.findByMovie(3, { page: 1, limit: 5 });
+      const result = await service.findAll({ page: 0, limit: 5 });
+
+      expect(repo.findAll).toHaveBeenCalledWith({ page: 1, limit: 5 });
+      expect(result).toEqual({
+        result: data,
+        pagination: { total: 11, page: 1, limit: 5, totalPages: 3 },
+      });
+    });
+
+    it('findByMovie uỷ quyền cho repository và trả {result, pagination}', async () => {
+      repo.findByMovie.mockResolvedValue([[], 0]);
+
+      const result = await service.findByMovie(3, { page: 1, limit: 5 });
 
       expect(repo.findByMovie).toHaveBeenCalledWith(3, { page: 1, limit: 5 });
+      expect(result).toEqual({
+        result: [],
+        pagination: { total: 0, page: 1, limit: 5, totalPages: 0 },
+      });
     });
   });
 });

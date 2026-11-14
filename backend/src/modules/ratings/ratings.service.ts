@@ -2,7 +2,9 @@ import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { CreateRatingDto } from './dto/create-rating.dto';
 import { UpdateRatingDto } from './dto/update-rating.dto';
 import { IRatingRepository } from './ratings.repository';
-import { PaginationDto } from '@/common/dtos/pagination.dto';
+import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
+import { ResultWithPagination } from '@/common/dtos/paginated-result.interface';
+import { PaginationUtils } from '@/common/utils/search.util';
 import { DataSource } from 'typeorm';
 import {
   Interaction,
@@ -116,12 +118,41 @@ export class RatingsService {
     return savedRating;
   }
 
-  async findAll(paginationDto: PaginationDto) {
-    return this.repo.findAll(paginationDto);
+  async findAll(
+    request: BaseSearchRequest,
+  ): Promise<ResultWithPagination<Rating>> {
+    const page = Math.max(request.page ?? 1, 1);
+    const limit = Math.min(Math.max(request.limit ?? 10, 1), 100);
+
+    const [data, total] = await this.repo.findAll({
+      ...request,
+      page,
+      limit,
+    });
+
+    return {
+      result: data,
+      pagination: PaginationUtils.getPaginationMeta(page, limit, total),
+    };
   }
 
-  async findByMovie(movieId: number, paginationDto: PaginationDto) {
-    return this.repo.findByMovie(movieId, paginationDto);
+  async findByMovie(
+    movieId: number,
+    request: BaseSearchRequest,
+  ): Promise<ResultWithPagination<Rating>> {
+    const page = Math.max(request.page ?? 1, 1);
+    const limit = Math.min(Math.max(request.limit ?? 10, 1), 100);
+
+    const [data, total] = await this.repo.findByMovie(movieId, {
+      ...request,
+      page,
+      limit,
+    });
+
+    return {
+      result: data,
+      pagination: PaginationUtils.getPaginationMeta(page, limit, total),
+    };
   }
 
   async findOne(id: number) {

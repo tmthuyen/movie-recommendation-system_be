@@ -1,8 +1,15 @@
-import { Injectable, Inject, NotFoundException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  NotFoundException,
+  Logger,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 import { ICommentRepository } from './comments.repository';
-import { PaginationDto } from '@/common/dtos/pagination.dto';
+import { QueryCommentDto } from './dto/query-comment.dto';
 import { DataSource } from 'typeorm';
 import {
   Interaction,
@@ -15,7 +22,8 @@ import { User } from '../users/entities/user.entity';
 import { Movie } from '../movies/entities/movie.entity';
 import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
 import { MovieInteractionStatsService } from '../interactions/movie-interaction-stats.service';
-import { PaginatedResult } from '@/common/dtos/paginated-result.interface';
+import { ResultWithPagination } from '@/common/dtos/paginated-result.interface';
+import { PaginationUtils } from '@/common/utils/search.util';
 
 @Injectable()
 export class CommentsService {
@@ -34,6 +42,10 @@ export class CommentsService {
     createCommentDto: CreateCommentDto,
   ): Promise<Comment> {
     const { movieId, content, parentId } = createCommentDto;
+
+    // check movieId exists
+
+    // check userId exists
 
     const savedComment = await this.dataSource.transaction(async manager => {
       // Create Comment
@@ -84,30 +96,47 @@ export class CommentsService {
   }
 
   async findAll(
-    paginationDto: PaginationDto,
-  ): Promise<PaginatedResult<Comment>> {
-    const result = await this.repo.findAll(paginationDto);
+    request: QueryCommentDto,
+  ): Promise<ResultWithPagination<Comment>> {
+    const page = Math.max(request.page ?? 1, 1);
+    const limit = Math.min(Math.max(request.limit ?? 10, 1), 100);
 
-    this.logger.log('Số lượng bình luận được tìm thấy:', result.data.length);
+    const [data, total] = await this.repo.findAll({
+      ...request,
+      page,
+      limit,
+    });
 
-    return result;
+    this.logger.log('Số lượng bình luận được tìm thấy:', data.length);
+
+    return {
+      result: data,
+      pagination: PaginationUtils.getPaginationMeta(page, limit, total),
+    };
   }
 
   async findByMovie(
     movieId: number,
-    paginationDto: PaginationDto,
+    request: QueryCommentDto,
     parentId?: number,
-  ) {
-    const result = await this.repo.findByMovie(
+  ): Promise<ResultWithPagination<Comment>> {
+    const page = Math.max(request.page ?? 1, 1);
+    const limit = Math.min(Math.max(request.limit ?? 10, 1), 100);
+
+    const [data, total] = await this.repo.findByMovie(
       movieId,
-      paginationDto,
+      { ...request, page, limit },
       parentId,
     );
 
     this.logger.log(
-      `Số lượng bình luận được tìm thấy cho movieId=${movieId}: ${result.data.length}`,
+      `Số lượng bình luận được tìm thấy cho movieId=${movieId}: ${data.length}`,
     );
-    return result;
+
+    return {
+      result: data,
+      pagination: PaginationUtils.getPaginationMeta(page, limit, total),
+    };
   }
 
   async findOne(id: number) {
@@ -118,9 +147,15 @@ export class CommentsService {
     return comment;
   }
 
-  async update(id: number, updateCommentDto: UpdateCommentDto) {
+  async update(id: number, userId: string, updateCommentDto: UpdateCommentDto) {
+    if (!updateCommentDto.content || updateCommentDto.content === undefined) {
+      throw new BadRequestException('Nội dung bình luận không được để trống');
+    }
     const comment = await this.findOne(id);
-    return this.repo.update(comment.id, updateCommentDto);
+    if (comment.user.id !== userId) {
+      throw new ForbiddenException('Không có quyền cập nhật bình luận này');
+    }
+    return this.repo.update(comment.id, { content: updateCommentDto.content });
   }
 
   async remove(id: number) {

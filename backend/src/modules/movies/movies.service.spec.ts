@@ -1,4 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { AppException } from '@/common/custom-exception/app-exception';
 import { DataSource } from 'typeorm';
 import { MoviesService } from './movies.service';
 import { IMovieRepository } from './movies.repository';
@@ -273,21 +274,21 @@ describe('MoviesService', () => {
       );
     });
 
-    it('sort sai format → BadRequestException', async () => {
+    it('sort sai format → AppException', async () => {
       await expect(search({ sort: 'releaseDate' })).rejects.toBeInstanceOf(
-        BadRequestException,
+        AppException,
       );
     });
 
-    it('sort field không nằm trong allowlist → BadRequestException', async () => {
+    it('sort field không nằm trong allowlist → AppException', async () => {
       await expect(search({ sort: 'password:ASC' })).rejects.toBeInstanceOf(
-        BadRequestException,
+        AppException,
       );
     });
 
-    it('sort direction sai → BadRequestException', async () => {
+    it('sort direction sai → AppException', async () => {
       await expect(search({ sort: 'releaseDate:UP' })).rejects.toBeInstanceOf(
-        BadRequestException,
+        AppException,
       );
     });
 

@@ -161,6 +161,28 @@ Lỗi — từ `src/common/filters/http-exception.filter.ts` (bắt `HttpExcepti
 - `ValidationPipe`: `whitelist: true`, `forbidNonWhitelisted: true`, `forbidUnknownValues: true`, `transform: true` → field lạ trong body/query bị **400 Bad Request**.
 - `CamelCaseInterceptor` (global): chuyển **key của request body/query** sang camelCase (client gửi `preference_data` vẫn nhận `preferenceData`). Response KHÔNG bị đổi key.
 
+### Search / Filter / Sort dùng chung (`BaseSearchRequest`)
+
+Các endpoint danh sách bên dưới dùng cùng một contract query (kế thừa `PaginationDto`):
+
+| Param | Kiểu | Mặc định | Mô tả |
+|---|---|---|---|
+| `page` | number | `1` | trang hiện tại, clamp `>= 1` |
+| `limit` | number | `10` | số item/trang, clamp `1..100` |
+| `keyword` | string | — | tìm partial (ILIKE `%keyword%`) trên nhiều field của từng module |
+| `filters` | string[] (lặp lại) | `[]` | `field:operator:value`; lặp param: `?filters=status:eq:ACTIVE&filters=role.code:eq:ADMIN` |
+| `sort` | string[] | `createdAt:DESC` | `field:DIR`; nhiều field: `?sort=fullName:ASC&sort=createdAt:DESC` hoặc `sort=fullName:ASC,createdAt:DESC` |
+
+- **Operator**: `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in`, `notin`, `between`, `contains`, `isnull`, `isnotnull`.
+- `in` / `notin`: value phân tách bằng dấu phẩy — `filters=status:in:ACTIVE,PENDING`.
+- `between`: `from_to` — `filters=voteAverage:between:7_9`.
+- `contains`: ILIKE `%value%`; `isnull` / `isnotnull` không cần value.
+- Value được phép chứa dấu `:` (ví dụ ISO timestamp) — chỉ 2 dấu `:` đầu được tách.
+- `filters` là **query param lặp lại**, không phải một chuỗi phân tách bằng dấu phẩy (dấu phẩy dành cho `in` / `notin`).
+- Sort luôn thêm `id ASC` làm tie-breaker để phân trang ổn định (trừ khi `sort` đã có `id`).
+- Field/operator/sort không hợp lệ → `400` với envelope lỗi chuẩn (`INVALID_FILTER`, `INVALID_SORT`, `INVALID_SORT_FIELD`, `INVALID_SORT_DIRECTION`).
+- Response: `result` = mảng item; `pagination = {page, limit, total, totalPages}`.
+
 ## Các API hiện có
 
 Ký hiệu cột **Auth**:
@@ -200,7 +222,7 @@ JWT payload: `{sub, fullName, email, scopes, sessionId, jti}`. `JwtStrategy` ki�
 | GET | `/api/users/me` | JWT | — | user (không `password`) | |
 | PUT | `/api/users/me` | JWT | `UpdateProfileDto` `{fullName?, avatarUrl?, phoneNumber?, birthDate?, gender?, preferenceData?}` | user | `preferenceData` là `jsonb` (sở thích: thể loại, đạo diễn...) |
 | POST | `/api/users` | JWT + `@Roles(ADMIN, SUPERADMIN)` **⚠ không enforce** | `CreateUserDto` `{email, fullName, avatarUrl?, phoneNumber?, password, confirmPassword, roleIds[]}` | user | `201`; publish `user.created` |
-| GET | `/api/users` | JWT + `@Roles` **⚠** | query `PaginationDto` `{page=1, limit=10, keyword}` (keyword ILIKE `fullName`/`email`) | user[] + `pagination` | |
+| GET | `/api/users` | JWT + `@Roles` **⚠** | `BaseSearchRequest` `{page=1, limit=10, keyword?, filters?, sort?}` — keyword ILIKE `fullName`/`email`/`phoneNumber` | user[] + `pagination` | filter: `id,email,fullName,phoneNumber,status,isVerified,gender,birthDate,createdAt,updatedAt,roleId,roleCode`; sort: `id,email,fullName,status,isVerified,birthDate,createdAt,updatedAt`; join `roles` |
 | GET | `/api/users/:id` | JWT + `@Roles` **⚠** | path `id` (uuid) | user | |
 | PUT | `/api/users/:id` | JWT + `@Roles` **⚠** | `UpdateProfileDto` | user | publish `user.updated` |
 | DELETE | `/api/users/:id` | JWT + `@Roles` **⚠** | path `id` | user | publish `user.deleted` |
@@ -214,7 +236,7 @@ JWT payload: `{sub, fullName, email, scopes, sessionId, jti}`. `JwtStrategy` ki�
 | Method | Path | Auth | Request | Response `result` | Ghi chú |
 |---|---|---|---|---|---|
 | POST | `/api/roles` | JWT (không `@Roles`) | `CreateRoleDto` `{code, name, description?}` | role | `201` |
-| GET | `/api/roles` | JWT + `@Roles(ADMIN, MANAGER)` | — | role[] | |
+| GET | `/api/roles` | JWT + `@Roles(ADMIN, MANAGER)` | `BaseSearchRequest` `{page=1, limit=10, keyword?, filters?, sort?}` — keyword ILIKE `name`/`code` | role[] + `pagination` | filter: `id,code`; sort: `id,code,name,createdAt` |
 | GET | `/api/roles/:id` | JWT | — | role | |
 | PATCH | `/api/roles/:id` | JWT | `UpdateRoleDto` (Partial của Create) | role | |
 | DELETE | `/api/roles/:id` | JWT | — | role | |
@@ -279,8 +301,8 @@ JWT payload: `{sub, fullName, email, scopes, sessionId, jti}`. `JwtStrategy` ki�
 | Method | Path | Auth | Request | Response `result` | Ghi chú |
 |---|---|---|---|---|---|
 | POST | `/api/ratings` | JWT | `CreateRatingDto` `{rating: 0–5, movieId}` | rating đã lưu | `201`; **transaction**: tạo Rating + Interaction (`type=rating`, `score=rating`) + cập nhật lại `voteAverage`/`voteCount` của movie; **sau commit**: WS `movie-{id}-rating` (payload kèm `movieStats`) + publish `interaction.created` (`score=rating`) |
-| GET | `/api/ratings` | Public | `{page, limit}` | rating[] + `pagination` | join `user`, `movie` |
-| GET | `/api/ratings/movie/:movieId` | Public | `{page, limit}` | rating[] + `pagination` | join `user` |
+| GET | `/api/ratings` | Public | `BaseSearchRequest` `{page=1, limit=10, keyword?, filters?, sort?}` — keyword ILIKE `content`, `user.fullName`, `user.email`, `movie.title`, `movie.titleVi` | rating[] + `pagination` | join `user`, `movie`; filter: `id,rating,content,timestamp,createdAt,updatedAt,userId,userEmail,userFullName,movieId,movieTitle`; sort: `id,rating,timestamp,createdAt,updatedAt` |
+| GET | `/api/ratings/movie/:movieId` | Public | `BaseSearchRequest` như trên | rating[] + `pagination` | join `user` (+ `movie` để filter/keyword); cùng filter/sort với `GET /api/ratings` |
 | GET | `/api/ratings/:id` | Public | — | rating (user + movie) | |
 | PATCH | `/api/ratings/:id` | JWT | `UpdateRatingDto` (Partial) | rating | ⚠ không kiểm tra rating thuộc về user |
 | DELETE | `/api/ratings/:id` | JWT + `@Roles(ADMIN, SUPERADMIN)` **⚠** | — | rating | ⚠ không kiểm tra chủ sở hữu |
@@ -292,8 +314,8 @@ Rating unique theo (user, movie).
 | Method | Path | Auth | Request | Response `result` | Ghi chú |
 |---|---|---|---|---|---|
 | POST | `/api/comments` | JWT | `CreateCommentDto` `{content, movieId, parentId?}` | comment đã lưu | `201`; **transaction**: Comment + Interaction (`comment`, `score=4`); **sau commit**: WS `movie-{id}-comment` + `movie-{id}-interaction` + publish `interaction.created` (`score=4`) |
-| GET | `/api/comments` | Public | `{page, limit}` | comment[] + `pagination` | join `user`, `movie`; sort `createdAt DESC` |
-| GET | `/api/comments/movie/:movieId` | Public | `{page, limit}` + query `parentId?` | comment[] + `pagination` | không truyền `parentId` → lấy root (`parentId IS NULL`); mỗi item có thêm **`replyCount`** (số reply trực tiếp) |
+| GET | `/api/comments` | Public | `QueryCommentDto` (extends `BaseSearchRequest`) `{page=1, limit=10, keyword?, filters?, sort?}` — keyword ILIKE `content`, `user.fullName`, `user.email`, `movie.title`, `movie.titleVi` | comment[] + `pagination` | join `user`, `movie`; filter: `id,content,parentId,createdAt,updatedAt,userId,userEmail,userFullName,movieId,movieTitle`; sort: `id,content,createdAt,updatedAt`; mặc định `createdAt DESC` |
+| GET | `/api/comments/movie/:movieId` | Public | `QueryCommentDto` + `parentId?` (number) | comment[] + `pagination` | không truyền `parentId` → lấy root (`parentId IS NULL`); mỗi item có thêm **`replyCount`** (số reply trực tiếp); filter/sort như `GET /api/comments` |
 | GET | `/api/comments/:id` | Public | — | comment (user + movie) | |
 | PATCH | `/api/comments/:id` | JWT | `UpdateCommentDto` (Partial) | comment | ⚠ không kiểm tra chủ sở hữu |
 | DELETE | `/api/comments/:id` | JWT + `@Roles(ADMIN, SUPERADMIN)` **⚠** | — | comment | |
@@ -304,9 +326,9 @@ Rating unique theo (user, movie).
 |---|---|---|---|---|---|
 | POST | `/api/interactions` | JWT | `CreateInteractionDto` `{type: 'like', movieId}` — **chỉ like** | `{action: 'added'\|'removed', type, score, likeCount, data?}` | **TOGGLE like**: đã tồn tại (user+movie+like) → xóa, `action='removed'`, publish `interaction.created` (`score=-5`, `removed=true`); chưa → tạo với `score=5`, publish (`removed=false`), `action='added'` + `data`; cả 2 trường hợp đều WS `movie-{id}-interaction` |
 | GET | `/api/interactions/stats/:movieId` | Public | path `movieId` | `{movieId, likeCount, commentCount, viewCount, ratingCount, voteAverage}` | aggregate 1 query; `404` nếu phim không tồn tại |
-| GET | `/api/interactions` | Public | `{page, limit}` | interaction[] + `pagination` | join `user`, `movie` |
-| GET | `/api/interactions/my-history` | JWT | `{page, limit}` | interaction[] + `pagination` | chỉ `type=click` (lịch sử xem), join `movie` |
-| GET | `/api/interactions/my-favorites` | JWT | `{page, limit}` | interaction[] + `pagination` | chỉ `type=like` |
+| GET | `/api/interactions` | Public | `BaseSearchRequest` `{page=1, limit=10, keyword?, filters?, sort?}` — keyword ILIKE `user.fullName`, `user.email`, `movie.title`, `movie.titleVi`, `type` | interaction[] + `pagination` | join `user`, `movie`; filter: `id,score,type,createdAt,updatedAt,userId,userEmail,userFullName,movieId,movieTitle`; sort: `id,score,type,createdAt,updatedAt`; mặc định `createdAt DESC` |
+| GET | `/api/interactions/my-history` | JWT | `BaseSearchRequest` | interaction[] + `pagination` | chỉ `type=click` (lịch sử xem), join `movie`; filter/sort như `GET /api/interactions` |
+| GET | `/api/interactions/my-favorites` | JWT | `BaseSearchRequest` | interaction[] + `pagination` | chỉ `type=like`; filter/sort như `GET /api/interactions` |
 | GET | `/api/interactions/movie/:movieId/me` | JWT | path `movieId` | `{isLiked: boolean, click: boolean, commentCount: number, rating: rating\|null}` | **Trạng thái tương tác của user với 1 phim** — dùng cho trang chi tiết (`interactions.controller.ts:152-175`); gộp 2 query song song (interactions + rating, `interactions.service.ts:237-259`) |
 | GET | `/api/interactions/:id` | Public | — | interaction | |
 | DELETE | `/api/interactions/:id` | JWT | — | `{success: true}` | |
@@ -342,7 +364,7 @@ Ghi chú cursor:
 
 | Method | Path | Auth | Request | Response | Ghi chú |
 |---|---|---|---|---|---|
-| GET | `/api/failed-events` | ⚠ Public (chỉ rate-limit) | query `{page=1, limit=10, status?}` — `status` ∈ `PENDING`, `RETRIED_SUCCESS`, `RETRIED_FAILED` | envelope chuẩn: `result` = FailedEvent[] + `pagination` | danh sách message rớt DLQ |
+| GET | `/api/failed-events` | ⚠ Public (chỉ rate-limit) | `FailedEventSearchDto` (extends `BaseSearchRequest`): `{page=1, limit=10, keyword?, filters?, sort?, status?}` — `status` ∈ `PENDING`, `RETRIED_SUCCESS`, `RETRIED_FAILED` (tương thích query cũ, được merge thành `filters=status:eq:<status>` nếu chưa có) | envelope chuẩn: `result` = FailedEvent[] + `pagination` | keyword ILIKE `source`,`queueName`,`routingKey`,`eventId`,`eventType`,`correlationId`,`errorReason`; filter: `id,status,source,queueName,routingKey,eventId,eventType,correlationId,retryCount,createdAt,updatedAt`; sort: `id,status,source,queueName,routingKey,eventType,retryCount,createdAt,updatedAt` |
 | POST | `/api/failed-events/:id/retry` | ⚠ Public (chỉ rate-limit) | path `id` (uuid) | `{success: boolean, statusCode: 200, message}` — **KHÔNG có `result`** | publish lại payload về `movie.exchange` (hoặc `user.exchange` nếu routingKey bắt đầu `user.`); đánh dấu status + tăng `retryCount`; `404` nếu không thấy |
 
 ### Module `health` — `/api/health`

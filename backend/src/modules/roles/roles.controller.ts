@@ -10,6 +10,7 @@ import {
   ClassSerializerInterceptor,
   UseGuards,
   HttpStatus,
+  Query,
 } from '@nestjs/common';
 import { RolesService } from './roles.service';
 import { CreateRoleDto } from './dto/create-role.dto';
@@ -18,6 +19,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { RolesGuard } from '@/modules/auth/guards/roles.guard';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { Roles } from '@/common/decorators/roles.decorator';
+import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
 
 @ApiTags('Roles')
 @ApiBearerAuth()
@@ -40,13 +42,15 @@ export class RolesController {
 
   @Get()
   @Roles('ADMIN', 'MANAGER')
-  async findAll() {
-    const result = await this.rolesService.findAll();
+  async findAll(@Query() searchRequest: BaseSearchRequest) {
+    const { result, pagination } =
+      await this.rolesService.findAll(searchRequest);
     return {
       success: true,
       statusCode: HttpStatus.OK,
       message: 'Lấy danh sách role thành công',
       result,
+      pagination,
     };
   }
 

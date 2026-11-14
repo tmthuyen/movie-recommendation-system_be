@@ -16,7 +16,7 @@ import { UpdateRatingDto } from './dto/update-rating.dto';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { Roles } from '@/common/decorators/roles.decorator';
-import { PaginationDto } from '@/common/dtos/pagination.dto';
+import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
 import { type Request } from 'express';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
 
@@ -46,8 +46,9 @@ export class RatingsController {
 
   @Get()
   @ApiOperation({ summary: 'Lấy tất cả đánh giá (Public)' })
-  async findAll(@Query() paginationDto: PaginationDto) {
-    const result = await this.ratingsService.findAll(paginationDto);
+  async findAll(@Query() searchRequest: BaseSearchRequest) {
+    const { result, pagination } =
+      await this.ratingsService.findAll(searchRequest);
 
     return {
       success: true,
@@ -56,20 +57,9 @@ export class RatingsController {
 
       message: 'Success',
 
-      result: result.data || result,
+      result,
 
-      pagination:
-        result.total !== undefined
-          ? {
-              total: result.total,
-
-              page: result.page,
-
-              limit: result.limit,
-
-              totalPages: result.totalPages,
-            }
-          : undefined,
+      pagination,
     };
   }
 
@@ -77,11 +67,11 @@ export class RatingsController {
   @ApiOperation({ summary: 'Lấy đánh giá của một bộ phim (Public)' })
   async findByMovie(
     @Param('movieId') movieId: string,
-    @Query() paginationDto: PaginationDto,
+    @Query() searchRequest: BaseSearchRequest,
   ) {
-    const result = await this.ratingsService.findByMovie(
+    const { result, pagination } = await this.ratingsService.findByMovie(
       +movieId,
-      paginationDto,
+      searchRequest,
     );
 
     return {
@@ -91,20 +81,9 @@ export class RatingsController {
 
       message: 'Success',
 
-      result: result.data || result,
+      result,
 
-      pagination:
-        result.total !== undefined
-          ? {
-              total: result.total,
-
-              page: result.page,
-
-              limit: result.limit,
-
-              totalPages: result.totalPages,
-            }
-          : undefined,
+      pagination,
     };
   }
 

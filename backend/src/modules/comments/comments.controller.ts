@@ -16,7 +16,6 @@ import { UpdateCommentDto } from './dto/update-comment.dto';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { Roles } from '@/common/decorators/roles.decorator';
-import { PaginationDto } from '@/common/dtos/pagination.dto';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
 import type { Request } from 'express';
 import { ApiResponseWithPagination } from '@/common/dtos/api-response.dto';
@@ -53,16 +52,16 @@ export class CommentsController {
   @Get()
   @ApiOperation({ summary: 'Lấy tất cả bình luận (Public)' })
   async findAll(
-    @Query() paginationDto: PaginationDto,
+    @Query() searchRequest: QueryCommentDto,
   ): Promise<ApiResponseWithPagination<Comment[]>> {
-    const comments = await this.commentsService.findAll(paginationDto);
-    const { data, ...pagination } = comments;
+    const { result, pagination } =
+      await this.commentsService.findAll(searchRequest);
     return {
       success: true,
       statusCode: 200,
       message: 'Lấy danh sách bình luận thành công',
-      result: data,
-      pagination: pagination,
+      result,
+      pagination,
     };
   }
 
@@ -72,7 +71,7 @@ export class CommentsController {
     @Param('movieId') movieId: string,
     @Query() query: QueryCommentDto,
   ) {
-    const result = await this.commentsService.findByMovie(
+    const { result, pagination } = await this.commentsService.findByMovie(
       +movieId,
       query,
       query.parentId,
@@ -85,20 +84,9 @@ export class CommentsController {
 
       message: 'Success',
 
-      result: result.data || result,
+      result,
 
-      pagination:
-        result.total !== undefined
-          ? {
-              total: result.total,
-
-              page: result.page,
-
-              limit: result.limit,
-
-              totalPages: result.totalPages,
-            }
-          : undefined,
+      pagination,
     };
   }
 
@@ -123,11 +111,18 @@ export class CommentsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Cập nhật bình luận của mình (Yêu cầu đăng nhập)' })
   async update(
+    @Req() req: Request,
     @Param('id') id: string,
     @Body() updateCommentDto: UpdateCommentDto,
   ) {
+    const { sub: userId } = req.user as JwtPayload;
+
     // Note: should check if comment belongs to user
-    const result = await this.commentsService.update(+id, updateCommentDto);
+    const result = await this.commentsService.update(
+      +id,
+      userId,
+      updateCommentDto,
+    );
 
     return {
       success: true,

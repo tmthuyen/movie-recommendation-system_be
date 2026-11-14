@@ -40,7 +40,7 @@ describe('UsersService', () => {
     save: jest.Mock;
     findByIdWithRoles: jest.Mock;
     findByEmail: jest.Mock;
-    findAndCount: jest.Mock;
+    search: jest.Mock;
   };
   let roleService: { findAllByIds: jest.Mock };
   let producer: {
@@ -56,7 +56,7 @@ describe('UsersService', () => {
       save: jest.fn((user: Partial<User>) => user as User),
       findByIdWithRoles: jest.fn(),
       findByEmail: jest.fn(),
-      findAndCount: jest.fn(),
+      search: jest.fn(),
     };
     roleService = { findAllByIds: jest.fn().mockResolvedValue([]) };
     producer = {
@@ -178,42 +178,58 @@ describe('UsersService', () => {
   });
 
   describe('findAll', () => {
-    it('mặc định page=1, limit=10 khi DTO rỗng và trả totalPages', async () => {
+    it('mặc định page=1, limit=10 khi DTO rỗng và trả pagination', async () => {
       const data = [makeUser({ id: 'user-1' })];
-      repo.findAndCount.mockResolvedValue([data, 23]);
+      repo.search.mockResolvedValue([data, 23]);
 
       const result = await service.findAll({});
 
-      expect(repo.findAndCount).toHaveBeenCalledWith({
+      expect(repo.search).toHaveBeenCalledWith({
         page: 1,
         limit: 10,
-        keyword: undefined,
       });
       expect(result).toEqual({
-        data,
-        total: 23,
-        page: 1,
-        limit: 10,
-        totalPages: 3,
+        result: data,
+        pagination: {
+          total: 23,
+          page: 1,
+          limit: 10,
+          totalPages: 3,
+        },
       });
     });
 
-    it('truyền page/limit/keyword xuống repository và tính totalPages', async () => {
-      repo.findAndCount.mockResolvedValue([[], 11]);
+    it('truyền page/limit/keyword/filters/sort xuống repository', async () => {
+      repo.search.mockResolvedValue([[], 11]);
 
       const result = await service.findAll({
         page: 3,
         limit: 5,
         keyword: 'an',
+        filters: ['status:eq:ACTIVE'],
+        sort: ['fullName:ASC'],
       });
 
-      expect(repo.findAndCount).toHaveBeenCalledWith({
+      expect(repo.search).toHaveBeenCalledWith({
         page: 3,
         limit: 5,
         keyword: 'an',
+        filters: ['status:eq:ACTIVE'],
+        sort: ['fullName:ASC'],
       });
-      expect(result.totalPages).toBe(3);
-      expect(result.data).toEqual([]);
+      expect(result.pagination.totalPages).toBe(3);
+      expect(result.result).toEqual([]);
+    });
+
+    it('clamp page < 1 và limit ngoài khoảng 1..100', async () => {
+      repo.search.mockResolvedValue([[], 0]);
+
+      await service.findAll({ page: 0, limit: 500 });
+
+      expect(repo.search).toHaveBeenCalledWith({
+        page: 1,
+        limit: 100,
+      });
     });
   });
 
