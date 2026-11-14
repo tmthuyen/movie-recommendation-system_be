@@ -12,6 +12,7 @@ import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import cookieParser from 'cookie-parser';
 import { NextFunction, Request } from 'express';
 import { Logger } from 'winston';
+import { TypeOrmExceptionFilter } from '@/common/filters/typeorm-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -54,7 +55,10 @@ async function bootstrap() {
   app.useGlobalInterceptors(new LoggingInterceptor());
 
   // filters
-  app.useGlobalFilters(new HttpExceptionFilter(winstonLogger));
+  app.useGlobalFilters(
+    new HttpExceptionFilter(winstonLogger),
+    new TypeOrmExceptionFilter(winstonLogger),
+  );
 
   // cors
   // http://localhost:3000, http://localhost:3001, http://localhost:3002

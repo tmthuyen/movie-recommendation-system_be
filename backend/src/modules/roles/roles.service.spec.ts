@@ -13,6 +13,7 @@ describe('RolesService', () => {
     find: jest.Mock;
     findBy: jest.Mock;
     remove: jest.Mock;
+    createQueryBuilder: jest.Mock;
   };
 
   const makeRole = (overrides: Partial<Role> = {}): Role =>
@@ -32,6 +33,7 @@ describe('RolesService', () => {
       find: jest.fn(),
       findBy: jest.fn(),
       remove: jest.fn(),
+      createQueryBuilder: jest.fn(),
     };
 
     service = new RolesService(repo as unknown as Repository<Role>);
@@ -78,12 +80,67 @@ describe('RolesService', () => {
   });
 
   describe('findAll / findOne', () => {
-    it('findAll uỷ quyền cho repository', async () => {
-      const roles = [makeRole(), makeRole({ id: 2, code: 'ADMIN' })];
-      repo.find.mockResolvedValue(roles);
+    const makeQueryBuilder = () => {
+      const qb = {
+        andWhere: jest.fn(),
+        addOrderBy: jest.fn(),
+        skip: jest.fn(),
+        take: jest.fn(),
+        getManyAndCount: jest.fn(),
+      };
+      qb.andWhere.mockReturnValue(qb);
+      qb.addOrderBy.mockReturnValue(qb);
+      qb.skip.mockReturnValue(qb);
+      qb.take.mockReturnValue(qb);
+      return qb;
+    };
 
-      await expect(service.findAll()).resolves.toBe(roles);
-      expect(repo.find).toHaveBeenCalledTimes(1);
+    it('findAll áp dụng keyword/filter/sort/pagination và trả {result, pagination}', async () => {
+      const roles = [makeRole(), makeRole({ id: 2, code: 'ADMIN' })];
+      const qb = makeQueryBuilder();
+      qb.getManyAndCount.mockResolvedValue([roles, 11]);
+      repo.createQueryBuilder.mockReturnValue(qb);
+
+      const result = await service.findAll({
+        page: 2,
+        limit: 5,
+        keyword: ' adm ',
+        filters: ['code:eq:ADMIN'],
+        sort: ['name:ASC'],
+      });
+
+      expect(repo.createQueryBuilder).toHaveBeenCalledWith('role');
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        '(role.name ILIKE :keyword OR role.code ILIKE :keyword)',
+        { keyword: '%adm%' },
+      );
+      expect(qb.andWhere).toHaveBeenCalledWith('role.code = :filter_0', {
+        filter_0: 'ADMIN',
+      });
+      expect(qb.addOrderBy).toHaveBeenNthCalledWith(1, 'role.name', 'ASC');
+      expect(qb.addOrderBy).toHaveBeenNthCalledWith(2, 'role.id', 'ASC');
+      expect(qb.skip).toHaveBeenCalledWith(5);
+      expect(qb.take).toHaveBeenCalledWith(5);
+      expect(result).toEqual({
+        result: roles,
+        pagination: { total: 11, page: 2, limit: 5, totalPages: 3 },
+      });
+    });
+
+    it('findAll clamp page/limit và dùng sort mặc định createdAt:DESC', async () => {
+      const qb = makeQueryBuilder();
+      qb.getManyAndCount.mockResolvedValue([[], 0]);
+      repo.createQueryBuilder.mockReturnValue(qb);
+
+      await service.findAll({ page: 0, limit: 1000 });
+
+      expect(qb.skip).toHaveBeenCalledWith(0);
+      expect(qb.take).toHaveBeenCalledWith(100);
+      expect(qb.addOrderBy).toHaveBeenNthCalledWith(
+        1,
+        'role.createdAt',
+        'DESC',
+      );
     });
 
     it('findOne trả role khi tồn tại', async () => {

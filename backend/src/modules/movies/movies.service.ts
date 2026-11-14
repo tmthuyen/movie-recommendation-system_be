@@ -42,6 +42,7 @@ import {
   MovieSearchCacheSchema,
 } from '@/infrastructure/cache/cache.schemas';
 import { parseIdUtils } from '@/common/utils/parseIdUtils';
+import { PaginationUtils, SearchUtils } from '@/common/utils/search.util';
 
 @Injectable()
 export class MoviesService {
@@ -464,7 +465,7 @@ export class MoviesService {
     queryBuilder.andWhere('movie.posterPath IS NOT NULL');
     queryBuilder.andWhere('movie.backdropPath IS NOT NULL');
 
-    // keyword search: titile, titleVi
+    // keyword search: title, titleVi
     const trimmedKeyword = keyword?.trim();
     if (trimmedKeyword) {
       queryBuilder.andWhere(
@@ -528,10 +529,24 @@ export class MoviesService {
     // START SORT
     // ====================
 
-    const sortOptions = SearchUtils.parseSort(sort, this.allowMovieSortFields);
+    const sortMap = {
+      viewCount: 'movie.viewCount',
+      likeCount: 'movie.likeCount',
+      releaseDate: 'movie.releaseDate',
+      createdAt: 'movie.createdAt',
+      voteAverage: 'movie.voteAverage',
+    };
+    const sortOptions = SearchUtils.parseSort(sort, Object.keys(sortMap));
+    this.logger.log(`Parsed sort options: ${JSON.stringify(sortOptions)}`);
 
     for (const option of sortOptions) {
-      queryBuilder.addOrderBy(`movie.${option.field}`, option.direction);
+      const column = sortMap[option.field] as string | undefined;
+      if (!column) {
+        throw new BadRequestException(
+          `Sort field không hợp lệ: ${option.field}`,
+        );
+      }
+      queryBuilder.addOrderBy(column, option.direction);
     }
 
     // stable sort by id
@@ -578,68 +593,5 @@ export class MoviesService {
 
     const movies = await this.repo.findAllByIds(ids);
     return movies;
-  }
-}
-
-class PaginationUtils {
-  static getPaginationMeta(page: number, limit: number, total: number) {
-    const totalPages = Math.ceil(total / limit);
-    return {
-      page,
-      limit,
-      total,
-      totalPages,
-    };
-  }
-}
-
-/** Sort option interface
- * field: string, direction: 'ASC' | 'DESC'
- */
-export interface SortOption {
-  field: string;
-  direction: 'ASC' | 'DESC';
-}
-
-class SearchUtils {
-  static allowDirections = ['ASC', 'DESC'];
-
-  /** Parse sort string thành mảng các option để dùng trong query builder
-   * @param sort: string, ví dụ: "releaseDate:DESC,voteAverage:ASC"
-   * @param allowedFields: mảng các field được phép sort, ví dụ: ['releaseDate', 'voteAverage']
-   * @returns Array<{ field: string, direction: 'ASC' | 'DESC' }>
-   * @throws BadRequestException nếu sort không hợp lệ
-   */
-  static parseSort(sort: string, allowedFields: string[]): Array<SortOption> {
-    if (!sort) return [{ field: 'releaseDate', direction: 'DESC' }];
-
-    // map allowFields
-    // ánh xạ field
-    const mapField = new Map<string, string>();
-    for (const f of allowedFields) {
-      mapField.set(f.toLowerCase(), f);
-    }
-
-    // trả về field và direction đúng quy định
-    const sortOptions = sort.split(',').map(s => {
-      const [field, direction] = s.split(':');
-
-      if (!field || !direction) {
-        throw new BadRequestException('Invalid sort format');
-      }
-
-      const mappedField = mapField.get(field.toLowerCase());
-      if (!mappedField) {
-        throw new BadRequestException('Invalid sort field');
-      }
-
-      if (!SearchUtils.allowDirections.includes(direction.toUpperCase())) {
-        throw new BadRequestException('Invalid sort direction');
-      }
-
-      return { field: mappedField, direction: direction.toUpperCase() };
-    });
-
-    return sortOptions as Array<SortOption>;
   }
 }

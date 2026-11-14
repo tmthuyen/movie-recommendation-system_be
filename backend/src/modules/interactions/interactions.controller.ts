@@ -13,7 +13,7 @@ import { InteractionsService } from './interactions.service';
 import { CreateInteractionDto } from './dto/create-interaction.dto';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
-import { PaginationDto } from '@/common/dtos/pagination.dto';
+import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
 import { type Request } from 'express';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
 
@@ -59,15 +59,15 @@ export class InteractionsController {
 
   @Get()
   @ApiOperation({ summary: 'Lấy tất cả tương tác (Public)' })
-  async findAll(@Query() paginationDto: PaginationDto) {
-    const { data, ...pagination } =
-      await this.interactionsService.findAll(paginationDto);
+  async findAll(@Query() searchRequest: BaseSearchRequest) {
+    const { result, pagination } =
+      await this.interactionsService.findAll(searchRequest);
     return {
       success: true,
       statusCode: 200,
       message: 'Lấy danh sách tương tác thành công',
-      result: data,
-      pagination: pagination,
+      result,
+      pagination,
     };
   }
 
@@ -77,19 +77,19 @@ export class InteractionsController {
   @ApiOperation({ summary: 'Lấy lịch sử xem phim của cá nhân' })
   async getMyHistory(
     @Req() req: Request,
-    @Query() paginationDto: PaginationDto,
+    @Query() searchRequest: BaseSearchRequest,
   ) {
     const { sub: userId } = req.user as JwtPayload;
-    const { data, ...pagination } = await this.interactionsService.getHistory(
+    const { result, pagination } = await this.interactionsService.getHistory(
       userId,
-      paginationDto,
+      searchRequest,
     );
     return {
       success: true,
       statusCode: 200,
       message: 'Lấy lịch sử xem phim thành công',
-      result: data,
-      pagination: pagination,
+      result,
+      pagination,
     };
   }
 
@@ -99,19 +99,19 @@ export class InteractionsController {
   @ApiOperation({ summary: 'Lấy danh sách phim yêu thích (like) của cá nhân' })
   async getMyFavorites(
     @Req() req: Request,
-    @Query() paginationDto: PaginationDto,
+    @Query() searchRequest: BaseSearchRequest,
   ) {
     const { sub: userId } = req.user as JwtPayload;
-    const { data, ...pagination } = await this.interactionsService.getFavorites(
+    const { result, pagination } = await this.interactionsService.getFavorites(
       userId,
-      paginationDto,
+      searchRequest,
     );
     return {
       success: true,
       statusCode: 200,
       message: 'Lấy danh sách phim yêu thích thành công',
-      result: data,
-      pagination: pagination,
+      result,
+      pagination,
     };
   }
 

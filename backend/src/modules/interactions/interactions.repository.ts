@@ -1,21 +1,21 @@
-import { Injectable } from '@nestjs/common';
+import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
+import { SearchUtils } from '@/common/utils/search.util';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, SelectQueryBuilder } from 'typeorm';
 import { Interaction } from './entities/interaction.entity';
-import { PaginationDto } from '@/common/dtos/pagination.dto';
-import { PaginatedResult } from '@/common/dtos/paginated-result.interface';
 import { User } from '@/modules/users/entities/user.entity';
 import { Movie } from '@/modules/movies/entities/movie.entity';
 
 export const IInteractionRepository = Symbol('IInteractionRepository');
 
 export interface IInteractionRepository {
-  findAll(paginationDto: PaginationDto): Promise<PaginatedResult<Interaction>>;
+  findAll(request: BaseSearchRequest): Promise<[Interaction[], number]>;
   findByUser(
     userId: string,
-    paginationDto: PaginationDto,
+    request: BaseSearchRequest,
     types?: string[],
-  ): Promise<PaginatedResult<Interaction>>;
+  ): Promise<[Interaction[], number]>;
   findById(id: number): Promise<Interaction | null>;
   create(interaction: Partial<Interaction>): Promise<Interaction>;
   update(
@@ -50,41 +50,108 @@ export class InteractionRepository implements IInteractionRepository {
     private readonly repo: Repository<Interaction>,
   ) {}
 
-  async findAll(
-    paginationDto: PaginationDto,
-  ): Promise<PaginatedResult<Interaction>> {
-    const { page = 1, limit = 10 } = paginationDto;
+  private applySearch(
+    qb: SelectQueryBuilder<Interaction>,
+    request: BaseSearchRequest,
+  ): void {
+    const { keyword, filters = [], sort = ['createdAt:DESC'] } = request;
+
+    // keyword search: user, movie, type
+    const trimmedKeyword = keyword?.trim();
+    if (trimmedKeyword) {
+      qb.andWhere(
+        '(user.fullName ILIKE :keyword OR user.email ILIKE :keyword OR movie.title ILIKE :keyword OR movie.titleVi ILIKE :keyword OR interaction.type ILIKE :keyword)',
+        { keyword: `%${trimmedKeyword}%` },
+      );
+    }
+
+    // ====================
+    // START FILTER <= >=
+    // ====================
+
+    const fieldMap: Record<string, string> = {
+      id: 'interaction.id',
+      score: 'interaction.score',
+      type: 'interaction.type',
+      createdAt: 'interaction.createdAt',
+      updatedAt: 'interaction.updatedAt',
+      userId: 'user.id',
+      userEmail: 'user.email',
+      userFullName: 'user.fullName',
+      movieId: 'movie.id',
+      movieTitle: 'movie.title',
+    };
+
+    SearchUtils.applyFilters(qb, filters || [], fieldMap);
+
+    // ====================
+    // END FILTER <= >=
+    // ====================
+
+    // ====================
+    // START SORT
+    // ====================
+
+    const sortMap = {
+      id: 'interaction.id',
+      score: 'interaction.score',
+      type: 'interaction.type',
+      createdAt: 'interaction.createdAt',
+      updatedAt: 'interaction.updatedAt',
+    };
+
+    const sortOptions = SearchUtils.parseSort(
+      sort.join(','),
+      Object.keys(sortMap),
+    );
+
+    for (const option of sortOptions) {
+      const column = sortMap[option.field] as string | undefined;
+      if (!column) {
+        throw new BadRequestException(
+          `Sort field không hợp lệ: ${option.field}`,
+        );
+      }
+      qb.addOrderBy(column, option.direction);
+    }
+
+    // stable sort by id
+    if (!sortOptions.some(option => option.field === 'id')) {
+      qb.addOrderBy('interaction.id', 'ASC');
+    }
+
+    // ====================
+    // END SORT
+    // ====================
+  }
+
+  async findAll(request: BaseSearchRequest): Promise<[Interaction[], number]> {
+    const { page = 1, limit = 10 } = request;
     const skip = (page - 1) * limit;
 
     const queryBuilder = this.repo
       .createQueryBuilder('interaction')
       .leftJoinAndSelect('interaction.user', 'user')
-      .leftJoinAndSelect('interaction.movie', 'movie')
-      .skip(skip)
-      .take(limit)
-      .orderBy('interaction.id', 'DESC');
+      .leftJoinAndSelect('interaction.movie', 'movie');
 
-    const [data, total] = await queryBuilder.getManyAndCount();
+    this.applySearch(queryBuilder, request);
 
-    return {
-      data,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
+    queryBuilder.skip(skip).take(limit);
+
+    return queryBuilder.getManyAndCount();
   }
 
   async findByUser(
     userId: string,
-    paginationDto: PaginationDto,
+    request: BaseSearchRequest,
     types?: string[],
-  ): Promise<PaginatedResult<Interaction>> {
-    const { page = 1, limit = 10 } = paginationDto;
+  ): Promise<[Interaction[], number]> {
+    const { page = 1, limit = 10 } = request;
     const skip = (page - 1) * limit;
 
     const queryBuilder = this.repo
       .createQueryBuilder('interaction')
+      .leftJoin('interaction.user', 'user')
       .leftJoinAndSelect('interaction.movie', 'movie')
       .where('interaction.user_id = :userId', { userId });
 
@@ -92,17 +159,11 @@ export class InteractionRepository implements IInteractionRepository {
       queryBuilder.andWhere('interaction.type IN (:...types)', { types });
     }
 
-    queryBuilder.skip(skip).take(limit).orderBy('interaction.id', 'DESC');
+    this.applySearch(queryBuilder, request);
 
-    const [data, total] = await queryBuilder.getManyAndCount();
+    queryBuilder.skip(skip).take(limit);
 
-    return {
-      data,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
+    return queryBuilder.getManyAndCount();
   }
 
   async findById(id: number): Promise<Interaction | null> {

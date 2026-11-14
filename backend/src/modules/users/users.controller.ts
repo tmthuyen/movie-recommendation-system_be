@@ -18,7 +18,7 @@ import {
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
-import { PaginationDto } from '@/common/dtos/pagination.dto';
+import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles } from '@/common/decorators/roles.decorator';
 import {
@@ -32,6 +32,7 @@ import { type Request } from 'express';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
 import { UserMapper } from '@/modules/users/user.mapper';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { AssignRolesDto } from '@/modules/users/dto/assign-role.dto';
 
 @ApiTags('Users')
 @Controller('users')
@@ -85,19 +86,15 @@ export class UsersController {
 
   @Roles('ADMIN', 'SUPERADMIN')
   @Get()
-  async findAll(@Query() paginationDto: PaginationDto) {
-    const result = await this.usersService.findAll(paginationDto);
+  async findAll(@Query() searchRequest: BaseSearchRequest) {
+    const { result, pagination } =
+      await this.usersService.findAll(searchRequest);
     return {
       success: true,
       statusCode: HttpStatus.OK,
       message: 'Lấy danh sách user thành công',
-      result: UserMapper.toResponseList(result.data),
-      pagination: {
-        total: result.total,
-        page: result.page,
-        limit: result.limit,
-        totalPages: result.totalPages,
-      },
+      result: UserMapper.toResponseList(result),
+      pagination,
     };
   }
 
@@ -144,9 +141,12 @@ export class UsersController {
   @Patch(':id/roles')
   async assignRoles(
     @Param('id') id: string,
-    @Body('roleIds') roleIds: number[],
+    @Body() assignRolesDto: AssignRolesDto,
   ) {
-    const result = await this.usersService.assignRoles(id, roleIds);
+    const result = await this.usersService.assignRoles(
+      id,
+      assignRolesDto.roleIds,
+    );
     return {
       success: true,
       statusCode: HttpStatus.OK,

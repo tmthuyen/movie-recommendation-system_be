@@ -17,19 +17,16 @@ describe('FailedEventsController', () => {
   afterEach(() => jest.restoreAllMocks());
 
   describe('findAll', () => {
-    it('mặc định page=1, limit=10 và map envelope + pagination', async () => {
+    it('map envelope + pagination từ service', async () => {
       const data = [{ id: 'fe-1' }];
       service.findAll.mockResolvedValue({
-        data,
-        total: 25,
-        page: 1,
-        limit: 10,
-        totalPages: 3,
+        result: data,
+        pagination: { total: 25, page: 1, limit: 10, totalPages: 3 },
       });
 
       const response = await controller.findAll({});
 
-      expect(service.findAll).toHaveBeenCalledWith(1, 10, undefined);
+      expect(service.findAll).toHaveBeenCalledWith({});
       expect(response).toEqual({
         success: true,
         statusCode: HttpStatus.OK,
@@ -39,32 +36,27 @@ describe('FailedEventsController', () => {
       });
     });
 
-    it('truyền page/limit/status từ query xuống service', async () => {
+    it('truyền search request (page/limit/status/filters/sort) xuống service', async () => {
       service.findAll.mockResolvedValue({
-        data: [],
-        total: 0,
+        result: [],
+        pagination: { total: 0, page: 2, limit: 5, totalPages: 0 },
+      });
+
+      await controller.findAll({
         page: 2,
         limit: 5,
-        totalPages: 0,
+        status: 'PENDING' as never,
+        filters: ['source:eq:backend-service'],
+        sort: ['retryCount:DESC'],
       });
 
-      await controller.findAll({ page: 2, limit: 5 }, 'PENDING');
-
-      expect(service.findAll).toHaveBeenCalledWith(2, 5, 'PENDING');
-    });
-
-    it('page/limit = 0 hoặc âm → fallback về 1/10 (toán tử ||)', async () => {
-      service.findAll.mockResolvedValue({
-        data: [],
-        total: 0,
-        page: 1,
-        limit: 10,
-        totalPages: 0,
+      expect(service.findAll).toHaveBeenCalledWith({
+        page: 2,
+        limit: 5,
+        status: 'PENDING',
+        filters: ['source:eq:backend-service'],
+        sort: ['retryCount:DESC'],
       });
-
-      await controller.findAll({ page: 0, limit: 0 });
-
-      expect(service.findAll).toHaveBeenCalledWith(1, 10, undefined);
     });
 
     it('service lỗi → lỗi lan ra ngoài (filter toàn cục xử lý)', async () => {

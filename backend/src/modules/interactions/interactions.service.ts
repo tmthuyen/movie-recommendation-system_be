@@ -1,7 +1,8 @@
 import { Injectable, Inject, NotFoundException, Logger } from '@nestjs/common';
 import { CreateInteractionDto } from './dto/create-interaction.dto';
 import { IInteractionRepository } from './interactions.repository';
-import { PaginationDto } from '@/common/dtos/pagination.dto';
+import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
+import { PaginationUtils } from '@/common/utils/search.util';
 import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
 import { Interaction, InteractionType } from './entities/interaction.entity';
 import { Movie } from '@/modules/movies/entities/movie.entity';
@@ -12,7 +13,7 @@ import {
   MovieInteractionStatsService,
 } from './movie-interaction-stats.service';
 import { MoviesService } from '@/modules/movies/movies.service';
-import { PaginatedResult } from '@/common/dtos/paginated-result.interface';
+import { ResultWithPagination } from '@/common/dtos/paginated-result.interface';
 import { RatingsService } from '@/modules/ratings/ratings.service';
 import { Rating } from '@/modules/ratings/entities/rating.entity';
 import { MyInteractionsWithMovie } from '@/modules/interactions/dto/my-interaction-with-movie.dto';
@@ -148,36 +149,72 @@ export class InteractionsService {
   }
 
   async findAll(
-    paginationDto: PaginationDto,
-  ): Promise<PaginatedResult<Interaction>> {
-    const data = await this.repo.findAll(paginationDto);
+    request: BaseSearchRequest,
+  ): Promise<ResultWithPagination<Interaction>> {
+    const page = Math.max(request.page ?? 1, 1);
+    const limit = Math.min(Math.max(request.limit ?? 10, 1), 100);
+
+    const [data, total] = await this.repo.findAll({
+      ...request,
+      page,
+      limit,
+    });
 
     this.logger.log(
-      `Lấy danh sách tương tác: page=${paginationDto.page}, limit=${paginationDto.limit}, keyword=${paginationDto.keyword || 'N/A'}`,
+      `Lấy danh sách tương tác: page=${page}, limit=${limit}, keyword=${request.keyword || 'N/A'}`,
     );
-    return data;
+
+    return {
+      result: data,
+      pagination: PaginationUtils.getPaginationMeta(page, limit, total),
+    };
   }
 
-  async getHistory(userId: string, paginationDto: PaginationDto) {
+  async getHistory(
+    userId: string,
+    request: BaseSearchRequest,
+  ): Promise<ResultWithPagination<Interaction>> {
+    const page = Math.max(request.page ?? 1, 1);
+    const limit = Math.min(Math.max(request.limit ?? 10, 1), 100);
+
     // Only fetch CLICK (view history)
-    const data = await this.repo.findByUser(userId, paginationDto, [
-      InteractionType.CLICK,
-    ]);
+    const [data, total] = await this.repo.findByUser(
+      userId,
+      { ...request, page, limit },
+      [InteractionType.CLICK],
+    );
 
     this.logger.log(
-      `Lấy lịch sử xem phim của userId=${userId}: page=${paginationDto.page}, limit=${paginationDto.limit}`,
+      `Lấy lịch sử xem phim của userId=${userId}: page=${page}, limit=${limit}`,
     );
-    return data;
+
+    return {
+      result: data,
+      pagination: PaginationUtils.getPaginationMeta(page, limit, total),
+    };
   }
 
-  async getFavorites(userId: string, paginationDto: PaginationDto) {
-    const data = await this.repo.findByUser(userId, paginationDto, [
-      InteractionType.LIKE,
-    ]);
-    this.logger.log(
-      `Lấy danh sách yêu thích của userId=${userId}: page=${paginationDto.page}, limit=${paginationDto.limit}`,
+  async getFavorites(
+    userId: string,
+    request: BaseSearchRequest,
+  ): Promise<ResultWithPagination<Interaction>> {
+    const page = Math.max(request.page ?? 1, 1);
+    const limit = Math.min(Math.max(request.limit ?? 10, 1), 100);
+
+    const [data, total] = await this.repo.findByUser(
+      userId,
+      { ...request, page, limit },
+      [InteractionType.LIKE],
     );
-    return data;
+
+    this.logger.log(
+      `Lấy danh sách yêu thích của userId=${userId}: page=${page}, limit=${limit}`,
+    );
+
+    return {
+      result: data,
+      pagination: PaginationUtils.getPaginationMeta(page, limit, total),
+    };
   }
 
   async findOne(id: number) {

@@ -242,5 +242,52 @@ describe('InteractionsService', () => {
       await expect(service.remove(7)).resolves.toEqual({ success: true });
       expect(repo.remove).toHaveBeenCalledWith(7);
     });
+
+    it('findAll chuẩn hoá page/limit và trả {result, pagination}', async () => {
+      const data = [{ id: 1 }];
+      repo.findAll.mockResolvedValue([data, 21]);
+
+      const result = await service.findAll({ page: 0, limit: 500 });
+
+      expect(repo.findAll).toHaveBeenCalledWith({ page: 1, limit: 100 });
+      expect(result).toEqual({
+        result: data,
+        pagination: { total: 21, page: 1, limit: 100, totalPages: 1 },
+      });
+    });
+
+    it('getHistory ép type CLICK và trả {result, pagination}', async () => {
+      repo.findByUser.mockResolvedValue([[], 0]);
+
+      const result = await service.getHistory('user-1', { page: 2, limit: 5 });
+
+      expect(repo.findByUser).toHaveBeenCalledWith(
+        'user-1',
+        { page: 2, limit: 5 },
+        [InteractionType.CLICK],
+      );
+      expect(result.pagination).toEqual({
+        total: 0,
+        page: 2,
+        limit: 5,
+        totalPages: 0,
+      });
+    });
+
+    it('getFavorites ép type LIKE và trả {result, pagination}', async () => {
+      repo.findByUser.mockResolvedValue([[], 3]);
+
+      const result = await service.getFavorites('user-1', {
+        page: 1,
+        limit: 10,
+      });
+
+      expect(repo.findByUser).toHaveBeenCalledWith(
+        'user-1',
+        { page: 1, limit: 10 },
+        [InteractionType.LIKE],
+      );
+      expect(result.pagination.total).toBe(3);
+    });
   });
 });

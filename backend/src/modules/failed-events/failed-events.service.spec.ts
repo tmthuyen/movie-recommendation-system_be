@@ -11,7 +11,7 @@ describe('FailedEventsService', () => {
   let repo: {
     save: jest.Mock;
     findById: jest.Mock;
-    findAndCount: jest.Mock;
+    search: jest.Mock;
   };
   let publisher: { publish: jest.Mock };
 
@@ -35,7 +35,7 @@ describe('FailedEventsService', () => {
     repo = {
       save: jest.fn((event: Partial<FailedEvent>) => event as FailedEvent),
       findById: jest.fn(),
-      findAndCount: jest.fn(),
+      search: jest.fn(),
     };
     publisher = { publish: jest.fn() };
 
@@ -51,38 +51,57 @@ describe('FailedEventsService', () => {
   afterEach(() => jest.restoreAllMocks());
 
   describe('findAll', () => {
-    it('trả dữ liệu phân trang và tính totalPages', async () => {
+    it('merge status cũ vào filters và trả {result, pagination}', async () => {
       const data = [makeFailedEvent()];
-      repo.findAndCount.mockResolvedValue([data, 25]);
+      repo.search.mockResolvedValue([data, 25]);
 
-      const result = await service.findAll(1, 10, FailedEventStatus.PENDING);
-
-      expect(repo.findAndCount).toHaveBeenCalledWith({
+      const result = await service.findAll({
         page: 1,
         limit: 10,
         status: FailedEventStatus.PENDING,
       });
-      expect(result).toEqual({
-        data,
-        total: 25,
+
+      expect(repo.search).toHaveBeenCalledWith({
         page: 1,
         limit: 10,
-        totalPages: 3,
+        status: FailedEventStatus.PENDING,
+        filters: ['status:eq:PENDING'],
+      });
+      expect(result).toEqual({
+        result: data,
+        pagination: { total: 25, page: 1, limit: 10, totalPages: 3 },
       });
     });
 
-    it('không truyền status → vẫn trả totalPages đúng khi rỗng', async () => {
-      repo.findAndCount.mockResolvedValue([[], 0]);
+    it('không nhân đôi filter status nếu client đã truyền filters', async () => {
+      repo.search.mockResolvedValue([[], 0]);
 
-      const result = await service.findAll(2, 5);
-
-      expect(repo.findAndCount).toHaveBeenCalledWith({
-        page: 2,
-        limit: 5,
-        status: undefined,
+      const result = await service.findAll({
+        page: 0,
+        limit: 500,
+        status: FailedEventStatus.PENDING,
+        filters: ['status:eq:PENDING'],
       });
-      expect(result.totalPages).toBe(0);
-      expect(result.data).toEqual([]);
+
+      expect(repo.search).toHaveBeenCalledWith({
+        page: 1,
+        limit: 100,
+        status: FailedEventStatus.PENDING,
+        filters: ['status:eq:PENDING'],
+      });
+      expect(result.pagination.totalPages).toBe(0);
+    });
+
+    it('không truyền status → filters rỗng', async () => {
+      repo.search.mockResolvedValue([[], 0]);
+
+      await service.findAll({});
+
+      expect(repo.search).toHaveBeenCalledWith({
+        page: 1,
+        limit: 10,
+        filters: [],
+      });
     });
   });
 

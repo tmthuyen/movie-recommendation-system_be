@@ -1,18 +1,18 @@
-import { Injectable } from '@nestjs/common';
+import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
+import { SearchUtils } from '@/common/utils/search.util';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, SelectQueryBuilder } from 'typeorm';
 import { Rating } from './entities/rating.entity';
-import { PaginationDto } from '@/common/dtos/pagination.dto';
-import { PaginatedResult } from '@/common/dtos/paginated-result.interface';
 
 export const IRatingRepository = Symbol('IRatingRepository');
 
 export interface IRatingRepository {
-  findAll(paginationDto: PaginationDto): Promise<PaginatedResult<Rating>>;
+  findAll(request: BaseSearchRequest): Promise<[Rating[], number]>;
   findByMovie(
     movieId: number,
-    paginationDto: PaginationDto,
-  ): Promise<PaginatedResult<Rating>>;
+    request: BaseSearchRequest,
+  ): Promise<[Rating[], number]>;
   findById(id: number): Promise<Rating | null>;
   create(rating: Partial<Rating>): Promise<Rating>;
   update(id: number, rating: Partial<Rating>): Promise<Rating | null>;
@@ -27,55 +27,110 @@ export class RatingRepository implements IRatingRepository {
     private readonly repo: Repository<Rating>,
   ) {}
 
-  async findAll(
-    paginationDto: PaginationDto,
-  ): Promise<PaginatedResult<Rating>> {
-    const { page = 1, limit = 10 } = paginationDto;
-    const skip = (page - 1) * limit;
+  private buildSearchQuery(
+    request: BaseSearchRequest,
+  ): SelectQueryBuilder<Rating> {
+    const { keyword, filters = [], sort = ['createdAt:DESC'] } = request;
 
-    const queryBuilder = this.repo
+    const qb = this.repo
       .createQueryBuilder('rating')
       .leftJoinAndSelect('rating.user', 'user')
-      .leftJoinAndSelect('rating.movie', 'movie')
-      .skip(skip)
-      .take(limit)
-      .orderBy('rating.createdAt', 'DESC');
+      .leftJoinAndSelect('rating.movie', 'movie');
 
-    const [data, total] = await queryBuilder.getManyAndCount();
+    // keyword search: content, user, movie
+    const trimmedKeyword = keyword?.trim();
+    if (trimmedKeyword) {
+      qb.andWhere(
+        '(rating.content ILIKE :keyword OR user.fullName ILIKE :keyword OR user.email ILIKE :keyword OR movie.title ILIKE :keyword OR movie.titleVi ILIKE :keyword)',
+        { keyword: `%${trimmedKeyword}%` },
+      );
+    }
 
-    return {
-      data,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
+    // ====================
+    // START FILTER <= >=
+    // ====================
+
+    const fieldMap: Record<string, string> = {
+      id: 'rating.id',
+      rating: 'rating.rating',
+      content: 'rating.content',
+      timestamp: 'rating.timestamp',
+      createdAt: 'rating.createdAt',
+      updatedAt: 'rating.updatedAt',
+      userId: 'user.id',
+      userEmail: 'user.email',
+      userFullName: 'user.fullName',
+      movieId: 'movie.id',
+      movieTitle: 'movie.title',
     };
+
+    SearchUtils.applyFilters(qb, filters || [], fieldMap);
+
+    // ====================
+    // END FILTER <= >=
+    // ====================
+
+    // ====================
+    // START SORT
+    // ====================
+
+    const sortMap = {
+      id: 'rating.id',
+      rating: 'rating.rating',
+      timestamp: 'rating.timestamp',
+      createdAt: 'rating.createdAt',
+      updatedAt: 'rating.updatedAt',
+    };
+
+    const sortOptions = SearchUtils.parseSort(
+      sort.join(','),
+      Object.keys(sortMap),
+    );
+
+    for (const option of sortOptions) {
+      const column = sortMap[option.field] as string | undefined;
+      if (!column) {
+        throw new BadRequestException(
+          `Sort field không hợp lệ: ${option.field}`,
+        );
+      }
+      qb.addOrderBy(column, option.direction);
+    }
+
+    // stable sort by id
+    if (!sortOptions.some(option => option.field === 'id')) {
+      qb.addOrderBy('rating.id', 'ASC');
+    }
+
+    // ====================
+    // END SORT
+    // ====================
+
+    return qb;
+  }
+
+  async findAll(request: BaseSearchRequest): Promise<[Rating[], number]> {
+    const { page = 1, limit = 10 } = request;
+    const skip = (page - 1) * limit;
+
+    const queryBuilder = this.buildSearchQuery(request).skip(skip).take(limit);
+
+    return queryBuilder.getManyAndCount();
   }
 
   async findByMovie(
     movieId: number,
-    paginationDto: PaginationDto,
-  ): Promise<PaginatedResult<Rating>> {
-    const { page = 1, limit = 10 } = paginationDto;
+    request: BaseSearchRequest,
+  ): Promise<[Rating[], number]> {
+    const { page = 1, limit = 10 } = request;
     const skip = (page - 1) * limit;
 
-    const queryBuilder = this.repo
-      .createQueryBuilder('rating')
-      .leftJoinAndSelect('rating.user', 'user')
-      .where('rating.movie_id = :movieId', { movieId })
+    const queryBuilder = this.buildSearchQuery(request)
+      .andWhere('rating.movie_id = :movieId', { movieId })
       .skip(skip)
-      .take(limit)
-      .orderBy('rating.createdAt', 'DESC');
+      .take(limit);
 
-    const [data, total] = await queryBuilder.getManyAndCount();
-
-    return {
-      data,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
+    return queryBuilder.getManyAndCount();
   }
 
   async findById(id: number): Promise<Rating | null> {

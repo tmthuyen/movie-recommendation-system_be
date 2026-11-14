@@ -9,7 +9,9 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User, UserStatus } from './entities/user.entity';
 import { RolesService } from '@/modules/roles/roles.service';
-import { PaginationDto } from '@/common/dtos/pagination.dto';
+import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
+import { ResultWithPagination } from '@/common/dtos/paginated-result.interface';
+import { PaginationUtils } from '@/common/utils/search.util';
 import * as bcrypt from 'bcrypt';
 import { IUserRepository } from './users.repository';
 import { UserProducer } from '@/infrastructure/messaging/producers/user.producer';
@@ -52,19 +54,21 @@ export class UsersService {
     return u;
   }
 
-  async findAll(paginationDto: PaginationDto) {
-    const { page = 1, limit = 10, keyword } = paginationDto;
-    const [data, total] = await this.userRepo.findAndCount({
+  async findAll(
+    request: BaseSearchRequest,
+  ): Promise<ResultWithPagination<User>> {
+    const page = Math.max(request.page ?? 1, 1);
+    const limit = Math.min(Math.max(request.limit ?? 10, 1), 100);
+
+    const [data, total] = await this.userRepo.search({
+      ...request,
       page,
       limit,
-      keyword,
     });
+
     return {
-      data,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
+      result: data,
+      pagination: PaginationUtils.getPaginationMeta(page, limit, total),
     };
   }
 

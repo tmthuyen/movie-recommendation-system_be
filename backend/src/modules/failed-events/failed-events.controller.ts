@@ -7,7 +7,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { FailedEventsService } from './failed-events.service';
-import { PaginationDto } from '@/common/dtos/pagination.dto';
+import { FailedEventSearchDto } from './dtos/failed-event-search.dto';
 import { Roles } from '@/common/decorators/roles.decorator';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 
@@ -19,25 +19,16 @@ export class FailedEventsController {
   @Roles('ADMIN', 'SUPERADMIN')
   @Get()
   @ApiOperation({ summary: 'Lấy danh sách các message lỗi (Dead Letter)' })
-  async findAll(
-    @Query() query: PaginationDto,
-    @Query('status') status?: string,
-  ) {
-    const page = query.page || 1;
-    const limit = query.limit || 10;
-    const result = await this.failedEventsService.findAll(page, limit, status);
+  async findAll(@Query() searchRequest: FailedEventSearchDto) {
+    const { result, pagination } =
+      await this.failedEventsService.findAll(searchRequest);
 
     return {
       success: true,
       statusCode: HttpStatus.OK,
       message: 'Lấy danh sách failed events thành công',
-      result: result.data,
-      pagination: {
-        total: result.total,
-        page: result.page,
-        limit: result.limit,
-        totalPages: result.totalPages,
-      },
+      result,
+      pagination,
     };
   }
 
