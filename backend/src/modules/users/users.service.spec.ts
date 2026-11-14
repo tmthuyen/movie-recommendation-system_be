@@ -140,6 +140,7 @@ describe('UsersService', () => {
         email: 'new@example.com',
         fullName: 'New User',
         status: UserStatus.UNVERIFIED,
+        preferenceData: {},
       });
     });
 
@@ -294,7 +295,10 @@ describe('UsersService', () => {
       expect(updated.password).toBe('hashed-new-password');
       expect(updated.password).not.toBe('plain-secret');
       expect(producer.publishUserUpdated).toHaveBeenCalledWith(
-        expect.objectContaining({ userId: 'user-1', email: user.email }),
+        expect.objectContaining({
+          userId: 'user-1',
+          preferenceData: {},
+        }),
       );
     });
 

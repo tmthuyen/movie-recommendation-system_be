@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from api.schemas import MovieCreated, MovieDeleted, MovieUpdated
-from services.recommend_service import RecommendService
+from services.movie_vector_service import MovieVectorService
 from utils.logger import setup_logger
 
 
@@ -15,8 +15,12 @@ class MovieEventHandler:
     roi goi RecommendService de thao tac ChromaDB tuong ung.
     """
 
-    def __init__(self, recommend_service: RecommendService) -> None:
-        self._svc = recommend_service
+    def __init__(
+        self,
+        movie_vector_service: MovieVectorService,
+    ) -> None:
+        # self._svc = recommend_service
+        self._movie_vector_service = movie_vector_service
         self._logger = setup_logger(name="FastAPI-Recommendations")
 
     async def handle(self, event_type: str, payload: dict[str, Any]) -> None:
@@ -58,7 +62,7 @@ class MovieEventHandler:
         """Validate schema MovieCreated -> upsert vector moi vao ChromaDB."""
         event = MovieCreated(**payload)
         movie_data = self._to_movie_data(event)
-        await self._svc.upsert_movie_vector(movie_data)
+        await self._movie_vector_service.upsert_movie_vector(movie_data)
         self._logger.info(
             "movie.created: upsert vector thanh cong movieId=%s", event.movieId
         )
@@ -67,7 +71,7 @@ class MovieEventHandler:
         """Validate schema MovieUpdated -> cap nhat (ghi de) vector trong ChromaDB."""
         event = MovieUpdated(**payload)
         movie_data = self._to_movie_data(event)
-        await self._svc.upsert_movie_vector(movie_data)
+        await self._movie_vector_service.upsert_movie_vector(movie_data)
         self._logger.info(
             "movie.updated: upsert vector thanh cong movieId=%s", event.movieId
         )
@@ -75,7 +79,7 @@ class MovieEventHandler:
     async def _on_movie_deleted(self, payload: dict[str, Any]) -> None:
         """Validate schema MovieDeleted -> xoa vector khoi ChromaDB."""
         event = MovieDeleted(**payload)
-        deleted = await self._svc.delete_movie_vector(event.movieId)
+        deleted = await self._movie_vector_service.delete_movie_vector(event.movieId)
         if deleted:
             self._logger.info(
                 "movie.deleted: xoa vector thanh cong movieId=%s", event.movieId

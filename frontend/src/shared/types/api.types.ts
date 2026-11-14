@@ -96,7 +96,7 @@ export interface UpdateProfileDto {
   phoneNumber?: string;
   birthDate?: Date;
   gender?: string;
-  preferenceData?: Record<string, any>;
+  preferenceData?: Record<string, string[]>;
 }
 
 // update password

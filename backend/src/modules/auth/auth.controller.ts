@@ -36,6 +36,19 @@ export class AuthController {
   constructor(private authService: AuthService) {}
 
   @Public()
+  // /api/auth/test-email
+  @Get('test-email')
+  async testEmail() {
+    await this.authService.testEmail();
+    return {
+      success: true,
+      statusCode: HttpStatus.OK,
+      message: 'Email test thành công',
+      result: {},
+    };
+  }
+
+  @Public()
   @RateLimit({
     strategy: 'sliding-window',
     type: 'ip',

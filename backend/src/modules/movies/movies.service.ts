@@ -41,7 +41,7 @@ import {
   MovieListCacheSchema,
   MovieSearchCacheSchema,
 } from '@/infrastructure/cache/cache.schemas';
-import { parseIdUtils } from '@/common/utils/parseIdUtils';
+import { idUtil } from '@/common/utils/id.util';
 import { PaginationUtils, SearchUtils } from '@/common/utils/search.util';
 
 @Injectable()
@@ -200,7 +200,7 @@ export class MoviesService {
           ...rs,
           data: rs.data.map(movie => ({
             ...movie,
-            id: parseIdUtils.toSafeNumberId(movie.id),
+            id: idUtil.toSafeNumberId(movie.id),
           })),
         };
       },
@@ -223,7 +223,7 @@ export class MoviesService {
       ttlSeconds: CacheTtl.movieDetail,
       loader: async () => {
         const movie = await this.findOneFresh(id);
-        return { ...movie, id: parseIdUtils.toSafeNumberId(movie.id) };
+        return { ...movie, id: idUtil.toSafeNumberId(movie.id) };
       },
     });
   }
@@ -425,7 +425,7 @@ export class MoviesService {
           ...rs,
           result: rs.result.map(movie => ({
             ...movie,
-            id: parseIdUtils.toSafeNumberId(movie.id),
+            id: idUtil.toSafeNumberId(movie.id),
           })),
         };
       },

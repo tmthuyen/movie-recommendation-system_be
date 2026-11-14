@@ -5,60 +5,79 @@ import {
   MESSAGE_EVENTS,
 } from '@/infrastructure/messaging/messaging.constants';
 import {
-  EmailVerificationRequestedPayload,
-  UserCreatedPayload,
-  UserUpdatedPayload,
+  EmailVerificationRequestedPayloadType,
+  UserCreatedPayloadType,
+  UserEmailVerifiedPayloadType,
+  UserUpdatedPayloadType,
 } from '@/infrastructure/messaging/event.types';
 
 @Injectable()
 export class UserProducer {
   constructor(private readonly eventPublisher: EventPublisherService) {}
 
-  publishUserCreated(payload: UserCreatedPayload, correlationId?: string) {
-    this.eventPublisher.publish(
+  // ========================
+  // user queue
+  publishUserCreated(
+    payload: UserCreatedPayloadType,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.eventPublisher.publish(
       MESSAGE_BUS_CONFIG.USER_EXCHANGE,
       MESSAGE_EVENTS.USER_CREATED,
       payload,
       correlationId,
+      MESSAGE_EVENTS.USER_CREATED,
     );
   }
 
-  publishUserUpdated(payload: UserUpdatedPayload, correlationId?: string) {
-    this.eventPublisher.publish(
-      MESSAGE_BUS_CONFIG.USER_EXCHANGE,
-      'user.updated',
-      payload,
-      correlationId,
-    );
-  }
-
-  publishUserDeleted(userId: string, correlationId?: string) {
-    this.eventPublisher.publish(
-      MESSAGE_BUS_CONFIG.USER_EXCHANGE,
-      'user.deleted',
-      { userId },
-      correlationId,
-    );
-  }
-
-  publishEmailVerificationRequested(
-    payload: EmailVerificationRequestedPayload,
+  publishUserUpdated(
+    payload: UserUpdatedPayloadType,
     correlationId?: string,
-  ) {
-    this.eventPublisher.publish(
+  ): Promise<void> {
+    return this.eventPublisher.publish(
       MESSAGE_BUS_CONFIG.USER_EXCHANGE,
-      MESSAGE_EVENTS.USER_EMAIL_VERIFICATION_REQUESTED,
+      MESSAGE_EVENTS.USER_UPDATED_PROFILE,
       payload,
       correlationId,
+      MESSAGE_EVENTS.USER_UPDATED_PROFILE,
     );
   }
 
-  publishEmailVerified(userId: string, correlationId?: string) {
-    this.eventPublisher.publish(
+  publishUserDeleted(userId: string, correlationId?: string): Promise<void> {
+    return this.eventPublisher.publish(
       MESSAGE_BUS_CONFIG.USER_EXCHANGE,
-      MESSAGE_EVENTS.USER_EMAIL_VERIFIED,
+      MESSAGE_EVENTS.USER_DELETED,
       { userId },
       correlationId,
+      MESSAGE_EVENTS.USER_DELETED,
+    );
+  }
+
+  // ========================
+  // auth queue
+  publishEmailVerificationRequested(
+    payload: EmailVerificationRequestedPayloadType,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.eventPublisher.publish(
+      MESSAGE_BUS_CONFIG.AUTH_EXCHANGE,
+      MESSAGE_EVENTS.AUTH_EMAIL_VERIFICATION_REQUESTED,
+      payload,
+      correlationId,
+      MESSAGE_EVENTS.AUTH_EMAIL_VERIFICATION_REQUESTED,
+    );
+  }
+
+  publishEmailVerified(
+    payload: UserEmailVerifiedPayloadType,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.eventPublisher.publish(
+      MESSAGE_BUS_CONFIG.AUTH_EXCHANGE,
+      MESSAGE_EVENTS.AUTH_EMAIL_VERIFIED,
+      payload,
+      correlationId,
+      MESSAGE_EVENTS.AUTH_EMAIL_VERIFIED,
     );
   }
 }

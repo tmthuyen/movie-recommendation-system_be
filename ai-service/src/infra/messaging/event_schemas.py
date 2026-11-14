@@ -55,6 +55,24 @@ class TrainingBatchEvent(DomainEvent[InteractionListPayload]):
     eventType: str = "training.batch"
 
 
+# ===================
+# User Event schema
+# ===================
+class UserUpdatedPayload(BaseModel):
+    userId: str
+    preferenceData: dict[str, list[str]] = Field(default_factory=dict)
+
+
+class UserCreatedPayload(UserUpdatedPayload):
+    email: str
+    fullName: str
+    status: str
+
+
+class UserDeletedPayload(BaseModel):
+    userId: str
+
+
 # class MovieCreated(BaseModel):
 #     movieId: int
 #     title: str

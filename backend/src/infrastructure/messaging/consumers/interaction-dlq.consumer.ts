@@ -1,10 +1,13 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { MESSAGE_BUS_CLIENT, MESSAGE_BUS_CONFIG } from '../messaging.constants';
 import type { ChannelWrapper } from 'amqp-connection-manager';
 import type { Channel, ConsumeMessage } from 'amqplib';
 import { FailedEventsService } from '@/modules/failed-events/failed-events.service';
 import { FailedEventDto } from '@/modules/failed-events/dtos/failed-event.dto';
-import { EventEnvelope } from '../event.types';
+import { EventEnvelope } from '@/infrastructure/messaging/event.types';
+import {
+  MESSAGE_BUS_CLIENT,
+  MESSAGE_BUS_CONFIG,
+} from '@/infrastructure/messaging/messaging.constants';
 
 @Injectable()
 export class InteractionHandler {

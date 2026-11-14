@@ -15,10 +15,13 @@ import {
   InteractionHandler,
 } from './consumers/interaction-dlq.consumer';
 import { FailedEventsModule } from '@/modules/failed-events/failed-events.module';
+import { MailModule } from '@/infrastructure/mail/mail.module';
+import { AuthConsumer, AuthHandler } from './consumers/auth.consumer';
+import { UserConsumer, UserHandler } from './consumers/user.consumer';
 
 @Global()
 @Module({
-  imports: [ConfigModule, FailedEventsModule],
+  imports: [ConfigModule, FailedEventsModule, MailModule],
   providers: [
     {
       provide: MESSAGE_BUS_CLIENT,
@@ -46,6 +49,11 @@ import { FailedEventsModule } from '@/modules/failed-events/failed-events.module
                 { durable: true },
               ),
               channel.assertExchange(
+                MESSAGE_BUS_CONFIG.AUTH_EXCHANGE,
+                'topic',
+                { durable: true },
+              ),
+              channel.assertExchange(
                 MESSAGE_BUS_CONFIG.INTERACTION_EXCHANGE,
                 'topic',
                 { durable: true },
@@ -62,6 +70,10 @@ import { FailedEventsModule } from '@/modules/failed-events/failed-events.module
     RecommendationHandler,
     InteractionConsumer,
     InteractionHandler,
+    UserConsumer,
+    UserHandler,
+    AuthConsumer,
+    AuthHandler,
     UserProducer,
     MovieProducer,
     InteractionProducer,

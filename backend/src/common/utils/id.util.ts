@@ -1,4 +1,5 @@
 import { AppException } from '@/common/custom-exception/app-exception';
+import * as crypto from 'crypto';
 
 export function toSafeNumberId(value: unknown): number {
   const id = Number(value);
@@ -15,6 +16,16 @@ export function toSafeNumberId(value: unknown): number {
   return id;
 }
 
-export const parseIdUtils = {
+// UUID
+const generateUUID = () => {
+  return crypto.randomUUID();
+};
+
+// UUID v7
+
+// Ulid
+
+export const idUtil = {
   toSafeNumberId,
+  generateUUID,
 };

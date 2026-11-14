@@ -4,11 +4,13 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from chromadb import Collection
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 from redis.asyncio import Redis
 
 from api.schemas import TrainRequest
+from core.custom_exception import CustomException
 from infra.redis.redis_service import RedisStore
 from services.model_training_service import ModelTrainingService
 from utils import setup_logger
@@ -53,6 +55,20 @@ class VectorBackend(ABC):
         self, movie_id: int, collection_name: str | None = None
     ) -> dict | None:
         return None
+
+    async def delete_by_id(self, id: str | int, collection_name: str):
+        """Xóa theo id
+
+        Args:
+            id (str | int): id của vector cần xóa
+            collection_name (str): tên collection chứa vector cần xóa
+        """
+        if not collection_name:
+            raise ValueError("collection_name is required for delete_by_id")
+        if not id:
+            raise ValueError("id is required for delete_by_id")
+
+        raise NotImplementedError("delete_by_id is not implemented for this backend")
 
     async def count(self, collection_name: str | None = None) -> int:
         """Return the number of stored vectors in a collection."""
@@ -110,6 +126,17 @@ class MemoryVectorBackend(VectorBackend):
     async def count(self, collection_name: str | None = None) -> int:
         return len(self.items)
 
+    async def delete_by_id(self, id: str | int, collection_name: str):
+        """Xóa theo id
+
+        Args:
+            id (str | int): id của vector cần xóa
+            collection_name (str): tên collection chứa vector cần xóa
+        """
+
+        if id in self.items:
+            del self.items[id]
+
     @property
     def location(self) -> str | None:
         return "memory"
@@ -118,44 +145,45 @@ class MemoryVectorBackend(VectorBackend):
         return None
 
 
-class RedisVectorBackend(VectorBackend):
-    def __init__(self, settings: Settings) -> None:
-        self.settings = settings
-        self.client: Redis | None = None
+# class RedisVectorBackend(VectorBackend):
+#     def __init__(self, settings: Settings) -> None:
+#         self.settings = settings
+#         self.client: Redis | None = None
 
-    async def start(self) -> None:
-        self.client = Redis.from_url(self.settings.redis_url, decode_responses=True)
+#     async def start(self) -> None:
+#         self.client = Redis.from_url(self.settings.redis_url, decode_responses=True)
 
-    async def upsert(
-        self,
-        movie_id: int,
-        vector: list[float],
-        payload: dict[str, Any],
-        collection_name: str | None = None,
-    ) -> None:
-        if self.client is None:
-            raise RuntimeError("Redis vector backend has not started")
-        key = f"{self.settings.redis_key_prefix}vector:{movie_id}"
-        await self.client.set(key, json.dumps({"vector": vector, "payload": payload}))
+#     async def upsert(
+#         self,
+#         movie_id: int,
+#         vector: list[float],
+#         payload: dict[str, Any],
+#         collection_name: str | None = None,
+#     ) -> None:
+#         if self.client is None:
+#             raise RuntimeError("Redis vector backend has not started")
+#         key = f"{self.settings.redis_key_prefix}vector:{movie_id}"
+#         await self.client.set(key, json.dumps({"vector": vector, "payload": payload}))
 
-    async def query(
-        self,
-        vector: list[float],
-        top_k: int = 10,
-        where: dict | None = None,
-        collection_name: str | None = None,
-    ) -> list[dict[str, Any]]:
-        logger.warning(
-            "RedisVectorBackend does not support ANN query; returning empty list."
-        )
-        return []
+#     async def query(
+#         self,
+#         vector: list[float],
+#         top_k: int = 10,
+#         where: dict | None = None,
+#         collection_name: str | None = None,
+#     ) -> list[dict[str, Any]]:
+#         logger.warning(
+#             "RedisVectorBackend does not support ANN query; returning empty list."
+#         )
+#         return []
 
-    async def count(self, collection_name: str | None = None) -> int:
-        raise NotImplementedError("RedisVectorBackend does not support count")
 
-    async def close(self) -> None:
-        if self.client:
-            await self.client.aclose()
+#     async def count(self, collection_name: str | None = None) -> int:
+#         raise NotImplementedError("RedisVectorBackend does not support count")
+
+#     async def close(self) -> None:
+#         if self.client:
+#             await self.client.aclose()
 
 
 class QdrantVectorBackend(VectorBackend):
@@ -209,6 +237,20 @@ class QdrantVectorBackend(VectorBackend):
         )
         return [{"id": h.id, "score": h.score, "payload": h.payload} for h in hits]
 
+    async def delete_by_id(self, id: str | int, collection_name: str):
+        """Xóa theo id
+
+        Args:
+            id (str | int): id của vector cần xóa
+            collection_name (str): tên collection chứa vector cần xóa
+        """
+        if self.client is None:
+            raise RuntimeError("Qdrant vector backend has not started")
+        await self.client.delete(
+            collection_name=collection_name,
+            points_selector={"ids": [id]},
+        )
+
     async def count(self, collection_name: str | None = None) -> int:
         if self.client is None:
             raise RuntimeError("Qdrant vector backend has not started")
@@ -245,7 +287,7 @@ class ChromaVectorBackend(VectorBackend):
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self._client = None
-        self._collections = {}
+        self._collections: dict[str, Collection] = {}
 
     # ── lifecycle ────────────────────────────────────────────────────────────
 
@@ -388,6 +430,14 @@ class ChromaVectorBackend(VectorBackend):
     ) -> dict | None:
         return await asyncio.to_thread(self._sync_get_by_id, movie_id, collection_name)
 
+    # delete
+    def _sync_delete_by_id(self, id: str | int, collection_name: str) -> None:
+        collection = self._get_collection(collection_name)
+        collection.delete(ids=[str(id)])
+
+    async def delete_by_id(self, id: str | int, collection_name: str):
+        await asyncio.to_thread(self._sync_delete_by_id, id, collection_name)
+
     def _sync_count(self, collection_name: str | None = None) -> int:
         collection = self._get_collection(
             collection_name or self.settings.vector_collection
@@ -424,7 +474,6 @@ class ChromaVectorBackend(VectorBackend):
 class VectorStore:
     BACKENDS: dict[str, type] = {
         "memory": MemoryVectorBackend,
-        "redis": RedisVectorBackend,
         "qdrant": QdrantVectorBackend,
         "chroma": ChromaVectorBackend,
     }
@@ -498,12 +547,34 @@ class VectorStore:
             return None
 
         if id is not None:
-            return await self.backend.get_by_id(id, collection_name)
+            return await self.backend.get_by_id(id=id, collection_name=collection_name)
 
         if movie_id is None:
             raise ValueError("Không có id hoặc movie_id để truy vấn vector.")
 
         return await self.backend.get_by_id(movie_id, collection_name)
+
+    # delete
+    async def delete_by_id(self, id: str | int, collection_name: str):
+        """Xóa theo id
+
+        Args:
+            id (str | int): id của vector cần xóa
+            collection_name (str): tên collection chứa vector cần xóa
+        """
+        if not self.settings.vector_db_enabled:
+            logger.info("Vector DB disabled; ignoring delete for id %s", id)
+            return
+
+        # check
+        if not id or not collection_name:
+            raise CustomException(
+                "id and collection_name are required for delete_by_id",
+                status_code=400,
+                error_code="BAD_REQUEST",
+            )
+
+        await self.backend.delete_by_id(id=id, collection_name=collection_name)
 
     @property
     def location(self) -> str | None:

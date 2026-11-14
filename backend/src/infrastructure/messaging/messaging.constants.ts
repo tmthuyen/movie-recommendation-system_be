@@ -2,14 +2,15 @@ export const MESSAGE_BUS_CLIENT = 'MESSAGE_BUS_CLIENT';
 
 export const MESSAGE_EVENTS = {
   USER_CREATED: 'user.created',
-  USER_EMAIL_VERIFICATION_REQUESTED: 'user.email_verification.requested',
-  USER_EMAIL_VERIFIED: 'user.email_verified',
+  USER_UPDATED_PROFILE: 'user.updated.profile',
+  USER_DELETED: 'user.deleted',
+  AUTH_EMAIL_VERIFICATION_REQUESTED: 'auth.email_verification.requested',
+  AUTH_EMAIL_VERIFIED: 'auth.email_verified',
   MOVIE_CREATED: 'movie.created',
   MOVIE_UPDATED: 'movie.updated',
   MOVIE_DELETED: 'movie.deleted',
   INTERACTION_CREATED: 'interaction.created',
-  USER_INTERACTION_CREATED: 'user.interaction.created',
-  USER_TRAINING_BATCH: 'training.batch',
+  INTERACTION_TRAINING_REQUEST: 'training.request',
 } as const;
 
 export const MESSAGE_BUS_CONFIG = {
@@ -29,6 +30,11 @@ export const MESSAGE_BUS_CONFIG = {
   USER_EXCHANGE: 'user.exchange',
   USER_QUEUE: 'user.queue',
   USER_ROUTING_KEY: 'user.#',
+
+  // auth: mail xác thực, mail reset password, mail bảo mật
+  AUTH_EXCHANGE: 'auth.exchange',
+  AUTH_QUEUE: 'auth.queue',
+  AUTH_ROUTING_KEY: 'auth.#',
 
   // interaction
   INTERACTION_EXCHANGE: 'interaction.exchange',

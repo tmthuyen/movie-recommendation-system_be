@@ -8,6 +8,7 @@ import asyncio
 import pytest
 
 from core.custom_exception import CustomException
+from src.services.embedding_service import EmbeddingService
 from src.services.user_vector_service import UserVectorService
 
 
@@ -16,8 +17,10 @@ def run(coro):
 
 
 @pytest.fixture
-def service(fake_chroma):
-    return UserVectorService(fake_chroma)
+def service(fake_chroma, fake_model):
+    embedding = EmbeddingService(model_name="MiniLM")
+    embedding._model = fake_model
+    return UserVectorService(fake_chroma, embedding)
 
 
 class TestFindUserProfileVector:
@@ -66,7 +69,7 @@ class TestUpsertUserProfileVector:
                 "vector": [0.25, 0.75],
                 "payload": {
                     "user_id": "u-2",
-                    "updated_from": "manual_update",
+                    "updated_from": "profile_event",
                 },
                 "collection_name": settings.vector_user_profile_collection,
             }
@@ -84,3 +87,9 @@ class TestUpsertUserProfileVector:
 
         result = run(service.find_user_profile_vector("u-3"))
         assert result["vector"] == [0.0, 1.0]
+
+    def test_updates_vector_from_profile_text(self, service, fake_chroma):
+        run(service.update_user_profile_with_text("u-4", "genre: Action, Drama"))
+
+        assert fake_chroma.upserts[-1]["movie_id"] == "u-4"
+        assert len(fake_chroma.upserts[-1]["vector"]) == 8

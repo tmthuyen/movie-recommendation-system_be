@@ -15,12 +15,9 @@ from core.integrations import TrainingScheduler
 from infra.messaging.event_schemas import (
     DomainEvent,
     InteractionAction,
-    InteractionCreatedEvent,
     InteractionCreatedPayload,
     InteractionListPayload,
-    TrainingBatchEvent,
 )
-from infra.storage.storage_service import storage_service
 from services.movie_vector_service import MovieVectorService
 from services.user_vector_service import UserVectorService
 
