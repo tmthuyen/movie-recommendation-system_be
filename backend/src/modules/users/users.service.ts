@@ -20,6 +20,27 @@ import {
   STORAGE_SERVICE,
 } from '@/infrastructure/storage/storage.service';
 
+function getPreferenceData(
+  preferenceData: User['preferenceData'] | null | undefined,
+): Record<string, string[]> {
+  if (!preferenceData) {
+    return {};
+  }
+
+  return Object.entries(preferenceData).reduce<Record<string, string[]>>(
+    (result, [key, value]) => {
+      if (
+        Array.isArray(value) &&
+        value.every(item => typeof item === 'string')
+      ) {
+        result[key] = value;
+      }
+      return result;
+    },
+    {},
+  );
+}
+
 @Injectable()
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
@@ -44,11 +65,12 @@ export class UsersService {
       roles: r,
     });
 
-    this.userProducer.publishUserCreated({
+    await this.userProducer.publishUserCreated({
       userId: u.id,
       email: u.email,
       fullName: u.fullName,
       status: u.status,
+      preferenceData: getPreferenceData(u.preferenceData),
     });
 
     return u;
@@ -90,11 +112,9 @@ export class UsersService {
     Object.assign(user, updateUserDto);
     await this.userRepo.save(user);
 
-    this.userProducer.publishUserUpdated({
+    await this.userProducer.publishUserUpdated({
       userId: user.id,
-      email: user.email,
-      fullName: user.fullName,
-      status: user.status,
+      preferenceData: getPreferenceData(user.preferenceData),
     });
 
     return user;
@@ -105,7 +125,7 @@ export class UsersService {
     user.status = UserStatus.BLOCKED;
     await this.userRepo.save(user);
 
-    this.userProducer.publishUserDeleted(user.id);
+    await this.userProducer.publishUserDeleted(user.id);
 
     return user;
   }

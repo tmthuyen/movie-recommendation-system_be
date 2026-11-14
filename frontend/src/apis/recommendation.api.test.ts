@@ -77,20 +77,14 @@ describe('recommendationApi', () => {
     });
   });
 
-  it('hybridSearch gửi đầy đủ tham số phân trang', async () => {
+  it('forYou gửi đầy đủ tham số phân trang', async () => {
     mocks.get.mockResolvedValue({ data: { result: [] } });
 
-    await recommendationApi.hybridSearch({
-      userId: 'u1',
-      keyword: 'dune',
+    await recommendationApi.forYou({
       topK: 10,
-      page: 2,
-      pageSize: 20,
     });
 
-    expect(mocks.get).toHaveBeenCalledWith('/recommendations/hybrid-search', {
-      params: { userId: 'u1', keyword: 'dune', topK: 10, page: 2, pageSize: 20 },
-    });
+    expect(mocks.get).toHaveBeenCalledWith('/recommendations/for-you?topK=10');
   });
 
   it('lan truyền lỗi từ axiosClient cho caller xử lý', async () => {

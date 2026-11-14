@@ -49,6 +49,8 @@ Bảng theo dõi danh sách plan trong `docs/plans/`. Dùng để xác định `
 | 29 | V29_testing_ai-service-fix-failing-tests.md | testing | ai-service-fix-failing-tests | Sửa test AI-service fail do lệch API hiện tại | ✅ Hoàn thành 2026-11-12 (554 passed) |
 | 30 | V30_backend_hybrid-semantic-load-more.md | backend | hybrid-semantic-load-more | Load-more semantic-search & for-you bằng Redis sorted set (cursor = rank) | ✅ Hoàn thành 2026-11-13 (BE 381 passed / 46 suites; AI phạm vi liên quan 100 passed) |
 | 31 | V31_backend_search-filter-sort-apis.md | backend | search-filter-sort-apis | Chuẩn hoá search/filter/sort cho users, ratings, comments, interactions, failed-events | ✅ Hoàn thành 2026-11-13 (BE 412 passed / 47 suites; type-check clean, lint 0 errors) |
+| 32 | V32_fullstack_user-profile-vector-events.md | backend + frontend + ai | fullstack-user-profile-vector-events | Luồng user profile qua RabbitMQ để cập nhật vector AI | ✅ Hoàn thành |
+| 33 | V33_backend-auth-user-consumers.md | backend | auth-user-consumers | Tách queue user/auth và xử lý email qua event | 🟡 Đang triển khai |
 
 ## Ghi chú legacy
 
@@ -59,11 +61,11 @@ Bảng theo dõi danh sách plan trong `docs/plans/`. Dùng để xác định `
 
 ## Cách tính next_index
 
-`max(index) = 31` → `next_index = 32`
+`max(index) = 33` → `next_index = 34`
 
 ## next_index
 
-`32`
+`34`
 
 ## Cách xác định index khi tạo plan mới
 

@@ -68,7 +68,7 @@ export class InteractionProducer {
 
     await this.eventPublisher.publish(
       MESSAGE_BUS_CONFIG.INTERACTION_EXCHANGE,
-      MESSAGE_BUS_CONFIG.INTERACTION_TRAINING_REQUEST_RK,
+      MESSAGE_EVENTS.INTERACTION_TRAINING_REQUEST,
       payload,
       correlationId,
       MESSAGE_BUS_CONFIG.INTERACTION_TRAINING_REQUEST_RK,

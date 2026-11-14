@@ -153,9 +153,13 @@ describe('SearchUtils', () => {
         fieldMap,
       );
 
-      expect(andWhere).toHaveBeenNthCalledWith(1, 'user.status = :filter_0', {
-        filter_0: 'ACTIVE',
-      });
+      expect(andWhere).toHaveBeenNthCalledWith(
+        1,
+        'UPPER(user.status) = :filter_0',
+        {
+          filter_0: 'ACTIVE',
+        },
+      );
       expect(andWhere).toHaveBeenNthCalledWith(
         2,
         'user.fullName ILIKE :filter_1',

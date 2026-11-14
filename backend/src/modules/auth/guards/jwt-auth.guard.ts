@@ -10,7 +10,7 @@ import { IS_PUBLIC } from '@/common/decorators/public.decorator';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
-  private readonly logger = new Logger('JwtAuthGuard');
+  private readonly logger = new Logger(JwtAuthGuard.name);
   constructor(private reflector: Reflector) {
     super();
   }
@@ -27,7 +27,9 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   }
 
   handleRequest(err, user, info) {
-    this.logger.log(err, user, info);
+    this.logger.log(
+      `Handle request: err=${err}, user=${JSON.stringify(user)}, info=${info}`,
+    );
     if (err || !user) {
       throw (
         err ||

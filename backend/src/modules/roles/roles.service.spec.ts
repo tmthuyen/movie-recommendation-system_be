@@ -114,7 +114,7 @@ describe('RolesService', () => {
         '(role.name ILIKE :keyword OR role.code ILIKE :keyword)',
         { keyword: '%adm%' },
       );
-      expect(qb.andWhere).toHaveBeenCalledWith('role.code = :filter_0', {
+      expect(qb.andWhere).toHaveBeenCalledWith('UPPER(role.code) = :filter_0', {
         filter_0: 'ADMIN',
       });
       expect(qb.addOrderBy).toHaveBeenNthCalledWith(1, 'role.name', 'ASC');

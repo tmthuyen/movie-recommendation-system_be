@@ -1,7 +1,7 @@
 import { AppException } from '@/common/custom-exception/app-exception';
+import { idUtil } from '@/common/utils/id.util';
 import { RedisService } from '@/infrastructure/redis/redis.service';
 import { Injectable, Logger } from '@nestjs/common';
-import * as crypto from 'crypto';
 
 export const REDIS_LOCK_SERVICE = 'REDIS_LOCK_SERVICE';
 
@@ -26,7 +26,7 @@ export class RedisLockService implements IRedisLockService {
   constructor(private readonly redisService: RedisService) {}
 
   async acquireLock(key: string, ttlSeconds: number): Promise<string | null> {
-    const lockValue = crypto.randomUUID();
+    const lockValue = idUtil.generateUUID();
 
     const result = await this.redisService.acquireLock(
       key,

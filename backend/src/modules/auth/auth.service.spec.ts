@@ -80,7 +80,7 @@ describe('AuthService', () => {
     };
     configService = { get: jest.fn().mockReturnValue(undefined) };
     mailService = {
-      sendVerificationEmail: jest.fn(),
+      sendMail: jest.fn(),
     };
     dataSource = { transaction: jest.fn() };
 
@@ -267,6 +267,7 @@ describe('AuthService', () => {
 
     it('token hợp lệ → active hoá user, xoá token, publish event', async () => {
       redisService.get.mockResolvedValue('1');
+      usersService.findByIdWithRoles.mockResolvedValue(activeUser());
 
       await service.verifyEmail('good');
 
@@ -276,7 +277,10 @@ describe('AuthService', () => {
         true,
       );
       expect(redisService.del).toHaveBeenCalledWith('auth:verify_email:good');
-      expect(userProducer.publishEmailVerified).toHaveBeenCalledWith('1');
+      expect(userProducer.publishEmailVerified).toHaveBeenCalledWith({
+        userId: 1,
+        email: 'a@example.com',
+      });
     });
   });
 
@@ -287,7 +291,7 @@ describe('AuthService', () => {
       await expect(
         service.forgotPassword('nobody@example.com'),
       ).resolves.toBeUndefined();
-      expect(mailService.sendVerificationEmail).not.toHaveBeenCalled();
+      expect(mailService.sendMail).not.toHaveBeenCalled();
     });
 
     it('email tồn tại → lưu token reset 15 phút, gửi mail', async () => {
@@ -300,9 +304,8 @@ describe('AuthService', () => {
         '1',
         15 * 60,
       );
-      expect(mailService.sendVerificationEmail).toHaveBeenCalledWith(
-        'a@example.com',
-        'opaque-token',
+      expect(mailService.sendMail).toHaveBeenCalledWith(
+        expect.objectContaining({ to: 'a@example.com' }),
       );
     });
 

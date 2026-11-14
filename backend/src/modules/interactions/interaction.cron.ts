@@ -15,6 +15,7 @@ import {
 } from '@/infrastructure/storage/storage.service';
 import { Interaction } from '@/modules/interactions/entities/interaction.entity';
 import * as crypto from 'crypto';
+import { idUtil } from '@/common/utils/id.util';
 
 @Injectable()
 export class InteractionCronService {
@@ -80,7 +81,7 @@ export class InteractionCronService {
         await this.processAppInteractions(lastCreatedAt, lastId);
 
         // Publish Training Request
-        const correlationId = crypto.randomUUID();
+        const correlationId = idUtil.generateUUID();
         await this.interactionProducer.publishTrainingRequest(
           {
             folder: 'interactions',

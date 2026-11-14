@@ -118,7 +118,7 @@ def service(fake_chroma, fake_model, settings):
     embedding = EmbeddingService(model_name="MiniLM")
     embedding._model = fake_model
     movie_service = MovieVectorService(fake_chroma, embedding)
-    user_service = UserVectorService(fake_chroma)
+    user_service = UserVectorService(fake_chroma, embedding)
     return RecommendService(
         fake_chroma,
         embedding,

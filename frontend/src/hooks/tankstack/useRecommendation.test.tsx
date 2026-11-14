@@ -6,7 +6,7 @@ import { recommendationApi } from '@/apis/recommendation.api';
 import {
   useGetSimilarMovies,
   useGetSimilarMoviesInfinite,
-  useHybridRecommendations,
+  useForYou,
   useSemanticSearch,
 } from './useRecommendation';
 
@@ -15,7 +15,7 @@ vi.mock('@/apis/recommendation.api', () => ({
     getSimilarMovies: vi.fn(),
     getSimilarMoviesCursor: vi.fn(),
     semanticSearch: vi.fn(),
-    hybridSearch: vi.fn(),
+    forYou: vi.fn(),
   },
 }));
 
@@ -243,7 +243,7 @@ describe('useSemanticSearch', () => {
 describe('useHybridRecommendations', () => {
   beforeEach(() => {
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    vi.mocked(recommendationApi.hybridSearch).mockReset();
+    vi.mocked(recommendationApi.forYou).mockReset();
   });
 
   afterEach(() => {
@@ -251,22 +251,22 @@ describe('useHybridRecommendations', () => {
   });
 
   it('truyền đầy đủ params phân trang/từ khoá và trả result', async () => {
-    vi.mocked(recommendationApi.hybridSearch).mockResolvedValue(apiResponse(similarMovies) as any);
+    vi.mocked(recommendationApi.forYou).mockResolvedValue(apiResponse(similarMovies) as any);
     const params = { userId: 'u1', keyword: 'dune', topK: 10, page: 2, pageSize: 20 };
 
-    const { result } = renderHook(() => useHybridRecommendations(params), {
+    const { result } = renderHook(() => useForYou(params), {
       wrapper: createWrapper(),
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(recommendationApi.hybridSearch).toHaveBeenCalledWith(params);
+    expect(recommendationApi.forYou).toHaveBeenCalledWith(params);
     expect(result.current.data).toEqual(similarMovies);
   });
 
   it('đưa lỗi vào state khi API thất bại', async () => {
-    vi.mocked(recommendationApi.hybridSearch).mockRejectedValue(new Error('timeout'));
+    vi.mocked(recommendationApi.forYou).mockRejectedValue(new Error('timeout'));
 
-    const { result } = renderHook(() => useHybridRecommendations({ userId: 'u1' }), {
+    const { result } = renderHook(() => useForYou({ topK: 10 }), {
       wrapper: createWrapper(),
     });
 

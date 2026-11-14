@@ -18,8 +18,10 @@ from core.integrations import TrainingScheduler, VectorStore
 from core.vector_health import log_vector_db_health
 from infra.messaging.consumers.interaction_event_handler import InteractionEventHandler
 from infra.messaging.consumers.movie_event_handler import MovieEventHandler
+from infra.messaging.consumers.user_event_handler import UserEventHandler
 from infra.messaging.interaction_queue import InteractionQueue
 from infra.messaging.message_queue import MessageQueue
+from infra.messaging.user_queue import UserQueue
 from infra.monitoring.prometheus import configure_monitoring, update_metrics
 from infra.redis.redis_service import RedisStore
 from infra.tracing.telemetry import configure_tracing
@@ -98,6 +100,7 @@ async def lifespan(application: FastAPI):
     )
     user_vector_service = UserVectorService(
         vector_store=vector_store,
+        embedding_service=embedding_service,
     )
 
     # CF model: ALS
@@ -123,12 +126,13 @@ async def lifespan(application: FastAPI):
     # =======================
 
     # khởi tạo các event handler
-    event_handler = MovieEventHandler(recommend_service=recommend_svc)
+    event_handler = MovieEventHandler(movie_vector_service=movie_vector_service)
     interaction_handler = InteractionEventHandler(
         training_scheduler=training_scheduler,
         user_vector_service=user_vector_service,
         movie_vector_service=movie_vector_service,
     )
+    user_event_handler = UserEventHandler(user_vector_service=user_vector_service)
 
     # Khởi tạo recommend queue
     mq = MessageQueue(settings)
@@ -140,6 +144,11 @@ async def lifespan(application: FastAPI):
     interaction_mq.set_handler(interaction_handler)
     await interaction_mq.start()
 
+    # Khởi tạo user queue
+    user_mq = UserQueue(settings=settings)
+    user_mq.set_handler(user_event_handler)
+    await user_mq.start()
+
     # =======================
     # END: khởi tạo các queue và event handler
     # =======================
@@ -150,6 +159,7 @@ async def lifespan(application: FastAPI):
     application.state.recommend_service = recommend_svc
     application.state.message_queue = mq
     application.state.interaction_queue = interaction_mq
+    application.state.user_queue = user_mq
     application.state.redis = redis_store
     application.state.training_scheduler = training_scheduler
 
@@ -173,6 +183,7 @@ async def lifespan(application: FastAPI):
         await training_scheduler.close()
         await redis_store.close()
         await interaction_mq.close()
+        await user_mq.close()
         await mq.close()
         await vector_store.close()
 

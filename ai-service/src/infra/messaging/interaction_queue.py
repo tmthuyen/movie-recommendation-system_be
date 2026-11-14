@@ -1,17 +1,11 @@
 import json
-from typing import TYPE_CHECKING, Any
 
 import aio_pika
 from aio_pika import ExchangeType, IncomingMessage
 
-from api.schemas import TrainRequest
-from core.config import Settings
+from core.config import Settings, get_settings
 from infra.messaging.consumers.interaction_event_handler import InteractionEventHandler
-from infra.messaging.event_schemas import (
-    InteractionCreatedEvent,
-    InteractionCreatedPayload,
-    TrainingBatchEvent,
-)
+from infra.messaging.event_constant import MessageEventBus
 from utils.logger import setup_logger
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -19,6 +13,7 @@ from utils.logger import setup_logger
 # ─────────────────────────────────────────────────────────────────────────────
 
 logger = setup_logger(name="FastAPI-Recommendations")
+settings = get_settings()
 
 
 class InteractionQueue:
@@ -50,26 +45,26 @@ class InteractionQueue:
 
         # ── 1. Khai bao Exchange ─────────────────────────────────────
         interaction_exchange = await self._channel.declare_exchange(
-            self._settings.rabbitmq_interaction_exchange,
+            name=MessageEventBus.INTERACTION_EXCHANGE,
             type=ExchangeType.TOPIC,
             durable=True,
         )
 
         # ── 2. Khai bao DLX ────────────────────────
         dlx = await self._channel.declare_exchange(
-            self._settings.rabbitmq_interaction_dlx,
+            name=MessageEventBus.INTERACTION_DLX,
             type=ExchangeType.TOPIC,
             durable=True,
         )
 
         # ── 3. Khai bao DLQ ──────────
         dlq = await self._channel.declare_queue(
-            self._settings.rabbitmq_interaction_dlq,
+            name=MessageEventBus.INTERACTION_DLQ,
             durable=True,
         )
         await dlq.bind(
             exchange=dlx,
-            routing_key=self._settings.rabbitmq_interaction_dlq_routing_key,
+            routing_key=MessageEventBus.INTERACTION_DLQ_RK,
         )
 
         # ── 4. Khai bao Queue voi DLX config ───────────────
@@ -77,24 +72,22 @@ class InteractionQueue:
             self._settings.rabbitmq_interaction_queue,
             durable=True,
             arguments={
-                "x-dead-letter-exchange": self._settings.rabbitmq_interaction_dlx,
-                "x-dead-letter-routing-key": self._settings.rabbitmq_interaction_dlq_routing_key,
+                "x-dead-letter-exchange": MessageEventBus.INTERACTION_DLX,
+                "x-dead-letter-routing-key": MessageEventBus.INTERACTION_DLQ_RK,
             },
         )
 
-        # ── 5. Bind vao Exchange ───────────────
+        # bind queue
+        # interaction
         await interaction_queue.bind(
             exchange=interaction_exchange,
-            routing_key=self._settings.rabbitmq_interaction_routing_key,
+            routing_key=MessageEventBus.INTERACTION_BINDING_ROUTING_KEY,
         )
-        # Batch training do backend cron publish với routing key riêng
+        # training: binding key có thể khác hoặc trùng routing key thật sự
+        # binding key: training.#, routing key: training.request, training.batch, ...
         await interaction_queue.bind(
             exchange=interaction_exchange,
-            routing_key="training.batch",
-        )
-        await interaction_queue.bind(
-            exchange=interaction_exchange,
-            routing_key="training.request",
+            routing_key=MessageEventBus.TRAINING_BINDING_ROUTING_KEY,
         )
 
         # ── 6. Bat dau consume ────────────────────────────────────────────
@@ -105,9 +98,9 @@ class InteractionQueue:
 
         logger.info(
             f"Started Interaction Queue:"
-            f"\nQueue: {self._settings.rabbitmq_interaction_queue}"
-            f"\nDLX: {self._settings.rabbitmq_interaction_dlx}"
-            f"\nDLQ: {self._settings.rabbitmq_interaction_dlq}"
+            f"\nQueue: {MessageEventBus.INTERACTION_QUEUE}"
+            f"\nDLX: {MessageEventBus.INTERACTION_DLX}"
+            f"\nDLQ: {MessageEventBus.INTERACTION_DLQ}"
         )
 
     async def close(self) -> None:
@@ -120,13 +113,16 @@ class InteractionQueue:
     async def _handle_message(self, message: IncomingMessage) -> None:
         """Xu ly message tu RabbitMQ."""
         event_type = "(unknown)"
+        correlation_id = message.correlation_id or "(unknown)"
+        routing_key = message.routing_key
         try:
-            routing_key = message.routing_key
             body = json.loads(message.body.decode("utf-8"))
 
             correlation_id = message.correlation_id or body.get("correlationId", None)
+            event_type = body.get("eventType", None)
+
             logger.info(
-                f"[InteractionQueue] Nhận message từ RabbitMQ: routing_key={routing_key}, correlation_id={correlation_id}"
+                f"[InteractionQueue] correlation_id={correlation_id} - Nhận message từ RabbitMQ: routing_key={routing_key or '(unknown)'} event_type={event_type}"
             )
 
             if routing_key is None:
@@ -134,7 +130,6 @@ class InteractionQueue:
                 await message.nack(requeue=False)
                 return
 
-            event_type = body.get("eventType", None)
             if event_type is None:
                 logger.error("[InteractionQueue] eventType is None in message body!")
                 await message.nack(requeue=False)
@@ -154,11 +149,14 @@ class InteractionQueue:
 
         except (ValueError, TypeError, KeyError) as exc:
             logger.error(
-                "[InteractionQueue] Invalid payload event_type=%s, sending to DLQ: %s",
+                "[InteractionQueue] correlation_id=%s - Invalid payload event_type=%s, sending to DLQ: %s",
+                correlation_id,
                 event_type,
                 exc,
             )
             await message.nack(requeue=False)
         except Exception as exc:
-            logger.error(f"[InteractionQueue] Error handling message: {exc}")
+            logger.error(
+                f"[InteractionQueue] correlation_id={correlation_id} - Error handling message: {exc}"
+            )
             await message.nack(requeue=False)

@@ -420,7 +420,7 @@ Socket.IO server chạy **cùng cổng 8081**, CORS `origin: '*'` (`src/modules/
 
 ## RabbitMQ events
 
-Backend là **producer** cho 3 exchange topic (durable, `assertExchange` trong `MessagingModule`) và **consumer cho 2 DLQ**. Kết nối qua `amqp-connection-manager`, `RABBITMQ_URL` (mặc định `amqp://guest:guest@localhost:5672`), `publishTimeout: 3000`.
+Backend là **producer** cho các exchange topic và **consumer cho user/auth business queue cùng 2 DLQ**. Kết nối qua `amqp-connection-manager`, `RABBITMQ_URL` (mặc định `amqp://guest:guest@localhost:5672`), `publishTimeout: 3000`.
 
 **Envelope sự kiện** (`EventEnvelope<T>`): `{eventId, eventType, eventVersion, source, occurredAt, correlationId?, payload}`.
 
@@ -429,15 +429,15 @@ Backend là **producer** cho 3 exchange topic (durable, `assertExchange` trong `
 | `movie.exchange` | `movie.created` | `POST /api/movies` (MoviesService.create) | `{movieId, title, titleVi, overview, overviewVi, genres[]}` | ai-service (`recommendation.queue`) |
 | `movie.exchange` | `movie.updated` | `PATCH /api/movies/:id` (khi đổi field AI) | như trên | ai-service |
 | `movie.exchange` | `movie.deleted` | `DELETE /api/movies/:id` | `{movieId}` | ai-service |
-| `user.exchange` | `user.created` | `UsersService.create` | `{userId, email, fullName, status}` | ai-service |
-| `user.exchange` | `user.updated` | `UsersService.update` | user payload | ai-service |
+| `user.exchange` | `user.created` | `UsersService.create` | `{userId, email, fullName, status, preferenceData}` | ai-service + `user.queue` |
+| `user.exchange` | `user.updated.profile` | `UsersService.update` | `{userId, preferenceData}` | ai-service + `user.queue` |
 | `user.exchange` | `user.deleted` | `UsersService.remove` | `{userId}` | ai-service |
-| `user.exchange` | `user.email_verification.requested` | register / send-verification-email (khi `ASYNC_MAIL_ENABLED=true`) | `{userId, email, verificationToken}` | (mail worker) |
-| `user.exchange` | `user.email_verified` | `POST /api/auth/verify-email` | `{userId, email?}` | ai-service |
+| `auth.exchange` | `auth.email_verification.requested` | register / send-verification-email (khi `ASYNC_MAIL_ENABLED=true`) | `{userId, email, verificationToken}` | `auth.queue` → MailService |
+| `auth.exchange` | `auth.email_verified` | `POST /api/auth/verify-email` | `{userId, email}` | `auth.queue` → MailService |
 | `interaction.exchange` | `interaction.event` | `POST /api/interactions` (like/unlike), `POST /api/ratings`, `POST /api/comments`, `POST /api/movies/:id/view` (chỉ lần click đầu) | `{userId, movieId, action, score, removed, createdAt}` — `eventType='interaction.created'`; unlike: `score=-5`, `removed=true` | ai-service (cập nhật vector real-time) |
 | `interaction.exchange` | `training.batch` | cron `InteractionCronService` | `{interactions: [{userId, movieId, action, score, removed, createdAt}]}` — seed ratings + toàn bộ interactions app | ai-service (training ALS) |
 
-**Routing key / binding (hằng trong `messaging.constants.ts`)**: `movie.#` → `movie.queue`, `user.#` → `user.queue`, `interaction.event` / `training.batch` → `interaction.queue` (queue do ai-service/infra định nghĩa). Lưu ý: `eventType` của sự kiện tương tác là `interaction.created`, routing key giữ `interaction.event`.
+**Routing key / binding (hằng trong `messaging.constants.ts`)**: `movie.#` → `movie.queue`, `user.#` → `user.queue`, `auth.#` → `auth.queue`, `interaction.event` / `training.batch` → `interaction.queue` (queue do ai-service/infra định nghĩa). Lưu ý: `eventType` của sự kiện tương tác là `interaction.created`, routing key giữ `interaction.event`.
 
 **DLQ flow (backend là consumer DLQ, ghi vào bảng `failed_events`)**:
 
@@ -450,7 +450,7 @@ Consumer đọc header `x-death` / `x-first-death-*` để khôi phục routing 
 
 **Cron**: `@Cron('0 */1440 * * * *')` (**mỗi 24 giờ**) — `interaction.cron.ts`: gửi `training.batch` gồm seed ratings (chunk 10.000, tối đa 10.000 dòng) + toàn bộ interactions của app (chunk 10.000); có cờ chống chạy chồng.
 
-**Backend KHÔNG consume `movie.queue`/`user.queue`/`interaction.queue` business** — chỉ publish business event + consume DLQ. Ngoài RabbitMQ, backend **có HTTP-call ai-service** qua module `recommendations` (`fetch` tới `AI_SERVICE_URL`), xem mục `Module recommendations`: `similar`, `semantic-search`, `for-you` (hybrid).
+Backend consume `user.queue` và `auth.queue` để xử lý user/auth event; `movie.queue` và `interaction.queue` business vẫn do ai-service consume. Ngoài RabbitMQ, backend **có HTTP-call ai-service** qua module `recommendations` (`fetch` tới `AI_SERVICE_URL`), xem mục `Module recommendations`: `similar`, `semantic-search`, `for-you` (hybrid).
 
 ## Database entities
 

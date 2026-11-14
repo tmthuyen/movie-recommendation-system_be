@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "analyze-project": {
+      "source": "lllllllama/rigorpilot-skills",
+      "sourceType": "github",
+      "skillPath": "skills/analyze-project/SKILL.md",
+      "computedHash": "8bc85d51271f57cbde116d615107564f14b4b083a1d00c7256e43cd1c42301f9"
+    },
     "api-and-interface-design": {
       "source": "addyosmani/agent-skills",
       "sourceType": "github",

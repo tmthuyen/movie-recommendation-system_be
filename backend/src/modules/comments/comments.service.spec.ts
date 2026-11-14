@@ -178,13 +178,15 @@ describe('CommentsService', () => {
     });
 
     it('update dùng id của comment đã tồn tại', async () => {
-      repo.findById.mockResolvedValue({ id: 5 });
+      repo.findById.mockResolvedValue({ id: 5, user: { id: '1' } });
       repo.update.mockResolvedValue({ id: 5, content: 'mới' });
 
-      await expect(service.update(5, { content: 'mới' })).resolves.toEqual({
-        id: 5,
-        content: 'mới',
-      });
+      await expect(service.update(5, '1', { content: 'mới' })).resolves.toEqual(
+        {
+          id: 5,
+          content: 'mới',
+        },
+      );
       expect(repo.update).toHaveBeenCalledWith(5, { content: 'mới' });
     });
 
