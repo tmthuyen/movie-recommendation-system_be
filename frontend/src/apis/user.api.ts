@@ -1,4 +1,5 @@
 import { ApiPaginatedResponse, ApiResponse, User } from '@/shared/types/api.types';
+import { withListParams, type SearchListParams } from '@/shared/utils/list-params';
 import axiosClient from '../lib/axiosClient';
 
 export const userApi = {
@@ -13,13 +14,9 @@ export const userApi = {
     }),
 
   // Admin
-  /** Danh sách user (ADMIN) — `{page, limit, keyword}` (keyword ILIKE fullName/email). */
-  getAllUsers: async (params: {
-    page?: number;
-    limit?: number;
-    keyword?: string;
-  }): Promise<ApiPaginatedResponse<User[]>> => {
-    const { data } = await axiosClient.get('/users', { params });
+  /** Danh sách user (ADMIN) — `BaseSearchRequest` (keyword ILIKE fullName/email/phoneNumber). */
+  getAllUsers: async (params: SearchListParams = {}): Promise<ApiPaginatedResponse<User[]>> => {
+    const { data } = await axiosClient.get(withListParams('/users', params));
     return data;
   },
   getUserById: async (id: number | string): Promise<ApiResponse<User>> => {

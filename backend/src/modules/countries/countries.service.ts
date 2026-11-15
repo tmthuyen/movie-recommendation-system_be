@@ -8,7 +8,7 @@ import {
 import { CreateCountryDto } from './dto/create-country.dto';
 import { UpdateCountryDto } from './dto/update-country.dto';
 import { ICountryRepository } from './countries.repository';
-import { PaginationDto } from '@/common/dtos/pagination.dto';
+import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
 import {
   CACHE_SERVICE,
   type ICacheService,
@@ -46,8 +46,18 @@ export class CountriesService {
     return country;
   }
 
-  async findAll(paginationDto: PaginationDto) {
-    const { page = 1, limit = 10, keyword } = paginationDto;
+  async findAll(request: BaseSearchRequest) {
+    const { page = 1, limit = 10, keyword, filters = [], sort } = request;
+
+    // Chỉ cache truy vấn mặc định; filter/sort tuỳ biến đọc thẳng DB.
+    const isDefaultQuery =
+      (filters?.length ?? 0) === 0 &&
+      (!sort || sort.join(',') === 'viName:ASC');
+
+    if (!isDefaultQuery) {
+      return this.repo.findAll(request);
+    }
+
     const version = await this.cache.getCounter(
       CacheKeys.country.listVersion(),
     );
@@ -57,7 +67,7 @@ export class CountriesService {
       schema: CountryListCacheSchema,
       ttlSeconds: CacheTtl.lookup,
       loader: async () => {
-        const countries = await this.repo.findAll(paginationDto);
+        const countries = await this.repo.findAll(request);
         this.logger.log(`Found ${countries.data.length} countries`);
         return countries;
       },

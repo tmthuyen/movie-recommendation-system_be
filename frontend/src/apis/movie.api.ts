@@ -1,5 +1,6 @@
 import { ApiPaginatedResponse, ApiResponse } from '@/shared/types/api.types';
 import { Movie, MovieDetail, MovieQuery } from '@/shared/types/movie.types';
+import { withListParams, type SearchListParams } from '@/shared/utils/list-params';
 import axiosClient from '../lib/axiosClient';
 
 import qs from 'qs';
@@ -28,9 +29,9 @@ export interface MovieAdminInput {
 }
 
 export const movieApi = {
-  /** Danh sách phim (public) — chỉ nhận `page`/`limit`/`keyword`. */
-  getAll: async (params: MovieQuery = {}): Promise<ApiPaginatedResponse<Movie[]>> => {
-    const { data } = await axiosClient.get('/movies', { params });
+  /** Danh sách phim (public) — hỗ trợ `BaseSearchRequest` (keyword/filter/sort). */
+  getAll: async (params: SearchListParams = {}): Promise<ApiPaginatedResponse<Movie[]>> => {
+    const { data } = await axiosClient.get(withListParams('/movies', params));
     return data;
   },
   /** Chi tiết phim theo id (public). */

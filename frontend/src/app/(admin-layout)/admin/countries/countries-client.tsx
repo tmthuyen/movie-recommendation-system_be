@@ -1,162 +1,194 @@
 'use client';
 
-import { CrudToolbar } from '@/components/admin/crud-toolbar';
-import { CrudTableSkeleton, DataTable, DataTableColumn } from '@/components/admin/data-table';
-import { CrudDeleteDialog } from '@/components/admin/delete-dialog';
-import { CrudFormDialog, CrudFormField, useCrudFormValues } from '@/components/admin/form-dialog';
-import { DataPagination } from '@/components/common/DataPagination';
-import { EmptyState } from '@/components/common/EmptyState';
-import { ErrorState } from '@/components/common/ErrorState';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
+import { countryApi } from '@/apis/country.api';
+import { AdminDeleteDialog } from '@/components/admin/data-view/admin-delete-dialog';
+import { AdminFormDialog } from '@/components/admin/data-view/admin-form-dialog';
+import type {
+  AdminFormField,
+  AdminFormValues,
+} from '@/components/admin/data-view/admin-form-schema';
+import { AdminTablePage } from '@/components/admin/data-view/admin-table-page';
 import { adminCountries } from '@/hooks/tankstack/admin';
-import { useCrudPage } from '@/hooks/tankstack/admin-crud';
-import { Country } from '@/shared/types/movie.types';
-import { z } from 'zod';
+import { useServerTable } from '@/hooks/use-server-table';
+import { parseAxiosError } from '@/lib/axiosClient';
+import type { Country } from '@/shared/types/movie.types';
+import { COUNTRY_FILTER_FIELDS } from './country-filter-fields';
+import { createCountryColumns } from './countries-columns';
 
-const FIELDS: CrudFormField[] = [
-  { name: 'viName', label: 'Tên quốc gia', placeholder: 'vd. Hàn Quốc' },
-  { name: 'enName', label: 'Tên quốc gia (tiếng Anh)', placeholder: 'vd. South Korea' },
-  { name: 'code', label: 'Mã quốc gia (ISO)', placeholder: 'vd. KR' },
-  { name: 'region', label: 'Khu vực', placeholder: 'vd. Asia' },
-];
+const EMPTY_COUNTRIES: Country[] = [];
+const DEFAULT_SORTING = [{ id: 'viName', desc: false }];
 
-type CountryForm = {
-  viName: string;
-  enName: string;
-  code: string;
-  region: string;
-};
-
-const schema = z.object({
-  viName: z.string().min(1, 'Tên quốc gia là bắt buộc'),
-  enName: z.string().min(1, 'Tên quốc gia (tiếng Anh) là bắt buộc'),
-  code: z
-    .string()
-    .nonempty('Mã quốc gia là bắt buộc')
-    .max(2, 'Mã quốc gia không được vượt quá 2 ký tự'),
-  region: z.string().min(1, 'Khu vực là bắt buộc'),
-}) as unknown as z.ZodType<CountryForm>;
-
-const COLUMNS: DataTableColumn<Country>[] = [
+const COUNTRY_FORM_FIELDS: AdminFormField[] = [
   {
-    key: 'id',
-    header: 'ID',
-    className: 'w-20 text-muted-foreground',
-    render: (country) => country.id,
+    name: 'viName',
+    label: 'Tên (tiếng Việt)',
+    required: true,
+    maxLength: 50,
+    placeholder: 'VD: Việt Nam',
   },
   {
-    key: 'viName',
-    header: 'Tên quốc gia',
-    render: (country) => <span className="font-medium">{country.viName}</span>,
+    name: 'enName',
+    label: 'Tên (tiếng Anh)',
+    required: true,
+    maxLength: 50,
+    placeholder: 'VD: Vietnam',
   },
   {
-    key: 'enName',
-    header: 'Tên tiếng Anh',
-    render: (country) => <span className="font-medium">{country.enName}</span>,
+    name: 'code',
+    label: 'Mã quốc gia',
+    required: true,
+    maxLength: 2,
+    placeholder: 'VD: VN',
   },
   {
-    key: 'code',
-    header: 'Mã',
-    render: (country) => <span className="font-mono text-xs">{country.code}</span>,
-  },
-  {
-    key: 'region',
-    header: 'Khu vực',
-    render: (country) => <span className="font-mono text-xs">{country.region}</span>,
+    name: 'region',
+    label: 'Khu vực',
+    required: true,
+    maxLength: 50,
+    placeholder: 'VD: Asia',
   },
 ];
 
-/** CRUD Quốc gia — dùng chung DataTable/CrudFormDialog/CrudDeleteDialog của admin. */
 export function CountriesClient() {
-  const mutations = {
-    create: adminCountries.useCreate(),
-    update: adminCountries.useUpdate(),
-    remove: adminCountries.useDelete(),
+  const table = useServerTable({
+    initialPageSize: 10,
+    initialSorting: DEFAULT_SORTING,
+  });
+  const { clampPageIndex } = table;
+
+  const countriesQuery = useQuery({
+    queryKey: ['admin-countries', 'list', table.params],
+    queryFn: () => countryApi.getAll(table.params),
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
+  });
+
+  const countries = countriesQuery.data?.result ?? EMPTY_COUNTRIES;
+  const total = countriesQuery.data?.pagination?.total ?? 0;
+
+  useEffect(() => {
+    clampPageIndex(total);
+  }, [clampPageIndex, total]);
+
+  const createCountry = adminCountries.useCreate();
+  const updateCountry = adminCountries.useUpdate();
+  const deleteCountry = adminCountries.useDelete();
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<Country | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Country | null>(null);
+
+  const openCreate = () => {
+    setEditing(null);
+    setFormOpen(true);
   };
-  const state = useCrudPage<
-    Country,
-    { viName: string; enName: string; code: string; region: string }
-  >(mutations);
-  const list = adminCountries.useList({ page: state.page, limit: 10, keyword: state.keyword });
-  const defaultValues = useCrudFormValues<CountryForm>(FIELDS, state.editing);
+
+  const columns = useMemo(
+    () =>
+      createCountryColumns({
+        onEdit: (country) => {
+          setEditing(country);
+          setFormOpen(true);
+        },
+        onDelete: (country) => setDeleteTarget(country),
+      }),
+    [],
+  );
+
+  const defaultValues = useMemo<AdminFormValues>(
+    () => ({
+      viName: editing?.viName ?? '',
+      enName: editing?.enName ?? '',
+      code: editing?.code ?? '',
+      region: editing?.region ?? '',
+    }),
+    [editing],
+  );
+
+  const handleSubmit = async (values: AdminFormValues) => {
+    const input = {
+      viName: String(values.viName ?? '').trim(),
+      enName: String(values.enName ?? '').trim(),
+      code: String(values.code ?? '')
+        .trim()
+        .toUpperCase(),
+      region: String(values.region ?? '').trim(),
+    };
+
+    if (editing) {
+      await updateCountry.mutateAsync({ id: editing.id, data: input });
+    } else {
+      await createCountry.mutateAsync(input);
+    }
+    setFormOpen(false);
+    setEditing(null);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteCountry.mutateAsync(deleteTarget.id);
+      setDeleteTarget(null);
+    } catch {
+      // Lỗi đã được toast trong mutation — giữ dialog mở để user thử lại.
+    }
+  };
 
   return (
-    <div className="flex w-full flex-col gap-4">
-      <CrudToolbar
-        keyword={state.keywordInput}
-        onKeywordChange={state.setKeywordInput}
-        searchPlaceholder="Tìm quốc gia…"
-        onAdd={state.openCreate}
-        addLabel="Thêm quốc gia"
-      />
-
-      {list.isLoading ? (
-        <CrudTableSkeleton />
-      ) : list.isError ? (
-        <ErrorState
-          title="Không thể tải danh sách quốc gia"
-          description="Vui lòng kiểm tra kết nối và thử lại."
-          onRetry={() => list.refetch()}
-        />
-      ) : (
-        <>
-          <DataTable
-            columns={COLUMNS}
-            items={list.data?.items ?? []}
-            rowKey={(country) => country.id}
-            onEdit={state.openEdit}
-            onDelete={(country) => state.setDeleteTarget(country)}
-            empty={
-              <EmptyState
-                title="Không có quốc gia nào"
-                description="Thêm quốc gia đầu tiên để gắn phim theo xuất xứ."
-              />
-            }
-          />
-          {list.data ? (
-            <DataPagination
-              page={list.data.pagination.page}
-              totalPages={list.data.pagination.totalPages}
-              total={list.data.pagination.total}
-              onPageChange={state.setPage}
-              disabled={list.isFetching}
-              ariaLabel="Phân trang quốc gia"
-            />
-          ) : null}
-        </>
-      )}
-
-      <CrudFormDialog<CountryForm>
-        open={state.dialogOpen}
-        onOpenChange={state.setDialogOpen}
-        title={state.editing ? 'Sửa quốc gia' : 'Thêm quốc gia'}
-        schema={schema}
-        fields={FIELDS}
+    <AdminTablePage
+      table={table}
+      columns={columns}
+      data={countries}
+      total={total}
+      isLoading={countriesQuery.isLoading}
+      isFetching={countriesQuery.isFetching}
+      error={countriesQuery.error}
+      onRetry={() => void countriesQuery.refetch()}
+      searchPlaceholder="Tìm theo tên hoặc mã quốc gia…"
+      searchLabel="Tìm kiếm quốc gia"
+      filterFields={COUNTRY_FILTER_FIELDS}
+      entityLabel="quốc gia"
+      emptyDescription="Thêm quốc gia đầu tiên để gắn vào phim."
+      addLabel="Thêm quốc gia"
+      onAdd={openCreate}
+    >
+      <AdminFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        title={editing ? 'Sửa quốc gia' : 'Thêm quốc gia'}
+        description={
+          editing ? 'Cập nhật thông tin quốc gia đang chọn.' : 'Tạo quốc gia mới để gắn vào phim.'
+        }
+        fields={COUNTRY_FORM_FIELDS}
         defaultValues={defaultValues}
-        onSubmit={(values, onSuccess) => {
-          state.submit(
-            {
-              viName: String(values.viName ?? ''),
-              enName: String(values.enName ?? ''),
-              code: String(values.code ?? ''),
-              region: String(values.region ?? ''),
-            },
-            onSuccess,
-          );
-        }}
-        submitting={state.saving}
-      />
-
-      <CrudDeleteDialog
-        target={
-          state.deleteTarget
-            ? { id: state.deleteTarget.id, label: state.deleteTarget.viName }
+        onSubmit={handleSubmit}
+        submitting={createCountry.isPending || updateCountry.isPending}
+        submitLabel={editing ? 'Lưu thay đổi' : 'Thêm quốc gia'}
+        mapServerError={(error) =>
+          parseAxiosError(error).statusCode === 409
+            ? { field: 'code', message: 'Tên hoặc mã quốc gia đã tồn tại' }
             : null
         }
-        onCancel={() => state.setDeleteTarget(null)}
-        onConfirm={state.confirmDelete}
-        isPending={state.deleting}
-        entityLabel="quốc gia"
       />
-    </div>
+
+      <AdminDeleteDialog
+        open={deleteTarget !== null}
+        onOpenChange={(next) => {
+          if (!next) setDeleteTarget(null);
+        }}
+        title="Xóa quốc gia?"
+        description={
+          <>
+            Quốc gia{' '}
+            <span className="text-foreground font-medium">{deleteTarget?.viName ?? 'này'}</span> sẽ
+            bị xóa khỏi tất cả phim liên quan. Hành động này không thể hoàn tác.
+          </>
+        }
+        onConfirm={handleDelete}
+        deleting={deleteCountry.isPending}
+      />
+    </AdminTablePage>
   );
 }

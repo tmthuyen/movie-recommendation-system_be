@@ -171,12 +171,14 @@ Các endpoint danh sách bên dưới dùng cùng một contract query (kế th�
 | `limit` | number | `10` | số item/trang, clamp `1..100` |
 | `keyword` | string | — | tìm partial (ILIKE `%keyword%`) trên nhiều field của từng module |
 | `filters` | string[] (lặp lại) | `[]` | `field:operator:value`; lặp param: `?filters=status:eq:ACTIVE&filters=role.code:eq:ADMIN` |
-| `sort` | string[] | `createdAt:DESC` | `field:DIR`; nhiều field: `?sort=fullName:ASC&sort=createdAt:DESC` hoặc `sort=fullName:ASC,createdAt:DESC` |
+| `sort` | string[] | — (module tự default) | `field:DIR`; nhiều field: `?sort=fullName:ASC&sort=createdAt:DESC` hoặc `sort=fullName:ASC,createdAt:DESC`. `BaseSearchRequest` **không còn default** — mỗi module tự áp default (`users/ratings/comments/interactions` → `createdAt:DESC`, `countries` → `viName:ASC`, …) |
 
-- **Operator**: `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in`, `notin`, `between`, `contains`, `isnull`, `isnotnull`.
+- **Operator**: `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `in`, `notin`, `between`, `contains`, `isnull`, `isnotnull`, `empty`, `notempty`.
 - `in` / `notin`: value phân tách bằng dấu phẩy — `filters=status:in:ACTIVE,PENDING`.
 - `between`: `from_to` — `filters=voteAverage:between:7_9`.
-- `contains`: ILIKE `%value%`; `isnull` / `isnotnull` không cần value.
+- `contains`: ILIKE `%value%`; `isnull` / `isnotnull` / `empty` / `notempty` không cần value.
+- `empty` / `notempty`: khớp **NULL hoặc chuỗi rỗng** (`TRIM(CAST(column AS TEXT)) = ''`), dùng cho cột text nullable (vd. lọc phim thiếu mô tả/poster).
+- ⚠ `eq` dùng `UPPER(column) = value` (so sánh chuỗi, không phân biệt hoa/thường) → **chỉ an toàn cho cột text/enum**. Cột số/ngày/uuid/boolean nên dùng `ne/gt/gte/lt/lte/between` hoặc `in`.
 - Value được phép chứa dấu `:` (ví dụ ISO timestamp) — chỉ 2 dấu `:` đầu được tách.
 - `filters` là **query param lặp lại**, không phải một chuỗi phân tách bằng dấu phẩy (dấu phẩy dành cho `in` / `notin`).
 - Sort luôn thêm `id ASC` làm tie-breaker để phân trang ổn định (trừ khi `sort` đã có `id`).
@@ -255,7 +257,7 @@ JWT payload: `{sub, fullName, email, scopes, sessionId, jti}`. `JwtStrategy` ki�
 |---|---|---|---|---|---|
 | POST | `/api/movies` | JWT + `@Roles(ADMIN, SUPERADMIN)` **⚠ không enforce** | `CreateMovieDto` (xem dưới) | movie | `201`; validate genreIds/countryId/peopleIds tồn tại; publish `movie.created` |
 | POST | `/api/movies/test-created` | **Public** (guard bị comment) | `CreateMovieDto` | `result: undefined` (bị lược khỏi JSON) | test publish event (movieId cứng 101000) |
-| GET | `/api/movies` | Public | query `{page, limit, keyword}` — keyword ILIKE `title` OR `titleVi` | movie[] + `pagination` | join `genres`, `countries` (M2M), `moviePeoples.people`; sort `createdAt DESC` |
+| GET | `/api/movies` | Public | `BaseSearchRequest` `{page=1, limit=10, keyword?, filters?, sort?}` — keyword ILIKE `title` OR `titleVi` | movie[] + `pagination` | join `genres`, `countries` (M2M), `moviePeoples.people`; sort mặc định `createdAt DESC` + `id ASC`; filter: `id,tmdbId,imdbId,title,titleVi,overview,overviewVi,homepage,posterPath,backdropPath,releaseDate,status,originCountry,originalLanguage,tmdbRating,voteAverage,voteCount,viewCount,likeCount,createdAt,updatedAt,genreId,countryId,peopleId`; sort: `id,title,titleVi,releaseDate,tmdbRating,voteAverage,voteCount,viewCount,likeCount,createdAt,updatedAt`; **cache chỉ dùng cho truy vấn mặc định** (không filter + sort `createdAt:DESC` + `page <= 3`) — có filter/sort khác sẽ đọc DB trực tiếp |
 | GET | `/api/movies/search` | Public | query `MovieSearchRequestDto`: `page=1`, `limit=10`, `keyword?`, `sort=releaseDate:DESC`, `genreIds?` (number[]), `countryIds?` (number[]), `releaseYearFrom?`, `releaseYearTo?` | movie[] + `pagination` | Search nâng cao: chỉ lấy phim có đủ `title/titleVi/releaseDate/overview/overviewVi/posterPath/backdropPath`; `sort` cho phép `releaseDate,voteAverage,viewCount,likeCount,createdAt` (nhiều field cách nhau dấu phẩy, thêm `id ASC` để ổn định) |
 | GET | `/api/movies/:id` | Public | path `id` (number) | movie (kèm relations) | `404` nếu không thấy |
 | POST | `/api/movies/:id/view` | **Optional JWT** | path `id` | `{viewCount, score, interaction: 'created'\|'updated'\|'none'}` | transaction: luôn +`viewCount`; nếu đã đăng nhập: tạo Interaction `click` (score 1, publish MQ) hoặc xem lại → `score = min(5, score+1)` (không publish lại); WS `movie-{id}-viewCount` + `movie-{id}-interaction` (chỉ khi user đăng nhập) |
@@ -264,14 +266,14 @@ JWT payload: `{sub, fullName, email, scopes, sessionId, jti}`. `JwtStrategy` ki�
 
 `CreateMovieDto` fields: `title` (bắt buộc, ≤255), `titleVi?`, `overview?`, `overviewVi?`, `releaseDate?` (string ≤20), `posterPath?`, `backdropPath?`, `originCountry?`, `originalLanguage?`, `budget?`, `revenue?`, `status?`, `video?` (boolean), `voteAverage?`, `voteCount?`, `genreIds?` (number[]), `countryId?` (number), `peopleIds?` (number[]).
 
-⚠ Lưu ý hiện trạng: `countryId` được validate tồn tại (`movies.service.ts:68-73`) nhưng `mapDtoToEntity` lại gán `entity.country = {id: countryId}` (`movies.service.ts:49-57`), trong khi entity `Movie` **không còn quan hệ `country`** — chỉ có M2M `countries` (`movie.entity.ts:158-174`). Việc quốc gia có thực sự được lưu khi tạo phim bằng `countryId` **cần xác minh runtime**. Search/filter quốc gia dùng M2M `countries` (`movies.service.ts:369-373`).
+⚠ Lưu ý: `countryId` được validate tồn tại (`movies.service.ts`) và `mapDtoToEntity` gán `entity.countries = [{id: countryId}]` (M2M `countries` của entity `Movie`). Search/filter quốc gia dùng M2M `countries` (`movies.service.ts`).
 
 ### Module `genres` — `/api/genres`
 
 | Method | Path | Auth | Request | Response `result` |
 |---|---|---|---|---|
 | POST | `/api/genres` | JWT + `@Roles(ADMIN, SUPERADMIN)` **⚠** | `CreateGenreDto` `{name, enName?}` | genre (`201`) |
-| GET | `/api/genres` | Public | `{page, limit, keyword}` (keyword ILIKE `name`) | genre[] + `pagination` |
+| GET | `/api/genres` | Public | `BaseSearchRequest` `{page, limit, keyword?, filters?, sort?}` — keyword ILIKE `name`; filter/sort: `id,name,enName,createdAt,updatedAt`; mặc định `createdAt DESC` + `id ASC` | genre[] + `pagination` |
 | GET | `/api/genres/:id` | Public | — | genre |
 | PATCH | `/api/genres/:id` | JWT + `@Roles` **⚠** | Partial | genre |
 | DELETE | `/api/genres/:id` | JWT + `@Roles` **⚠** | — | genre |
@@ -281,7 +283,7 @@ JWT payload: `{sub, fullName, email, scopes, sessionId, jti}`. `JwtStrategy` ki�
 | Method | Path | Auth | Request | Response `result` |
 |---|---|---|---|---|
 | POST | `/api/countries` | JWT + `@Roles` **⚠** | `CreateCountryDto` `{viName, enName, code, region}` (`subregion` có ở entity nhưng không có trong DTO tạo) | country (`201`) |
-| GET | `/api/countries` | Public | `{page, limit, keyword}` | country[] + `pagination` |
+| GET | `/api/countries` | Public | `BaseSearchRequest` `{page, limit, keyword?, filters?, sort?}` — filter/sort: `id,viName,enName,code,region,subregion,createdAt,updatedAt`; mặc định `viName ASC` + `id ASC` | country[] + `pagination` |
 | GET | `/api/countries/:id` | Public | — | country |
 | PATCH | `/api/countries/:id` | JWT + `@Roles` **⚠** | Partial | country |
 | DELETE | `/api/countries/:id` | JWT + `@Roles` **⚠** | — | country |
@@ -291,7 +293,7 @@ JWT payload: `{sub, fullName, email, scopes, sessionId, jti}`. `JwtStrategy` ki�
 | Method | Path | Auth | Request | Response `result` |
 |---|---|---|---|---|
 | POST | `/api/peoples` | JWT + `@Roles` **⚠** | `CreatePeopleDto` `{fullName, birthDate?, nationality?, gender?, mainRole?}` | people (`201`) |
-| GET | `/api/peoples` | Public | `{page, limit, keyword}` | people[] + `pagination` |
+| GET | `/api/peoples` | Public | `BaseSearchRequest` `{page, limit, keyword?, filters?, sort?}` — filter/sort: `id,fullName,nationality,gender,mainRole,birthDate,createdAt,updatedAt`; mặc định `createdAt DESC` + `id ASC` | people[] + `pagination` |
 | GET | `/api/peoples/:id` | Public | — | people |
 | PATCH | `/api/peoples/:id` | JWT + `@Roles` **⚠** | Partial | people |
 | DELETE | `/api/peoples/:id` | JWT + `@Roles` **⚠** | — | people |

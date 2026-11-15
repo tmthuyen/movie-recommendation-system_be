@@ -2,7 +2,7 @@ import { Injectable, Inject, NotFoundException, Logger } from '@nestjs/common';
 import { CreateMovieDto } from './dto/create-movie.dto';
 import { UpdateMovieDto } from './dto/update-movie.dto';
 import { IMovieRepository } from './movies.repository';
-import { PaginationDto } from '@/common/dtos/pagination.dto';
+import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
 import { MovieProducer } from '@/infrastructure/messaging/producers/movie.producer';
 import { DataSource } from 'typeorm';
 import { EventsGateway } from '@/modules/events/events.gateway';
@@ -70,7 +70,8 @@ export class MoviesService {
     const { genreIds, countryId, peopleIds, ...rest } = dto;
     const entity: any = { ...rest };
     if (genreIds) entity.genres = genreIds.map((id: number) => ({ id }));
-    if (countryId) entity.country = { id: countryId };
+    // Entity dùng quan hệ ManyToMany `countries` (bảng movie_countries).
+    if (countryId) entity.countries = [{ id: countryId }];
     if (peopleIds)
       entity.moviePeoples = peopleIds.map((id: number) => ({ people: { id } }));
     return entity;
@@ -100,7 +101,7 @@ export class MoviesService {
     }
   }
 
-  testMovieCreated(createMovieDto: CreateMovieDto) {
+  async testMovieCreated(createMovieDto: CreateMovieDto) {
     // Publish movie.created event
     if (createMovieDto) {
       const payload: MovieCreatedPayload = {
@@ -111,7 +112,7 @@ export class MoviesService {
         overviewVi: createMovieDto.overviewVi || '',
         genres: ['test genre'],
       };
-      this.movieProducer.publishMovieCreated(payload);
+      await this.movieProducer.publishMovieCreated(payload);
     }
   }
 
@@ -134,7 +135,7 @@ export class MoviesService {
           overviewVi: movie.overviewVi,
           genres: movie.genres?.map(g => g.name) || [],
         };
-        this.movieProducer.publishMovieCreated(payload);
+        await this.movieProducer.publishMovieCreated(payload);
       }
 
       page++;
@@ -164,7 +165,7 @@ export class MoviesService {
         overviewVi: fullMovie.overviewVi,
         genres: fullMovie.genres?.map(g => g.name) || [],
       };
-      this.movieProducer.publishMovieCreated(payload);
+      await this.movieProducer.publishMovieCreated(payload);
     }
 
     // Làm mới version danh sách phim.
@@ -173,12 +174,16 @@ export class MoviesService {
     return saved;
   }
 
-  async findAll(paginationDto: PaginationDto): Promise<PaginatedResult<Movie>> {
-    const { page = 1, limit = 10, keyword } = paginationDto;
+  async findAll(request: BaseSearchRequest): Promise<PaginatedResult<Movie>> {
+    const { page = 1, limit = 10, keyword, filters = [], sort } = request;
 
-    // Chỉ cache trang <= MAX_CACHED_PAGE.
-    if (page > MAX_CACHED_PAGE) {
-      return this.repo.findAll(paginationDto);
+    // Chỉ cache truy vấn mặc định (không filter, sort mặc định) ở trang <= MAX_CACHED_PAGE.
+    const isDefaultQuery =
+      (filters?.length ?? 0) === 0 &&
+      (!sort || sort.join(',') === 'createdAt:DESC');
+
+    if (!isDefaultQuery || page > MAX_CACHED_PAGE) {
+      return this.repo.findAll(request);
     }
 
     const version = await this.cache.getCounter(CacheKeys.movie.listVersion());
@@ -195,7 +200,7 @@ export class MoviesService {
       schema: MovieListCacheSchema,
       ttlSeconds: ttl,
       loader: async () => {
-        const rs = await this.repo.findAll(paginationDto);
+        const rs = await this.repo.findAll(request);
         return {
           ...rs,
           data: rs.data.map(movie => ({
@@ -266,7 +271,7 @@ export class MoviesService {
           overviewVi: fullMovie.overviewVi,
           genres: fullMovie.genres?.map(g => g.name) || [],
         };
-        this.movieProducer.publishMovieUpdated(payload);
+        await this.movieProducer.publishMovieUpdated(payload);
       }
     }
 
@@ -279,7 +284,7 @@ export class MoviesService {
     const movie = await this.findOneFresh(id); // Kiểm tra tồn tại (đọc DB)
     await this.repo.remove(movie.id);
 
-    this.movieProducer.publishMovieDeleted({ movieId: id });
+    await this.movieProducer.publishMovieDeleted({ movieId: id });
 
     await this.invalidateAfterMovieChange(id);
 

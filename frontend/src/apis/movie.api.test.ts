@@ -32,9 +32,9 @@ describe('movieApi', () => {
 
     const result = await movieApi.getAll({ page: 2, limit: 10, keyword: 'dune' });
 
-    expect(mocks.client.get).toHaveBeenCalledWith('/movies', {
-      params: { page: 2, limit: 10, keyword: 'dune' },
-    });
+    expect(mocks.client.get).toHaveBeenCalledWith(
+      `/movies?${qs.stringify({ page: 2, limit: 10, keyword: 'dune' }, { arrayFormat: 'repeat' })}`,
+    );
     expect(result.result).toEqual([{ id: 1 }]);
   });
 

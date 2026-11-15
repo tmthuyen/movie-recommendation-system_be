@@ -190,6 +190,17 @@
   --elevation-dropdown: 0 4px 6px -1px rgb(15 23 42 / 8%), 0 2px 4px -2px rgb(15 23 42 / 6%);
   --elevation-dialog: 0 10px 30px rgb(15 23 42 / 14%);
   --elevation-floating: 0 20px 50px rgb(15 23 42 / 18%);
+
+  /* Neumorphism (soft UI) — khung bảng admin, toolbar, chip */
+  --neo-surface: #eef2f8;
+  --neo-shadow-dark: rgb(163 177 198 / 45%);
+  --neo-shadow-light: #ffffff;
+  --neo-raised:
+    10px 10px 24px var(--neo-shadow-dark), -10px -10px 24px var(--neo-shadow-light);
+  --neo-raised-sm:
+    5px 5px 12px var(--neo-shadow-dark), -5px -5px 12px var(--neo-shadow-light);
+  --neo-inset:
+    inset 3px 3px 8px var(--neo-shadow-dark), inset -3px -3px 8px var(--neo-shadow-light);
 }
 
 /* =========================================================
@@ -274,6 +285,17 @@
   --elevation-dropdown: 0 6px 16px rgb(0 0 0 / 28%);
   --elevation-dialog: 0 12px 32px rgb(0 0 0 / 35%);
   --elevation-floating: 0 20px 50px rgb(0 0 0 / 45%);
+
+  /* Neumorphism (soft UI) — dark surface + low-contrast highlights */
+  --neo-surface: #0d1725;
+  --neo-shadow-dark: rgb(0 0 0 / 55%);
+  --neo-shadow-light: rgb(45 64 87 / 45%);
+  --neo-raised:
+    10px 10px 24px var(--neo-shadow-dark), -10px -10px 24px var(--neo-shadow-light);
+  --neo-raised-sm:
+    5px 5px 12px var(--neo-shadow-dark), -5px -5px 12px var(--neo-shadow-light);
+  --neo-inset:
+    inset 3px 3px 8px var(--neo-shadow-dark), inset -3px -3px 8px var(--neo-shadow-light);
 }
 
 /* =========================================================
@@ -405,6 +427,26 @@
   &::-webkit-scrollbar {
     display: none;
   }
+}
+
+/* Neumorphism (soft UI) — dùng cho khung bảng/toolbar admin.
+   Luôn kèm border hoặc text token đủ tương phản để không giảm a11y. */
+@utility neo-surface {
+  background-color: var(--neo-surface);
+  box-shadow: var(--neo-raised);
+}
+
+@utility neo-surface-inset {
+  background-color: var(--neo-surface);
+  box-shadow: var(--neo-inset);
+}
+
+@utility neo-raised-sm {
+  box-shadow: var(--neo-raised-sm);
+}
+
+@utility neo-inset {
+  box-shadow: var(--neo-inset);
 }
 
 /* =========================================================

@@ -1,12 +1,10 @@
 import { ApiPaginatedResponse, ApiResponse } from '@/shared/types/api.types';
 import { People } from '@/shared/types/movie.types';
+import { withListParams, type SearchListParams } from '@/shared/utils/list-params';
 import axiosClient from '../lib/axiosClient';
 
-export interface PeopleQuery {
-  page?: number;
-  limit?: number;
-  keyword?: string;
-}
+/** Query params `GET /peoples` — khớp `BaseSearchRequest`. */
+export type PeopleQuery = SearchListParams;
 
 /** Input tạo/cập nhật people — khớp `CreatePeopleDto` của backend. */
 export interface PeopleInput {
@@ -20,7 +18,7 @@ export interface PeopleInput {
 export const peopleApi = {
   /** Danh sách diễn viên/đạo diễn (public). */
   getAll: async (params: PeopleQuery = {}): Promise<ApiPaginatedResponse<People[]>> => {
-    const { data } = await axiosClient.get('/peoples', { params });
+    const { data } = await axiosClient.get(withListParams('/peoples', params));
     return data;
   },
   /** Chi tiết theo id (public). */
@@ -34,7 +32,10 @@ export const peopleApi = {
     return data;
   },
   /** Cập nhật (ADMIN) — backend nhận `PATCH`. */
-  update: async (id: number | string, input: Partial<PeopleInput>): Promise<ApiResponse<People>> => {
+  update: async (
+    id: number | string,
+    input: Partial<PeopleInput>,
+  ): Promise<ApiResponse<People>> => {
     const { data } = await axiosClient.patch(`/peoples/${id}`, input);
     return data;
   },

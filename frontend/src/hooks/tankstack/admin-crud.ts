@@ -1,13 +1,31 @@
 import { parseAxiosError } from '@/lib/axiosClient';
 import { ApiPaginatedResponse, Pagination } from '@/shared/types/api.types';
+import type { SearchListParams } from '@/shared/utils/list-params';
 import { UseMutationResult, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
-export interface CrudListParams {
-  page?: number;
-  limit?: number;
-  keyword?: string;
+/** Query params danh sách admin — đầy đủ `BaseSearchRequest`. */
+export type CrudListParams = SearchListParams;
+
+/** Chuẩn hoá params thành object ổn định để hash queryKey (bỏ field rỗng). */
+function useNormalizedListParams({
+  page = 1,
+  limit = 10,
+  keyword,
+  filters,
+  sort,
+}: SearchListParams): SearchListParams {
+  return useMemo<SearchListParams>(
+    () => ({
+      page,
+      limit,
+      ...(keyword ? { keyword } : {}),
+      ...(filters && filters.length > 0 ? { filters } : {}),
+      ...(sort && sort.length > 0 ? { sort } : {}),
+    }),
+    [page, limit, keyword, filters, sort],
+  );
 }
 
 /** Kết quả danh sách phân trang cho bảng admin (items + pagination từ envelope). */
@@ -20,7 +38,7 @@ export interface CrudListResult<T> {
 export interface CrudApi<T, TInput> {
   /** QueryKey root riêng cho domain (vd. `admin-genres`) — invalidate theo root. */
   domain: string;
-  list: (params: CrudListParams) => Promise<ApiPaginatedResponse<T[]>>;
+  list: (params: SearchListParams) => Promise<ApiPaginatedResponse<T[]>>;
   create: (data: TInput) => Promise<unknown>;
   update: (id: string | number, data: TInput) => Promise<unknown>;
   remove: (id: string | number) => Promise<unknown>;
@@ -28,12 +46,13 @@ export interface CrudApi<T, TInput> {
 
 /** Bộ hooks CRUD dùng chung — mỗi domain chỉ cần cung cấp `CrudApi`, không viết lại query/mutation. */
 export function createCrudHooks<T, TInput>(api: CrudApi<T, TInput>) {
-  function useList(params: { page?: number; limit?: number; keyword?: string; enabled?: boolean }) {
-    const { page = 1, limit = 10, keyword = '', enabled = true } = params;
+  function useList(params: SearchListParams & { enabled?: boolean } = {}) {
+    const { enabled = true, ...rest } = params;
+    const queryParams = useNormalizedListParams(rest);
     return useQuery({
-      queryKey: [api.domain, page, limit, keyword],
+      queryKey: [api.domain, 'list', queryParams],
       queryFn: async (): Promise<CrudListResult<T>> => {
-        const response = await api.list({ page, limit, keyword: keyword || undefined });
+        const response = await api.list(queryParams);
         return { items: response.result ?? [], pagination: response.pagination };
       },
       enabled,
@@ -101,24 +120,23 @@ export function useDeleteOnly(
   });
 }
 
-/** Query "chỉ list phân trang" cho danh sách read-only (hỗ trợ `enabled` để không fetch tab ẩn). */
+/**
+ * Query "chỉ list" cho danh sách read-only (hỗ trợ đầy đủ
+ * `page/limit/keyword/filters/sort` + `enabled` để không fetch tab ẩn).
+ */
 export function usePagedList<T>(
   domain: string,
-  fetcher: (params: { page: number; limit: number }) => Promise<ApiPaginatedResponse<T[]>>,
+  fetcher: (params: SearchListParams) => Promise<ApiPaginatedResponse<T[]>>,
 ) {
   return function usePagedListQuery({
-    page,
-    limit,
     enabled = true,
-  }: {
-    page: number;
-    limit: number;
-    enabled?: boolean;
-  }) {
+    ...rest
+  }: SearchListParams & { enabled?: boolean }) {
+    const queryParams = useNormalizedListParams(rest);
     return useQuery({
-      queryKey: [domain, page, limit],
+      queryKey: [domain, 'list', queryParams],
       queryFn: async (): Promise<CrudListResult<T>> => {
-        const response = await fetcher({ page, limit });
+        const response = await fetcher(queryParams);
         return { items: response.result ?? [], pagination: response.pagination };
       },
       enabled,

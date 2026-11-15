@@ -5,6 +5,7 @@ import {
   MyInteractionsWithMovie,
   ToggleInteractionResult,
 } from '@/shared/types/interaction.types';
+import { withListParams, type SearchListParams } from '@/shared/utils/list-params';
 import axiosClient from '../lib/axiosClient';
 
 export const interactionApi = {
@@ -46,12 +47,9 @@ export const interactionApi = {
     const { data } = await axiosClient.get(`/interactions/movie/${movieId}/me`);
     return data;
   },
-  /** Toàn bộ tương tác (public, admin) — `{page, limit}`, join `user` + `movie`. */
-  getAll: async (params: {
-    page?: number;
-    limit?: number;
-  }): Promise<ApiPaginatedResponse<Interaction[]>> => {
-    const { data } = await axiosClient.get('/interactions', { params });
+  /** Toàn bộ tương tác (public, admin) — `BaseSearchRequest`, join `user` + `movie`. */
+  getAll: async (params: SearchListParams = {}): Promise<ApiPaginatedResponse<Interaction[]>> => {
+    const { data } = await axiosClient.get(withListParams('/interactions', params));
     return data;
   },
   /** Xóa tương tác (JWT). */

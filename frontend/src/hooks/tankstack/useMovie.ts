@@ -14,7 +14,7 @@ export function useGetMovies(
   return useQuery({
     queryKey: ['movies', page, limit, keyword],
     queryFn: async (): Promise<MovieListResult> => {
-      const response = await movieApi.getAll(params);
+      const response = await movieApi.getAll({ page, limit, keyword });
       return {
         movies: response.result,
         total: response.pagination?.total ?? 0,

@@ -57,7 +57,12 @@ export interface Movie extends BaseDto {
   voteCount?: number;
   viewCount?: number;
   likeCount?: number;
+  /** Trạng thái TMDB (vd. `Released`) — có trong entity backend. */
+  status?: string;
+  originalLanguage?: string;
   genres?: Genre[];
+  /** ManyToMany `movie_countries` — danh sách trả về từ `GET /api/movies`. */
+  countries?: Country[];
   country?: Country;
 }
 

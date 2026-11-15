@@ -351,12 +351,27 @@ export class RecommendationsService implements IRecommendationsService {
     schema: z.ZodType<T>,
     accessToken?: string,
   ): Promise<T> {
-    const res = await fetch(`${AI_SERVICE_URL}${path}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      },
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${AI_SERVICE_URL}${path}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+      });
+    } catch (error) {
+      this.logger.error(
+        `Lỗi khi gọi AI service: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'Lỗi khi gọi AI service',
+        'The AI service returned an error.',
+        'AI_SERVICE_ERROR',
+      );
+    }
 
     if (!res.ok) {
       throw new AppException(
@@ -453,7 +468,7 @@ export class RecommendationsService implements IRecommendationsService {
       key,
       schema: RecommendationSnapshotSchema,
       ttlSeconds: CacheTtl.recommendation,
-      loader: () => this.loadSnapshotFromAi(movieId, this.window),
+      loader: () => this.loadSnapshotSimilarFromAi(movieId, this.window),
     });
 
     return {
@@ -465,13 +480,26 @@ export class RecommendationsService implements IRecommendationsService {
   }
 
   /** Lấy snapshot từ ai-service và chuẩn hoá `rank` về 1..n. */
-  private async loadSnapshotFromAi(
+  private async loadSnapshotSimilarFromAi(
     movieId: number,
     window: number,
   ): Promise<RecommendationItem[]> {
-    const res = await fetch(
-      `${AI_SERVICE_URL}/similar/${movieId}?topK=${window}`,
-    );
+    let res: Response;
+    try {
+      res = await fetch(`${AI_SERVICE_URL}/similar/${movieId}?topK=${window}`);
+    } catch (error) {
+      this.logger.error(
+        `Lỗi khi gọi AI service: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'Lỗi khi gọi AI service',
+        'The AI service returned an error.',
+        'AI_SERVICE_ERROR',
+      );
+    }
 
     let parsedResponse: SimilarFromAiServiceResponse;
     try {

@@ -25,6 +25,8 @@ export const OPERATOR_MAP: Record<string, string> = {
   contains: 'contains',
   isnull: 'isNull',
   isnotnull: 'isNotNull',
+  empty: 'empty',
+  notempty: 'notEmpty',
 };
 
 export interface SearchFilter {
@@ -52,5 +54,7 @@ export class BaseSearchRequest extends PaginationDto {
   @IsArray()
   @IsString({ each: true })
   @Transform(({ value }) => parseValuesToArray(value))
-  sort?: string[] = ['createdAt:DESC'];
+  // Không đặt default ở DTO: mỗi module tự quyết định sort mặc định
+  // (vd. countries `viName:ASC`, ratings `createdAt:DESC`).
+  sort?: string[];
 }

@@ -2,7 +2,7 @@ import { Injectable, Inject, NotFoundException, Logger } from '@nestjs/common';
 import { CreateGenreDto } from './dto/create-genre.dto';
 import { UpdateGenreDto } from './dto/update-genre.dto';
 import { IGenreRepository } from './genres.repository';
-import { PaginationDto } from '@/common/dtos/pagination.dto';
+import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
 import { PaginatedResult } from '@/common/dtos/paginated-result.interface';
 import { Genre } from './entities/genre.entity';
 import {
@@ -27,8 +27,18 @@ export class GenresService {
     return created;
   }
 
-  async findAll(paginationDto: PaginationDto): Promise<PaginatedResult<Genre>> {
-    const { page = 1, limit = 10, keyword } = paginationDto;
+  async findAll(request: BaseSearchRequest): Promise<PaginatedResult<Genre>> {
+    const { page = 1, limit = 10, keyword, filters = [], sort } = request;
+
+    // Chỉ cache truy vấn mặc định; filter/sort tuỳ biến đọc thẳng DB.
+    const isDefaultQuery =
+      (filters?.length ?? 0) === 0 &&
+      (!sort || sort.join(',') === 'createdAt:DESC');
+
+    if (!isDefaultQuery) {
+      return this.repo.findAll(request);
+    }
+
     const version = await this.cache.getCounter(CacheKeys.genre.listVersion());
 
     return this.cache.getOrLoad<PaginatedResult<Genre>>({
@@ -36,7 +46,7 @@ export class GenresService {
       schema: GenreListCacheSchema,
       ttlSeconds: CacheTtl.lookup,
       loader: async () => {
-        const result = await this.repo.findAll(paginationDto);
+        const result = await this.repo.findAll(request);
         this.logger.log(
           `Fetched ${result.data.length} genres (page ${result.page}/${result.totalPages})`,
         );

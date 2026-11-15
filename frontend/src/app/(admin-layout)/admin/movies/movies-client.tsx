@@ -1,249 +1,431 @@
 'use client';
 
-import Image from 'next/image';
-import { useMemo } from 'react';
-import { CrudToolbar } from '@/components/admin/crud-toolbar';
-import { CrudTableSkeleton, DataTable, DataTableColumn } from '@/components/admin/data-table';
-import { CrudDeleteDialog } from '@/components/admin/delete-dialog';
-import { CrudFormDialog, CrudFormField, useCrudFormValues } from '@/components/admin/form-dialog';
-import { DataPagination } from '@/components/common/DataPagination';
-import { EmptyState } from '@/components/common/EmptyState';
-import { ErrorState } from '@/components/common/ErrorState';
-import { MovieAdminInput } from '@/apis/movie.api';
+import { LayoutGrid, List } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { type MovieAdminInput } from '@/apis/movie.api';
+import { AdminDeleteDialog } from '@/components/admin/data-view/admin-delete-dialog';
+import { AdminFormDialog } from '@/components/admin/data-view/admin-form-dialog';
+import type {
+  AdminFormField,
+  AdminFormValues,
+} from '@/components/admin/data-view/admin-form-schema';
+import { AdminTablePage } from '@/components/admin/data-view/admin-table-page';
+import { Button } from '@/components/ui/button';
 import { adminCountries, adminGenres, adminMovies, adminPeoples } from '@/hooks/tankstack/admin';
-import { useCrudPage } from '@/hooks/tankstack/admin-crud';
-import { Movie } from '@/shared/types/movie.types';
-import { getMovieTitle, getPosterUrl, getReleaseYear } from '@/shared/utils/movie';
-import { z } from 'zod';
+import { useServerTable } from '@/hooks/use-server-table';
+import { parseAxiosError } from '@/lib/axiosClient';
+import type { Movie } from '@/shared/types/movie.types';
+import { createMovieFilterFields } from './movie-filter-fields';
+import { MovieDetailDialog } from './movie-detail-dialog';
+import { MovieGrid } from './movie-grid';
+import { createMovieColumns } from './movies-columns';
 
-type MovieForm = Record<string, unknown>;
+type ViewMode = 'table' | 'grid';
 
-const schema = z.object({
-  title: z.string().min(1, 'Tên phim là bắt buộc'),
-  titleVi: z.string().optional(),
-  releaseDate: z.string().max(20, 'Tối đa 20 ký tự').optional(),
-  status: z.string().optional(),
-  posterPath: z.string().optional(),
-  backdropPath: z.string().optional(),
-  overview: z.string().optional(),
-  overviewVi: z.string().optional(),
-  countryId: z.string().optional(),
-  genreIds: z.array(z.string()),
-  peopleIds: z.array(z.string()),
-}) as unknown as z.ZodType<MovieForm>;
+const EMPTY_MOVIES: Movie[] = [];
+const DEFAULT_SORTING = [{ id: 'releaseDate', desc: true }];
+const OPTION_LIST_PARAMS = { page: 1, limit: 100 };
 
-const STATIC_FIELDS: CrudFormField[] = [
-  { name: 'title', label: 'Tên phim (gốc)', placeholder: 'vd. Parasite' },
-  { name: 'titleVi', label: 'Tên phim (tiếng Việt)', placeholder: 'vd. Ký sinh trùng' },
-  { name: 'releaseDate', label: 'Ngày phát hành', placeholder: 'YYYY-MM-DD' },
-  { name: 'status', label: 'Trạng thái', placeholder: 'vd. Released' },
-  { name: 'posterPath', label: 'Poster (path TMDB)', placeholder: '/abc.jpg' },
-  { name: 'backdropPath', label: 'Backdrop (path TMDB)', placeholder: '/xyz.jpg' },
-  { name: 'overview', label: 'Nội dung (tiếng Anh)', type: 'textarea', placeholder: 'Overview…' },
-  {
-    name: 'overviewVi',
-    label: 'Nội dung (tiếng Việt)',
-    type: 'textarea',
-    placeholder: 'Nội dung…',
-  },
-];
+function optionalText(value: unknown): string | undefined {
+  if (value === null || value === undefined) return undefined;
+  const text = String(value).trim();
+  return text ? text : undefined;
+}
 
-const COLUMNS: DataTableColumn<Movie>[] = [
-  {
-    key: 'id',
-    header: 'ID',
-    className: 'w-20 text-muted-foreground',
-    render: (movie) => movie.id,
-  },
-  {
-    key: 'poster',
-    header: 'Poster',
-    className: 'w-16',
-    hideOnMobile: true,
-    render: (movie) => {
-      const poster = getPosterUrl(movie.posterPath || movie.backdropPath);
-      return poster ? (
-        <Image
-          src={poster}
-          alt=""
-          width={40}
-          height={60}
-          className="bg-muted h-15 w-10 rounded-md object-cover"
-        />
-      ) : (
-        <span className="text-muted-foreground text-xs">—</span>
-      );
-    },
-  },
-  {
-    key: 'title',
-    header: 'Tên phim',
-    render: (movie) => (
-      <div className="min-w-0">
-        <p className="truncate font-medium">{getMovieTitle(movie)}</p>
-        {movie.titleVi && movie.titleVi !== movie.title ? (
-          <p className="text-muted-foreground truncate text-xs">{movie.title}</p>
-        ) : null}
-      </div>
-    ),
-  },
-  {
-    key: 'releaseDate',
-    header: 'Năm phát hành',
-    render: (movie) =>
-      getReleaseYear(movie.releaseDate) || <span className="text-muted-foreground">—</span>,
-  },
-  {
-    key: 'viewCount',
-    header: 'Lượt xem',
-    className: 'w-28',
-    render: (movie) => <span className="tabular-nums">{movie.viewCount ?? 0}</span>,
-  },
-];
+function toNumberArray(value: unknown): number[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const numbers = value.map(Number).filter((item) => Number.isFinite(item));
+  return numbers.length > 0 ? numbers : undefined;
+}
 
-/** CRUD Phim — form multiselect thể loại/người + select quốc gia (options nạp từ API chung). */
+function displayTitle(movie: Movie): string {
+  return movie.titleVi || movie.title || `#${movie.id}`;
+}
+
+function toDateInput(value?: string): string {
+  if (!value) return '';
+  return value.slice(0, 10);
+}
+
 export function MoviesClient() {
-  const mutations = {
-    create: adminMovies.useCreate(),
-    update: adminMovies.useUpdate(),
-    remove: adminMovies.useDelete(),
-  };
-  const state = useCrudPage<Movie, MovieAdminInput>(mutations);
-  const list = adminMovies.useList({ page: state.page, limit: 10, keyword: state.keyword });
+  const table = useServerTable({
+    initialPageSize: 10,
+    initialSorting: DEFAULT_SORTING,
+  });
+  const { clampPageIndex } = table;
 
-  // Options cho form — đọc từ CRUD hooks dùng chung (không viết query riêng).
-  const genres = adminGenres.useList({ page: 1, limit: 100 });
-  const countries = adminCountries.useList({ page: 1, limit: 100 });
-  const peoples = adminPeoples.useList({ page: 1, limit: 100 });
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
 
-  const fields = useMemo<CrudFormField[]>(
+  const moviesQuery = adminMovies.useList(table.params);
+  const movies = moviesQuery.data?.items ?? EMPTY_MOVIES;
+  const total = moviesQuery.data?.pagination?.total ?? 0;
+
+  useEffect(() => {
+    clampPageIndex(total);
+  }, [clampPageIndex, total]);
+
+  const genresQuery = adminGenres.useList(OPTION_LIST_PARAMS);
+  const countriesQuery = adminCountries.useList(OPTION_LIST_PARAMS);
+  const peoplesQuery = adminPeoples.useList(OPTION_LIST_PARAMS);
+
+  const genreOptions = useMemo(
+    () =>
+      (genresQuery.data?.items ?? []).map((genre) => ({
+        value: String(genre.id),
+        label: genre.name,
+      })),
+    [genresQuery.data],
+  );
+
+  const countryOptions = useMemo(
+    () =>
+      (countriesQuery.data?.items ?? []).map((country) => ({
+        value: String(country.id),
+        label: country.viName,
+      })),
+    [countriesQuery.data],
+  );
+
+  const peopleOptions = useMemo(
+    () =>
+      (peoplesQuery.data?.items ?? []).map((people) => ({
+        value: String(people.id),
+        label: people.fullName ?? people.name ?? `#${people.id}`,
+      })),
+    [peoplesQuery.data],
+  );
+
+  const filterFields = useMemo(
+    () =>
+      createMovieFilterFields({
+        genreOptions,
+        countryOptions,
+        peopleOptions,
+      }),
+    [genreOptions, countryOptions, peopleOptions],
+  );
+
+  const formFields = useMemo<AdminFormField[]>(
     () => [
-      ...STATIC_FIELDS,
       {
-        name: 'countryId',
-        label: 'Quốc gia',
-        type: 'select',
-        options: [
-          { value: '', label: '— Chọn quốc gia —' },
-          ...(countries.data?.items ?? []).map((country) => ({
-            value: String(country.id),
-            label: country.viName,
-          })),
-        ],
+        name: 'title',
+        label: 'Tên phim',
+        required: true,
+        maxLength: 255,
+        placeholder: 'VD: The Matrix',
+        wide: true,
+      },
+      {
+        name: 'titleVi',
+        label: 'Tên tiếng Việt',
+        maxLength: 255,
+        placeholder: 'VD: Ma trận',
+      },
+      {
+        name: 'status',
+        label: 'Trạng thái',
+        maxLength: 50,
+        placeholder: 'VD: Released',
+      },
+      {
+        name: 'releaseDate',
+        label: 'Ngày phát hành',
+        type: 'date',
+      },
+      {
+        name: 'originCountry',
+        label: 'Quốc gia gốc',
+        maxLength: 255,
+        placeholder: 'VD: US',
+      },
+      {
+        name: 'originalLanguage',
+        label: 'Ngôn ngữ gốc',
+        maxLength: 50,
+        placeholder: 'VD: en',
+      },
+      {
+        name: 'posterPath',
+        label: 'Poster (path hoặc URL)',
+        maxLength: 255,
+        placeholder: '/abc123.jpg hoặc https://…',
+        wide: true,
+      },
+      {
+        name: 'backdropPath',
+        label: 'Backdrop (path hoặc URL)',
+        maxLength: 255,
+        placeholder: '/abc123.jpg hoặc https://…',
+        wide: true,
+      },
+      {
+        name: 'overview',
+        label: 'Mô tả (tiếng Anh)',
+        type: 'textarea',
+        placeholder: 'Nội dung tóm tắt phim…',
+      },
+      {
+        name: 'overviewVi',
+        label: 'Mô tả (tiếng Việt)',
+        type: 'textarea',
+        placeholder: 'Nội dung tóm tắt phim…',
       },
       {
         name: 'genreIds',
         label: 'Thể loại',
         type: 'multiselect',
-        options: (genres.data?.items ?? []).map((genre) => ({
-          value: String(genre.id),
-          label: genre.name,
-        })),
+        options: genreOptions,
+        placeholder: 'Chọn thể loại',
+        wide: true,
+      },
+      {
+        name: 'countryId',
+        label: 'Quốc gia',
+        type: 'select',
+        options: countryOptions,
+        placeholder: 'Chọn quốc gia',
       },
       {
         name: 'peopleIds',
-        label: 'Người tham gia',
+        label: 'Diễn viên / đạo diễn',
         type: 'multiselect',
-        options: (peoples.data?.items ?? []).map((people) => ({
-          value: String(people.id),
-          label: people.fullName ?? people.name ?? String(people.id),
-        })),
+        options: peopleOptions,
+        placeholder: 'Chọn người tham gia',
+        wide: true,
       },
     ],
-    [genres.data, countries.data, peoples.data],
+    [genreOptions, countryOptions, peopleOptions],
   );
 
-  const defaultValues = useCrudFormValues<MovieForm>(fields, state.editing);
+  const createMovie = adminMovies.useCreate();
+  const updateMovie = adminMovies.useUpdate();
+  const deleteMovie = adminMovies.useDelete();
 
-  const handleSubmit = (values: MovieForm) => {
-    const toNumberList = (value: unknown): number[] =>
-      (Array.isArray(value) ? value : [])
-        .map((entry) => Number(entry))
-        .filter((entry) => !Number.isNaN(entry));
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<Movie | null>(null);
+  const [detailTarget, setDetailTarget] = useState<Movie | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Movie | null>(null);
 
-    state.submit({
-      title: String(values.title ?? ''),
-      titleVi: values.titleVi ? String(values.titleVi) : undefined,
-      overview: values.overview ? String(values.overview) : undefined,
-      overviewVi: values.overviewVi ? String(values.overviewVi) : undefined,
-      releaseDate: values.releaseDate ? String(values.releaseDate) : undefined,
-      posterPath: values.posterPath ? String(values.posterPath) : undefined,
-      backdropPath: values.backdropPath ? String(values.backdropPath) : undefined,
-      status: values.status ? String(values.status) : undefined,
-      countryId: values.countryId ? Number(values.countryId) : undefined,
-      genreIds: toNumberList(values.genreIds),
-      peopleIds: toNumberList(values.peopleIds),
-    });
+  const openCreate = () => {
+    setEditing(null);
+    setFormOpen(true);
   };
 
+  const openEdit = (movie: Movie) => {
+    setEditing(movie);
+    setFormOpen(true);
+  };
+
+  const columns = useMemo(
+    () =>
+      createMovieColumns({
+        onEdit: openEdit,
+        onViewDetail: (movie) => setDetailTarget(movie),
+        onDelete: (movie) => setDeleteTarget(movie),
+      }),
+    // Các callback chỉ set state, không phụ thuộc dữ liệu.
+
+    [],
+  );
+
+  const defaultValues = useMemo<AdminFormValues>(() => {
+    if (!editing) {
+      return {
+        title: '',
+        titleVi: '',
+        status: '',
+        releaseDate: '',
+        originCountry: '',
+        originalLanguage: '',
+        posterPath: '',
+        backdropPath: '',
+        overview: '',
+        overviewVi: '',
+        genreIds: [],
+        countryId: '',
+        peopleIds: [],
+      };
+    }
+
+    const countries = editing.countries ?? [];
+    const countryId = countries[0]?.id ?? editing.country?.id;
+
+    return {
+      title: editing.title ?? '',
+      titleVi: editing.titleVi ?? '',
+      status: editing.status ?? '',
+      releaseDate: toDateInput(editing.releaseDate),
+      originCountry: editing.originCountry ?? '',
+      originalLanguage: editing.originalLanguage ?? '',
+      posterPath: editing.posterPath ?? '',
+      backdropPath: editing.backdropPath ?? '',
+      overview: editing.overview ?? '',
+      overviewVi: editing.overviewVi ?? '',
+      genreIds: (editing.genres ?? []).map((genre) => String(genre.id)),
+      countryId: countryId !== undefined ? String(countryId) : '',
+      peopleIds: [],
+    };
+  }, [editing]);
+
+  const handleSubmit = async (values: AdminFormValues) => {
+    const input: MovieAdminInput = {
+      title: String(values.title ?? '').trim(),
+      titleVi: optionalText(values.titleVi),
+      status: optionalText(values.status),
+      releaseDate: optionalText(values.releaseDate),
+      originCountry: optionalText(values.originCountry),
+      originalLanguage: optionalText(values.originalLanguage),
+      posterPath: optionalText(values.posterPath),
+      backdropPath: optionalText(values.backdropPath),
+      overview: optionalText(values.overview),
+      overviewVi: optionalText(values.overviewVi),
+      genreIds: toNumberArray(values.genreIds),
+      countryId: values.countryId ? Number(values.countryId) : undefined,
+      peopleIds: toNumberArray(values.peopleIds),
+    };
+
+    if (editing) {
+      await updateMovie.mutateAsync({ id: editing.id, data: input });
+    } else {
+      await createMovie.mutateAsync(input);
+    }
+    setFormOpen(false);
+    setEditing(null);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteMovie.mutateAsync(deleteTarget.id);
+      setDeleteTarget(null);
+    } catch {
+      // Lỗi đã được toast trong mutation — giữ dialog mở để user thử lại.
+    }
+  };
+
+  const hasQuery = Boolean(table.keyword) || table.filters.length > 0;
+
+  const viewToggle = (
+    <div
+      className="border-border/70 inline-flex items-center gap-1 rounded-xl border p-1"
+      role="group"
+      aria-label="Chế độ xem danh sách phim"
+    >
+      <Button
+        type="button"
+        variant={viewMode === 'table' ? 'secondary' : 'ghost'}
+        className="h-11 cursor-pointer gap-1.5 px-3"
+        aria-pressed={viewMode === 'table'}
+        onClick={() => setViewMode('table')}
+      >
+        <List className="size-4" aria-hidden />
+        Bảng
+      </Button>
+      <Button
+        type="button"
+        variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+        className="h-11 cursor-pointer gap-1.5 px-3"
+        aria-pressed={viewMode === 'grid'}
+        onClick={() => setViewMode('grid')}
+      >
+        <LayoutGrid className="size-4" aria-hidden />
+        Lưới
+      </Button>
+    </div>
+  );
+
   return (
-    <div className="flex w-full flex-col gap-4">
-      <CrudToolbar
-        keyword={state.keywordInput}
-        onKeywordChange={state.setKeywordInput}
-        searchPlaceholder="Tìm phim…"
-        onAdd={state.openCreate}
-        addLabel="Thêm phim"
-      />
-
-      {list.isLoading ? (
-        <CrudTableSkeleton />
-      ) : list.isError ? (
-        <ErrorState
-          title="Không thể tải danh sách phim"
-          description="Vui lòng kiểm tra kết nối và thử lại."
-          onRetry={() => list.refetch()}
-        />
-      ) : (
-        <>
-          <DataTable
-            columns={COLUMNS}
-            items={list.data?.items ?? []}
-            rowKey={(movie) => movie.id}
-            onEdit={state.openEdit}
-            onDelete={(movie) => state.setDeleteTarget(movie)}
-            empty={
-              <EmptyState
-                title="Không có phim nào"
-                description="Thêm phim đầu tiên vào hệ thống."
-              />
-            }
+    <AdminTablePage
+      table={table}
+      columns={columns}
+      data={movies}
+      total={total}
+      isLoading={moviesQuery.isLoading}
+      isFetching={moviesQuery.isFetching}
+      error={moviesQuery.error}
+      onRetry={() => void moviesQuery.refetch()}
+      searchPlaceholder="Tìm theo tên phim…"
+      searchLabel="Tìm kiếm phim"
+      filterFields={filterFields}
+      entityLabel="phim"
+      emptyDescription="Thêm phim đầu tiên để bắt đầu quản lý thư viện."
+      addLabel="Thêm phim"
+      onAdd={openCreate}
+      toolbarActions={viewToggle}
+      body={
+        viewMode === 'grid' ? (
+          <MovieGrid
+            movies={movies}
+            isLoading={moviesQuery.isLoading}
+            error={moviesQuery.error}
+            onRetry={() => void moviesQuery.refetch()}
+            hasQuery={hasQuery}
+            onClearQuery={() => {
+              table.setKeywordInput('');
+              table.clearFilters();
+            }}
+            onEdit={openEdit}
+            onDelete={(movie) => setDeleteTarget(movie)}
+            onViewDetail={(movie) => setDetailTarget(movie)}
+            onAdd={openCreate}
+            addLabel="Thêm phim"
           />
-          {list.data ? (
-            <DataPagination
-              page={list.data.pagination.page}
-              totalPages={list.data.pagination.totalPages}
-              total={list.data.pagination.total}
-              onPageChange={state.setPage}
-              disabled={list.isFetching}
-              ariaLabel="Phân trang phim"
-            />
-          ) : null}
-        </>
-      )}
-
-      <CrudFormDialog
-        open={state.dialogOpen}
-        onOpenChange={state.setDialogOpen}
-        title={state.editing ? 'Sửa phim' : 'Thêm phim'}
-        schema={schema}
-        fields={fields}
+        ) : undefined
+      }
+    >
+      <AdminFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        title={editing ? 'Sửa phim' : 'Thêm phim'}
+        description={
+          editing
+            ? `Cập nhật thông tin phim “${displayTitle(editing)}”.`
+            : 'Tạo phim mới trong thư viện.'
+        }
+        fields={formFields}
         defaultValues={defaultValues}
         onSubmit={handleSubmit}
-        submitting={state.saving}
+        submitting={createMovie.isPending || updateMovie.isPending}
+        submitLabel={editing ? 'Lưu thay đổi' : 'Thêm phim'}
+        mapServerError={(error) => {
+          const parsed = parseAxiosError(error);
+          if (parsed.statusCode === 409) {
+            return { field: 'title', message: 'Phim này đã tồn tại' };
+          }
+          return null;
+        }}
       />
 
-      <CrudDeleteDialog
-        target={
-          state.deleteTarget
-            ? { id: state.deleteTarget.id, label: getMovieTitle(state.deleteTarget) }
-            : null
-        }
-        onCancel={() => state.setDeleteTarget(null)}
-        onConfirm={state.confirmDelete}
-        isPending={state.deleting}
-        entityLabel="phim"
+      <MovieDetailDialog
+        movie={detailTarget}
+        open={detailTarget !== null}
+        onOpenChange={(next) => {
+          if (!next) setDetailTarget(null);
+        }}
+        onEdit={(movie) => {
+          setDetailTarget(null);
+          openEdit(movie);
+        }}
       />
-    </div>
+
+      <AdminDeleteDialog
+        open={deleteTarget !== null}
+        onOpenChange={(next) => {
+          if (!next) setDeleteTarget(null);
+        }}
+        title="Xóa phim?"
+        description={
+          <>
+            Phim{' '}
+            <span className="text-foreground font-medium">
+              {deleteTarget ? displayTitle(deleteTarget) : 'này'}
+            </span>{' '}
+            sẽ bị xóa vĩnh viễn khỏi thư viện. Hành động này không thể hoàn tác.
+          </>
+        }
+        onConfirm={handleDelete}
+        deleting={deleteMovie.isPending}
+      />
+    </AdminTablePage>
   );
 }

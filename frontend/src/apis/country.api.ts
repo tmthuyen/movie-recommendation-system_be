@@ -1,17 +1,15 @@
 import { ApiPaginatedResponse, ApiResponse } from '@/shared/types/api.types';
 import { Country } from '@/shared/types/movie.types';
+import { withListParams, type SearchListParams } from '@/shared/utils/list-params';
 import axiosClient from '../lib/axiosClient';
 
-export interface CountryQuery {
-  page?: number;
-  limit?: number;
-  keyword?: string;
-}
+/** Query params `GET /countries` — khớp `BaseSearchRequest`. */
+export type CountryQuery = SearchListParams;
 
 export const countryApi = {
   /** Danh sách quốc gia (public). */
   getAll: async (params: CountryQuery = {}): Promise<ApiPaginatedResponse<Country[]>> => {
-    const { data } = await axiosClient.get('/countries', { params });
+    const { data } = await axiosClient.get(withListParams('/countries', params));
     return data;
   },
   /** Chi tiết quốc gia theo id (public). */
