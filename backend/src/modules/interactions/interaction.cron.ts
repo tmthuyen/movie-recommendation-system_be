@@ -14,7 +14,6 @@ import {
   STORAGE_SERVICE,
 } from '@/infrastructure/storage/storage.service';
 import { Interaction } from '@/modules/interactions/entities/interaction.entity';
-import * as crypto from 'crypto';
 import { idUtil } from '@/common/utils/id.util';
 
 @Injectable()
@@ -35,7 +34,8 @@ export class InteractionCronService {
     private readonly storageService: IStorageService,
   ) {}
 
-  @Cron('0 */180 * * * *')
+  // 0h sáng hàng ngày
+  @Cron('0 0 0 * * *')
   /**
    * Cron job để chạy định kỳ và gửi dữ liệu tương tác để train ALS model cho AI service
    * @description Luồng xử lý:

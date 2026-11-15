@@ -33,7 +33,7 @@ class MovieVectorService:
     async def find_movie_vector(self, movie_id: int) -> dict[str, Any] | None:
         """Tìm kiếm movie vector theo movie_id trong VectorDB"""
         movie_data = await self._vs.get_by_id(
-            movie_id, collection_name=self.collection_name
+            id=movie_id, collection_name=self.collection_name
         )
 
         if movie_data is None or not movie_data.get("vector"):

@@ -33,7 +33,7 @@ class VectorBackend(ABC):
     @abstractmethod
     async def upsert(
         self,
-        movie_id: int,
+        id: int,
         vector: list[float],
         payload: dict[str, Any],
         collection_name: str | None = None,
@@ -51,11 +51,21 @@ class VectorBackend(ABC):
         """Return top_k nearest neighbours as [{id, score, payload}]."""
         raise NotImplementedError
 
+    @abstractmethod
     async def get_by_id(
-        self, movie_id: int, collection_name: str | None = None
+        self, id: int, collection_name: str | None = None
     ) -> dict | None:
-        return None
 
+        if not id or not collection_name:
+            raise CustomException(
+                "id and collection_name are required for get_by_id",
+                status_code=400,
+                error_code="BAD_REQUEST",
+            )
+
+        raise NotImplementedError
+
+    @abstractmethod
     async def delete_by_id(self, id: str | int, collection_name: str):
         """Xóa theo id
 
@@ -68,8 +78,9 @@ class VectorBackend(ABC):
         if not id:
             raise ValueError("id is required for delete_by_id")
 
-        raise NotImplementedError("delete_by_id is not implemented for this backend")
+        raise NotImplementedError
 
+    @abstractmethod
     async def count(self, collection_name: str | None = None) -> int:
         """Return the number of stored vectors in a collection."""
         raise NotImplementedError
@@ -95,12 +106,12 @@ class MemoryVectorBackend(VectorBackend):
 
     async def upsert(
         self,
-        movie_id: int,
+        id: int,
         vector: list[float],
         payload: dict[str, Any],
         collection_name: str | None = None,
     ) -> None:
-        self.items[movie_id] = {"vector": vector, "payload": payload}
+        self.items[id] = {"vector": vector, "payload": payload}
 
     async def query(
         self,
@@ -209,7 +220,7 @@ class QdrantVectorBackend(VectorBackend):
 
     async def upsert(
         self,
-        movie_id: int,
+        id: int,
         vector: list[float],
         payload: dict[str, Any],
         collection_name: str | None = None,
@@ -218,7 +229,7 @@ class QdrantVectorBackend(VectorBackend):
             raise RuntimeError("Qdrant vector backend has not started")
         await self.client.upsert(
             collection_name=collection_name or self.settings.vector_collection,
-            points=[PointStruct(id=movie_id, vector=vector, payload=payload)],
+            points=[PointStruct(id=id, vector=vector, payload=payload)],
         )
 
     async def query(
@@ -285,6 +296,7 @@ class ChromaVectorBackend(VectorBackend):
     """
 
     def __init__(self, settings: Settings) -> None:
+        super().__init__()
         self.settings = settings
         self._client = None
         self._collections: dict[str, Collection] = {}
@@ -334,7 +346,7 @@ class ChromaVectorBackend(VectorBackend):
 
     def _sync_upsert(
         self,
-        movie_id: int,
+        id: int,
         vector: list[float],
         payload: dict[str, Any],
         collection_name: str | None = None,
@@ -343,21 +355,19 @@ class ChromaVectorBackend(VectorBackend):
             collection_name or self.settings.vector_collection
         )
         collection.upsert(
-            ids=[str(movie_id)],
+            ids=[str(id)],
             embeddings=[vector],
             metadatas=[self._sanitise_meta(payload)],
         )
 
     async def upsert(
         self,
-        movie_id: int,
+        id: int,
         vector: list[float],
         payload: dict[str, Any],
         collection_name: str | None = None,
     ) -> None:
-        await asyncio.to_thread(
-            self._sync_upsert, movie_id, vector, payload, collection_name
-        )
+        await asyncio.to_thread(self._sync_upsert, id, vector, payload, collection_name)
 
     # ── read ─────────────────────────────────────────────────────────────────
 
@@ -403,12 +413,12 @@ class ChromaVectorBackend(VectorBackend):
         )
 
     def _sync_get_by_id(
-        self, movie_id: int, collection_name: str | None = None
+        self, id: int, collection_name: str | None = None
     ) -> dict | None:
         collection = self._get_collection(
             collection_name or self.settings.vector_collection
         )
-        res = collection.get(ids=[str(movie_id)], include=["embeddings", "metadatas"])
+        res = collection.get(ids=[str(id)], include=["embeddings", "metadatas"])
         if res and res.get("ids") and len(res["ids"]) > 0:
             embeddings = res.get("embeddings")
             metadatas = res.get("metadatas")
@@ -422,13 +432,15 @@ class ChromaVectorBackend(VectorBackend):
                 else None
             )
             meta = metadatas[0] if metadatas is not None and len(metadatas) > 0 else {}
-            return {"id": movie_id, "vector": vec, "payload": meta}
+            return {"id": id, "vector": vec, "payload": meta}
         return None
 
     async def get_by_id(
-        self, movie_id: int, collection_name: str | None = None
+        self, id: int, collection_name: str | None = None
     ) -> dict | None:
-        return await asyncio.to_thread(self._sync_get_by_id, movie_id, collection_name)
+        super().get_by_id(id=id, collection_name=collection_name)
+
+        return await asyncio.to_thread(self._sync_get_by_id, id, collection_name)
 
     # delete
     def _sync_delete_by_id(self, id: str | int, collection_name: str) -> None:
@@ -508,9 +520,17 @@ class VectorStore:
             logger.info("Vector DB disabled; accepted vector for movie %s", movie_id)
             return
 
+        # check collection_name
+        if not collection_name:
+            raise CustomException(
+                "collection_name is required for upsert",
+                status_code=400,
+                error_code="BAD_REQUEST",
+            )
+
         if id is not None:
             await self.backend.upsert(
-                movie_id=id,
+                id=id,
                 vector=vector,
                 payload=payload,
                 collection_name=collection_name,
@@ -519,7 +539,9 @@ class VectorStore:
         if movie_id is None:
             raise ValueError("No id or movie_id provided for vector upsert.")
 
-        await self.backend.upsert(movie_id, vector, payload, collection_name)
+        await self.backend.upsert(
+            id=movie_id, vector=vector, payload=payload, collection_name=collection_name
+        )
 
     async def query(
         self,
@@ -552,7 +574,9 @@ class VectorStore:
         if movie_id is None:
             raise ValueError("Không có id hoặc movie_id để truy vấn vector.")
 
-        return await self.backend.get_by_id(movie_id, collection_name)
+        return await self.backend.get_by_id(
+            id=movie_id, collection_name=collection_name
+        )
 
     # delete
     async def delete_by_id(self, id: str | int, collection_name: str):
