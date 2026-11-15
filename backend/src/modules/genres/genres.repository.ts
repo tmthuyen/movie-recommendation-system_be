@@ -1,19 +1,28 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Genre } from './entities/genre.entity';
-import { PaginationDto } from '@/common/dtos/pagination.dto';
+import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
 import { PaginatedResult } from '@/common/dtos/paginated-result.interface';
+import { SearchUtils } from '@/common/utils/search.util';
 
 export const IGenreRepository = Symbol('IGenreRepository');
 
 export interface IGenreRepository {
-  findAll(paginationDto: PaginationDto): Promise<PaginatedResult<Genre>>;
+  findAll(request: BaseSearchRequest): Promise<PaginatedResult<Genre>>;
   findById(id: number): Promise<Genre | null>;
   create(genre: Partial<Genre>): Promise<Genre>;
   update(id: number, genre: Partial<Genre>): Promise<Genre | null>;
   remove(id: number): Promise<boolean>;
 }
+
+const GENRE_FIELD_MAP: Record<string, string> = {
+  id: 'genre.id',
+  name: 'genre.name',
+  enName: 'genre.enName',
+  createdAt: 'genre.createdAt',
+  updatedAt: 'genre.updatedAt',
+};
 
 @Injectable()
 export class GenreRepository implements IGenreRepository {
@@ -22,19 +31,42 @@ export class GenreRepository implements IGenreRepository {
     private readonly repo: Repository<Genre>,
   ) {}
 
-  async findAll(paginationDto: PaginationDto): Promise<PaginatedResult<Genre>> {
-    const { page = 1, limit = 10, keyword } = paginationDto;
+  async findAll(request: BaseSearchRequest): Promise<PaginatedResult<Genre>> {
+    const { page = 1, limit = 10, keyword, filters = [], sort } = request;
     const skip = (page - 1) * limit;
 
     const queryBuilder = this.repo.createQueryBuilder('genre');
 
-    if (keyword) {
-      queryBuilder.where('genre.name ILIKE :keyword', {
-        keyword: `%${keyword}%`,
-      });
+    const trimmedKeyword = keyword?.trim();
+    if (trimmedKeyword) {
+      queryBuilder.andWhere(
+        '(genre.name ILIKE :keyword OR genre.enName ILIKE :keyword)',
+        { keyword: `%${trimmedKeyword}%` },
+      );
     }
 
-    queryBuilder.skip(skip).take(limit).orderBy('genre.createdAt', 'DESC');
+    SearchUtils.applyFilters(queryBuilder, filters || [], GENRE_FIELD_MAP);
+
+    const sortOptions = SearchUtils.parseSort(
+      sort?.join(',') ?? 'createdAt:DESC',
+      Object.keys(GENRE_FIELD_MAP),
+    );
+
+    for (const option of sortOptions) {
+      const column = GENRE_FIELD_MAP[option.field];
+      if (!column) {
+        throw new BadRequestException(
+          `Sort field không hợp lệ: ${option.field}`,
+        );
+      }
+      queryBuilder.addOrderBy(column, option.direction);
+    }
+
+    if (!sortOptions.some(option => option.field === 'id')) {
+      queryBuilder.addOrderBy('genre.id', 'ASC');
+    }
+
+    queryBuilder.skip(skip).take(limit);
 
     const [data, total] = await queryBuilder.getManyAndCount();
 

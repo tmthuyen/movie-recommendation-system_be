@@ -2,6 +2,7 @@ const USER_STATUS = {
   ACTIVE: 'Hoạt động',
   UNVERIFIED: 'Chưa xác thực',
   LOCKED: 'Đã khóa',
+  BLOCKED: 'Đã khóa',
   INACTIVE: 'Không hoạt động',
   PENDING: 'Đang chờ',
 };
@@ -16,6 +17,8 @@ const USER_STATUS_COLOR = {
   UNVERIFIED:
     'text-yellow-500 border border-yellow-500 bg-yellow-100/50 dark:bg-yellow-900 dark:text-yellow-400 dark:border-yellow-400',
   LOCKED:
+    'text-red-500 border border-red-500 bg-red-100/50 dark:bg-red-900 dark:text-red-400 dark:border-red-400',
+  BLOCKED:
     'text-red-500 border border-red-500 bg-red-100/50 dark:bg-red-900 dark:text-red-400 dark:border-red-400',
 };
 

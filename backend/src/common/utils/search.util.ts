@@ -112,10 +112,13 @@ export class SearchUtils {
       );
     }
 
-    // isnull/isnotnull không cần value.
+    // isnull/isnotnull/empty/notempty không cần value.
     const mappedOperator = operatorMap[operator.toLowerCase()];
     const valueOptional =
-      mappedOperator === 'isNull' || mappedOperator === 'isNotNull';
+      mappedOperator === 'isNull' ||
+      mappedOperator === 'isNotNull' ||
+      mappedOperator === 'empty' ||
+      mappedOperator === 'notEmpty';
     if (!value && !valueOptional) {
       throw new AppException(
         HttpStatus.BAD_REQUEST,
@@ -173,9 +176,18 @@ export class SearchUtils {
 
       switch (OPERATOR_MAP[filterParsed.operator.toLowerCase()]) {
         case 'eq': {
-          qb.andWhere(`UPPER(${column}) = :${param}`, {
-            [param]: filterParsed.value.trim().toUpperCase(),
-          });
+          // check type nêu là string thì so sánh không phân biệt hoa thường
+          const type = typeof filterParsed.value;
+          if (type === 'string') {
+            qb.andWhere(`UPPER(${column}) = :${param}`, {
+              [param]: filterParsed.value.trim().toUpperCase(),
+            });
+          } else {
+            qb.andWhere(`${column} = :${param}`, {
+              [param]: filterParsed.value,
+            });
+          }
+          // và ngược lại
           break;
         }
 
@@ -260,6 +272,19 @@ export class SearchUtils {
 
         case 'isNotNull':
           qb.andWhere(`${column} IS NOT NULL`);
+          break;
+
+        case 'empty':
+          // "Rỗng" = NULL hoặc chuỗi rỗng (kể cả toàn khoảng trắng).
+          qb.andWhere(
+            `(${column} IS NULL OR TRIM(CAST(${column} AS TEXT)) = '')`,
+          );
+          break;
+
+        case 'notEmpty':
+          qb.andWhere(
+            `(${column} IS NOT NULL AND TRIM(CAST(${column} AS TEXT)) <> '')`,
+          );
           break;
 
         default:

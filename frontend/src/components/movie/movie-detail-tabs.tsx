@@ -91,7 +91,7 @@ export function TopRatedMovieColumn() {
   return (
     <section aria-label="Top Rated" className="space-y-3">
       <div className="bg-muted/40 flex flex-col gap-3 rounded-xl border border-dashed p-5">
-        <MovieColumn movies={data?.movies || []} />;
+        <MovieColumn movies={data?.movies || []} />
       </div>
     </section>
   );
@@ -108,7 +108,7 @@ export function TrendingMovieColumn() {
   return (
     <section aria-label="Trending" className="space-y-3">
       <div className="bg-muted/40 flex flex-col gap-3 rounded-xl border border-dashed p-5">
-        <MovieColumn movies={data?.movies || []} />;
+        <MovieColumn movies={data?.movies || []} />
       </div>
     </section>
   );
@@ -133,7 +133,7 @@ export function SameGenreMovieColumn({ genreIds }: { genreIds?: number[] }) {
   return (
     <section aria-label="Cùng thể loại" className="space-y-3">
       <div className="bg-muted/40 flex flex-col gap-3 rounded-xl border border-dashed p-5">
-        <MovieColumn movies={data?.movies || []} />;
+        <MovieColumn movies={data?.movies || []} />
       </div>
     </section>
   );

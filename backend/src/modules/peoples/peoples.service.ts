@@ -2,7 +2,7 @@ import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { CreatePeopleDto } from './dto/create-people.dto';
 import { UpdatePeopleDto } from './dto/update-people.dto';
 import { IPeopleRepository } from './peoples.repository';
-import { PaginationDto } from '@/common/dtos/pagination.dto';
+import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
 
 @Injectable()
 export class PeoplesService {
@@ -15,8 +15,8 @@ export class PeoplesService {
     return this.repo.create(createPeopleDto);
   }
 
-  async findAll(paginationDto: PaginationDto) {
-    return this.repo.findAll(paginationDto);
+  async findAll(request: BaseSearchRequest) {
+    return this.repo.findAll(request);
   }
 
   async findOne(id: number) {

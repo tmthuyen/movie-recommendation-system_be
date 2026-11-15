@@ -1,15 +1,11 @@
 'use client';
 
-import { useState } from 'react';
-import { CrudTableSkeleton, DataTable, DataTableColumn } from '@/components/admin/data-table';
-import { CrudDeleteDialog } from '@/components/admin/delete-dialog';
-import { DataPagination } from '@/components/common/DataPagination';
-import { EmptyState } from '@/components/common/EmptyState';
-import { ErrorState } from '@/components/common/ErrorState';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { TYPE_BADGES } from '@/components/movie/interaction-movie-list';
+import { useEffect, useMemo, useState } from 'react';
+import { AdminDeleteDialog } from '@/components/admin/data-view/admin-delete-dialog';
+import { AdminTablePage } from '@/components/admin/data-view/admin-table-page';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
+  adminMovies,
   useAdminComments,
   useAdminInteractions,
   useAdminRatings,
@@ -17,237 +13,297 @@ import {
   useDeleteInteraction,
   useDeleteRating,
 } from '@/hooks/tankstack/admin';
-import { Comment } from '@/shared/types/comment.types';
-import { Interaction } from '@/shared/types/interaction.types';
-import { Rating } from '@/shared/types/rating.types';
-import { formatDateTime } from '@/shared/utils/formatting';
-import { getMovieTitle } from '@/shared/utils/movie';
-import { cn } from '@/lib/utils';
+import { useServerTable } from '@/hooks/use-server-table';
+import type { Comment } from '@/shared/types/comment.types';
+import type { Interaction } from '@/shared/types/interaction.types';
+import type { Movie } from '@/shared/types/movie.types';
+import type { Rating } from '@/shared/types/rating.types';
+import {
+  createCommentFilterFields,
+  createInteractionFilterFields,
+  createRatingFilterFields,
+} from './interaction-filter-fields';
+import {
+  createCommentColumns,
+  createInteractionColumns,
+  createRatingColumns,
+} from './interaction-columns';
 
-type Tab = 'interactions' | 'ratings' | 'comments';
+const EMPTY_RATINGS: Rating[] = [];
+const EMPTY_COMMENTS: Comment[] = [];
+const EMPTY_INTERACTIONS: Interaction[] = [];
+const EMPTY_MOVIES: Movie[] = [];
+const DEFAULT_SORTING = [{ id: 'createdAt', desc: true }];
+/** Tab Like/Click chỉ hiển thị tương tác `like` và `click`. */
+const LIKE_CLICK_TAB_FILTERS = ['type:in:like,click'];
+const OPTION_LIST_PARAMS = { page: 1, limit: 100 };
 
-const TABS: Array<{ value: Tab; label: string }> = [
-  { value: 'interactions', label: 'Tương tác' },
-  { value: 'ratings', label: 'Đánh giá' },
-  { value: 'comments', label: 'Bình luận' },
-];
+/** Option phim cho filter quan hệ (hiển thị tên, gửi id). */
+function useMovieFilterOptions() {
+  const moviesQuery = adminMovies.useList(OPTION_LIST_PARAMS);
+  const movies = moviesQuery.data?.items ?? EMPTY_MOVIES;
 
-interface DeleteTarget {
-  id: string;
-  label: string;
-  kind: Tab;
-}
-
-/** Người hiển thị — join `user` từ backend. */
-function renderUser(user?: { fullName?: string; email?: string }) {
-  return user?.fullName || user?.email || <span className="text-muted-foreground">—</span>;
-}
-
-/** Phim hiển thị — join `movie` từ backend. */
-function renderMovie(movie?: { title?: string; titleVi?: string }) {
-  if (!movie) return <span className="text-muted-foreground">—</span>;
-  return (
-    <span className="line-clamp-1 max-w-56">
-      {getMovieTitle({ title: movie.title ?? '', titleVi: movie.titleVi })}
-    </span>
+  return useMemo(
+    () =>
+      movies.map((movie) => ({
+        value: String(movie.id),
+        label: movie.titleVi || movie.title || `#${movie.id}`,
+      })),
+    [movies],
   );
 }
 
-function renderCreatedAt(value?: string | Date) {
-  return value ? formatDateTime(value) : '—';
-}
+/** Tab Đánh giá — danh sách read-only, chỉ thao tác xóa. */
+function RatingTab() {
+  const table = useServerTable({ initialPageSize: 10, initialSorting: DEFAULT_SORTING });
+  const { clampPageIndex } = table;
 
-const INTERACTION_COLUMNS: DataTableColumn<Interaction>[] = [
-  { key: 'user', header: 'Người dùng', render: (item) => renderUser(item.user) },
-  { key: 'movie', header: 'Phim', render: (item) => renderMovie(item.movie) },
-  {
-    key: 'type',
-    header: 'Loại',
-    className: 'w-32',
-    render: (item) => {
-      const badge = TYPE_BADGES[item.type];
-      return (
-        <Badge variant="outline" className={cn('border-transparent', badge?.className)}>
-          {badge?.label ?? item.type}
-        </Badge>
-      );
-    },
-  },
-  {
-    key: 'score',
-    header: 'Điểm',
-    className: 'w-20',
-    hideOnMobile: true,
-    render: (item) => <span className="tabular-nums">{item.score}</span>,
-  },
-  { key: 'createdAt', header: 'Thời gian', className: 'w-40', render: (item) => renderCreatedAt(item.createdAt) },
-];
+  const movieOptions = useMovieFilterOptions();
+  const filterFields = useMemo(() => createRatingFilterFields(movieOptions), [movieOptions]);
 
-const RATING_COLUMNS: DataTableColumn<Rating>[] = [
-  { key: 'user', header: 'Người dùng', render: (item) => renderUser(item.user) },
-  { key: 'movie', header: 'Phim', render: (item) => renderMovie(item.movie) },
-  {
-    key: 'rating',
-    header: 'Điểm',
-    className: 'w-24',
-    render: (item) => (
-      <span className="tabular-nums font-medium">
-        {item.rating}
-        <span className="text-muted-foreground font-normal">/5</span>
-      </span>
-    ),
-  },
-  { key: 'createdAt', header: 'Thời gian', className: 'w-40', render: (item) => renderCreatedAt(item.createdAt) },
-];
+  const ratingsQuery = useAdminRatings(table.params);
+  const ratings = ratingsQuery.data?.items ?? EMPTY_RATINGS;
+  const total = ratingsQuery.data?.pagination?.total ?? 0;
 
-const COMMENT_COLUMNS: DataTableColumn<Comment>[] = [
-  { key: 'user', header: 'Người dùng', render: (item) => renderUser(item.user) },
-  { key: 'movie', header: 'Phim', render: (item) => renderMovie(item.movie) },
-  {
-    key: 'content',
-    header: 'Nội dung',
-    render: (item) => <p className="line-clamp-2 max-w-md whitespace-pre-wrap">{item.content}</p>,
-  },
-  { key: 'createdAt', header: 'Thời gian', className: 'w-40', render: (item) => renderCreatedAt(item.createdAt) },
-];
+  useEffect(() => {
+    clampPageIndex(total);
+  }, [clampPageIndex, total]);
 
-/**
- * Trang admin Interaction — 3 danh sách read-only (Tương tác / Đánh giá / Bình luận)
- * chuyển bằng tab segment; xóa từng bản ghi qua `CrudDeleteDialog` dùng chung.
- * `enabled` theo tab để không fetch thừa; backend không filter theo type.
- */
-export function InteractionClient() {
-  const [tab, setTab] = useState<Tab>('interactions');
-  const [page, setPage] = useState(1);
-  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const removeRating = useDeleteRating();
+  const [deleteTarget, setDeleteTarget] = useState<Rating | null>(null);
 
-  const limit = 10;
-  const interactions = useAdminInteractions({ page, limit, enabled: tab === 'interactions' });
-  const ratings = useAdminRatings({ page, limit, enabled: tab === 'ratings' });
-  const comments = useAdminComments({ page, limit, enabled: tab === 'comments' });
+  const columns = useMemo(
+    () => createRatingColumns({ onDelete: (rating) => setDeleteTarget(rating) }),
+    [],
+  );
 
-  const deleteInteraction = useDeleteInteraction();
-  const deleteRating = useDeleteRating();
-  const deleteComment = useDeleteComment();
-
-  const active = tab === 'interactions' ? interactions : tab === 'ratings' ? ratings : comments;
-  const isDeleting =
-    deleteInteraction.isPending || deleteRating.isPending || deleteComment.isPending;
-
-  const switchTab = (next: Tab) => {
-    setTab(next);
-    setPage(1);
-  };
-
-  const confirmDelete = async () => {
+  const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      if (deleteTarget.kind === 'interactions') {
-        await deleteInteraction.mutateAsync(deleteTarget.id);
-      } else if (deleteTarget.kind === 'ratings') {
-        await deleteRating.mutateAsync(deleteTarget.id);
-      } else {
-        await deleteComment.mutateAsync(deleteTarget.id);
-      }
+      await removeRating.mutateAsync(deleteTarget.id);
       setDeleteTarget(null);
     } catch {
-      // Đã toast trong mutation onError — giữ dialog mở.
+      // Lỗi đã được toast trong mutation — giữ dialog mở để user thử lại.
     }
   };
 
   return (
-    <div className="flex w-full flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Loại dữ liệu">
-        {TABS.map((item) => (
-          <Button
-            key={item.value}
-            role="tab"
-            aria-selected={tab === item.value}
-            variant={tab === item.value ? 'default' : 'outline'}
-            className="cursor-pointer"
-            onClick={() => switchTab(item.value)}
-          >
-            {item.label}
-          </Button>
-        ))}
-      </div>
-
-      {active.isLoading ? (
-        <CrudTableSkeleton />
-      ) : active.isError ? (
-        <ErrorState
-          title="Không thể tải dữ liệu"
-          description="Vui lòng kiểm tra kết nối và thử lại."
-          onRetry={() => active.refetch()}
-        />
-      ) : (
-        <>
-          {tab === 'interactions' ? (
-            <DataTable
-              columns={INTERACTION_COLUMNS}
-              items={interactions.data?.items ?? []}
-              rowKey={(item) => item.id}
-              onDelete={(item) =>
-                setDeleteTarget({
-                  id: String(item.id),
-                  label: item.user?.fullName || item.user?.email || `#${item.id}`,
-                  kind: 'interactions',
-                })
-              }
-              empty={<EmptyState title="Chưa có tương tác nào" description="Chưa có bản ghi nào." />}
-            />
-          ) : null}
-          {tab === 'ratings' ? (
-            <DataTable
-              columns={RATING_COLUMNS}
-              items={ratings.data?.items ?? []}
-              rowKey={(item) => item.id}
-              onDelete={(item) =>
-                setDeleteTarget({
-                  id: String(item.id),
-                  label: item.user?.fullName || item.user?.email || `#${item.id}`,
-                  kind: 'ratings',
-                })
-              }
-              empty={<EmptyState title="Chưa có đánh giá nào" description="Chưa có bản ghi nào." />}
-            />
-          ) : null}
-          {tab === 'comments' ? (
-            <DataTable
-              columns={COMMENT_COLUMNS}
-              items={comments.data?.items ?? []}
-              rowKey={(item) => item.id}
-              onDelete={(item) =>
-                setDeleteTarget({
-                  id: String(item.id),
-                  label: item.user?.fullName || item.user?.email || `#${item.id}`,
-                  kind: 'comments',
-                })
-              }
-              empty={<EmptyState title="Chưa có bình luận nào" description="Chưa có bản ghi nào." />}
-            />
-          ) : null}
-
-          {active.data ? (
-            <DataPagination
-              page={active.data.pagination.page}
-              totalPages={active.data.pagination.totalPages}
-              total={active.data.pagination.total}
-              onPageChange={setPage}
-              disabled={active.isFetching}
-              ariaLabel="Phân trang dữ liệu tương tác"
-            />
-          ) : null}
-        </>
-      )}
-
-      <CrudDeleteDialog
-        target={deleteTarget}
-        onCancel={() => setDeleteTarget(null)}
-        onConfirm={confirmDelete}
-        isPending={isDeleting}
-        entityLabel="bản ghi"
+    <AdminTablePage
+      table={table}
+      columns={columns}
+      data={ratings}
+      total={total}
+      isLoading={ratingsQuery.isLoading}
+      isFetching={ratingsQuery.isFetching}
+      error={ratingsQuery.error}
+      onRetry={() => void ratingsQuery.refetch()}
+      searchPlaceholder="Tìm theo người dùng, phim, nội dung…"
+      searchLabel="Tìm kiếm đánh giá"
+      filterFields={filterFields}
+      entityLabel="đánh giá"
+      emptyDescription="Chưa có đánh giá nào trong hệ thống."
+    >
+      <AdminDeleteDialog
+        open={deleteTarget !== null}
+        onOpenChange={(next) => {
+          if (!next) setDeleteTarget(null);
+        }}
+        title="Xóa đánh giá?"
+        description={
+          <>
+            Đánh giá{' '}
+            <span className="text-foreground font-medium">
+              {deleteTarget ? `${deleteTarget.rating} sao` : 'này'}
+            </span>{' '}
+            sẽ bị xóa vĩnh viễn và không thể khôi phục.
+          </>
+        }
+        onConfirm={handleDelete}
+        deleting={removeRating.isPending}
       />
-    </div>
+    </AdminTablePage>
+  );
+}
+
+/** Tab Bình luận — danh sách read-only, chỉ thao tác xóa. */
+function CommentTab() {
+  const table = useServerTable({ initialPageSize: 10, initialSorting: DEFAULT_SORTING });
+  const { clampPageIndex } = table;
+
+  const movieOptions = useMovieFilterOptions();
+  const filterFields = useMemo(() => createCommentFilterFields(movieOptions), [movieOptions]);
+
+  const commentsQuery = useAdminComments(table.params);
+  const comments = commentsQuery.data?.items ?? EMPTY_COMMENTS;
+  const total = commentsQuery.data?.pagination?.total ?? 0;
+
+  useEffect(() => {
+    clampPageIndex(total);
+  }, [clampPageIndex, total]);
+
+  const removeComment = useDeleteComment();
+  const [deleteTarget, setDeleteTarget] = useState<Comment | null>(null);
+
+  const columns = useMemo(
+    () => createCommentColumns({ onDelete: (comment) => setDeleteTarget(comment) }),
+    [],
+  );
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await removeComment.mutateAsync(deleteTarget.id);
+      setDeleteTarget(null);
+    } catch {
+      // Lỗi đã được toast trong mutation — giữ dialog mở để user thử lại.
+    }
+  };
+
+  return (
+    <AdminTablePage
+      table={table}
+      columns={columns}
+      data={comments}
+      total={total}
+      isLoading={commentsQuery.isLoading}
+      isFetching={commentsQuery.isFetching}
+      error={commentsQuery.error}
+      onRetry={() => void commentsQuery.refetch()}
+      searchPlaceholder="Tìm theo người dùng, phim, nội dung…"
+      searchLabel="Tìm kiếm bình luận"
+      filterFields={filterFields}
+      entityLabel="bình luận"
+      emptyDescription="Chưa có bình luận nào trong hệ thống."
+    >
+      <AdminDeleteDialog
+        open={deleteTarget !== null}
+        onOpenChange={(next) => {
+          if (!next) setDeleteTarget(null);
+        }}
+        title="Xóa bình luận?"
+        description={
+          <>
+            Bình luận của{' '}
+            <span className="text-foreground font-medium">
+              {deleteTarget?.user?.fullName ?? deleteTarget?.user?.email ?? 'người dùng này'}
+            </span>{' '}
+            sẽ bị xóa vĩnh viễn. Các phản hồi trực thuộc (nếu có) không bị xóa theo.
+          </>
+        }
+        onConfirm={handleDelete}
+        deleting={removeComment.isPending}
+      />
+    </AdminTablePage>
+  );
+}
+
+/** Tab Like / Click — tương tác yêu thích và lượt xem. */
+function LikeClickTab() {
+  const table = useServerTable({
+    initialPageSize: 10,
+    initialSorting: DEFAULT_SORTING,
+    lockedFilters: LIKE_CLICK_TAB_FILTERS,
+  });
+  const { clampPageIndex } = table;
+
+  const movieOptions = useMovieFilterOptions();
+  const actionsFilterFields = useMemo(
+    () => createInteractionFilterFields(movieOptions),
+    [movieOptions],
+  );
+
+  const interactionsQuery = useAdminInteractions(table.params);
+  const interactions = interactionsQuery.data?.items ?? EMPTY_INTERACTIONS;
+  const total = interactionsQuery.data?.pagination?.total ?? 0;
+
+  useEffect(() => {
+    clampPageIndex(total);
+  }, [clampPageIndex, total]);
+
+  const removeInteraction = useDeleteInteraction();
+  const [deleteTarget, setDeleteTarget] = useState<Interaction | null>(null);
+
+  const columns = useMemo(
+    () => createInteractionColumns({ onDelete: (interaction) => setDeleteTarget(interaction) }),
+    [],
+  );
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await removeInteraction.mutateAsync(deleteTarget.id);
+      setDeleteTarget(null);
+    } catch {
+      // Lỗi đã được toast trong mutation — giữ dialog mở để user thử lại.
+    }
+  };
+
+  return (
+    <AdminTablePage
+      table={table}
+      columns={columns}
+      data={interactions}
+      total={total}
+      isLoading={interactionsQuery.isLoading}
+      isFetching={interactionsQuery.isFetching}
+      error={interactionsQuery.error}
+      onRetry={() => void interactionsQuery.refetch()}
+      searchPlaceholder="Tìm theo người dùng, phim, loại tương tác…"
+      searchLabel="Tìm kiếm tương tác"
+      filterFields={actionsFilterFields}
+      entityLabel="tương tác"
+      emptyDescription="Chưa có tương tác nào trong hệ thống."
+    >
+      <AdminDeleteDialog
+        open={deleteTarget !== null}
+        onOpenChange={(next) => {
+          if (!next) setDeleteTarget(null);
+        }}
+        title="Xóa tương tác?"
+        description={
+          <>
+            Tương tác của{' '}
+            <span className="text-foreground font-medium">
+              {deleteTarget?.user?.fullName ?? deleteTarget?.user?.email ?? 'người dùng này'}
+            </span>{' '}
+            sẽ bị xóa vĩnh viễn và không thể khôi phục.
+          </>
+        }
+        onConfirm={handleDelete}
+        deleting={removeInteraction.isPending}
+      />
+    </AdminTablePage>
+  );
+}
+
+/** Trang Tương tác: 3 tab độc lập (đánh giá / bình luận / like-click). */
+export function InteractionClient() {
+  return (
+    <Tabs defaultValue="ratings" className="gap-4">
+      <TabsList
+        className="h-auto! w-full justify-start gap-1 overflow-x-auto sm:w-fit"
+        aria-label="Loại tương tác"
+      >
+        <TabsTrigger value="ratings" className="min-h-11 cursor-pointer px-4">
+          Đánh giá
+        </TabsTrigger>
+        <TabsTrigger value="comments" className="min-h-11 cursor-pointer px-4">
+          Bình luận
+        </TabsTrigger>
+        <TabsTrigger value="like-click" className="min-h-11 cursor-pointer px-4">
+          Like / Click
+        </TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="ratings">
+        <RatingTab />
+      </TabsContent>
+      <TabsContent value="comments">
+        <CommentTab />
+      </TabsContent>
+      <TabsContent value="like-click">
+        <LikeClickTab />
+      </TabsContent>
+    </Tabs>
   );
 }

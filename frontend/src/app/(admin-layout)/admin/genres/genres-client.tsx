@@ -1,119 +1,177 @@
 'use client';
 
-import { CrudToolbar } from '@/components/admin/crud-toolbar';
-import { CrudTableSkeleton, DataTable, DataTableColumn } from '@/components/admin/data-table';
-import { CrudDeleteDialog } from '@/components/admin/delete-dialog';
-import { CrudFormDialog, CrudFormField, useCrudFormValues } from '@/components/admin/form-dialog';
-import { DataPagination } from '@/components/common/DataPagination';
-import { EmptyState } from '@/components/common/EmptyState';
-import { ErrorState } from '@/components/common/ErrorState';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
+import { genreApi } from '@/apis/genre.api';
+import { AdminDeleteDialog } from '@/components/admin/data-view/admin-delete-dialog';
+import { AdminFormDialog } from '@/components/admin/data-view/admin-form-dialog';
+import type {
+  AdminFormField,
+  AdminFormValues,
+} from '@/components/admin/data-view/admin-form-schema';
+import { AdminTablePage } from '@/components/admin/data-view/admin-table-page';
 import { adminGenres } from '@/hooks/tankstack/admin';
-import { useCrudPage } from '@/hooks/tankstack/admin-crud';
-import { Genre } from '@/shared/types/api.types';
-import { z } from 'zod';
+import { useServerTable } from '@/hooks/use-server-table';
+import { parseAxiosError } from '@/lib/axiosClient';
+import type { Genre } from '@/shared/types/api.types';
+import { GENRE_FILTER_FIELDS } from './genre-filter-fields';
+import { createGenreColumns } from './genres-columns';
 
-const FIELDS: CrudFormField[] = [
-  { name: 'name', label: 'Tên thể loại (tiếng Việt)', placeholder: 'vd. Hành động' },
-  { name: 'enName', label: 'Tên tiếng Anh', placeholder: 'vd. Action' },
-];
+/** Identity ổn định cho fallback data (tránh reset row model mỗi render). */
+const EMPTY_GENRES: Genre[] = [];
+const DEFAULT_SORTING = [{ id: 'name', desc: false }];
 
-type GenreForm = Record<string, unknown>;
-
-const schema = z.object({
-  name: z.string().min(1, 'Tên thể loại là bắt buộc'),
-  enName: z.string().optional(),
-}) as unknown as z.ZodType<GenreForm>;
-
-const COLUMNS: DataTableColumn<Genre>[] = [
-  { key: 'id', header: 'ID', className: 'w-20 text-muted-foreground', render: (genre) => genre.id },
-  { key: 'name', header: 'Tên thể loại', render: (genre) => <span className="font-medium">{genre.name}</span> },
+const GENRE_FORM_FIELDS: AdminFormField[] = [
   {
-    key: 'enName',
-    header: 'Tên tiếng Anh',
-    render: (genre) => genre.enName ?? <span className="text-muted-foreground">—</span>,
+    name: 'name',
+    label: 'Tên thể loại',
+    required: true,
+    placeholder: 'VD: Hành động',
+    wide: true,
+  },
+  {
+    name: 'enName',
+    label: 'Tên tiếng Anh',
+    placeholder: 'VD: Action',
+    wide: true,
   },
 ];
 
-/** CRUD Thể loại — dùng chung DataTable/CrudFormDialog/CrudDeleteDialog của admin. */
 export function GenresClient() {
-  const mutations = {
-    create: adminGenres.useCreate(),
-    update: adminGenres.useUpdate(),
-    remove: adminGenres.useDelete(),
+  const table = useServerTable({
+    initialPageSize: 10,
+    initialSorting: DEFAULT_SORTING,
+  });
+  const { clampPageIndex } = table;
+
+  const genresQuery = useQuery({
+    queryKey: ['admin-genres', 'list', table.params],
+    queryFn: () => genreApi.getAll(table.params),
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
+  });
+
+  const genres = genresQuery.data?.result ?? EMPTY_GENRES;
+  const total = genresQuery.data?.pagination?.total ?? 0;
+
+  // Filter/search làm tổng bản ghi giảm → lùi về trang cuối hợp lệ.
+  useEffect(() => {
+    clampPageIndex(total);
+  }, [clampPageIndex, total]);
+
+  const createGenre = adminGenres.useCreate();
+  const updateGenre = adminGenres.useUpdate();
+  const deleteGenre = adminGenres.useDelete();
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<Genre | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Genre | null>(null);
+
+  const openCreate = () => {
+    setEditing(null);
+    setFormOpen(true);
   };
-  const state = useCrudPage<Genre, { name: string; enName?: string }>(mutations);
-  const list = adminGenres.useList({ page: state.page, limit: 10, keyword: state.keyword });
-  const defaultValues = useCrudFormValues<GenreForm>(FIELDS, state.editing);
+
+  const columns = useMemo(
+    () =>
+      createGenreColumns({
+        onEdit: (genre) => {
+          setEditing(genre);
+          setFormOpen(true);
+        },
+        onDelete: (genre) => setDeleteTarget(genre),
+      }),
+    [],
+  );
+
+  const defaultValues = useMemo<AdminFormValues>(
+    () => ({
+      name: editing?.name ?? '',
+      enName: editing?.enName ?? '',
+    }),
+    [editing],
+  );
+
+  const handleSubmit = async (values: AdminFormValues) => {
+    const input = {
+      name: String(values.name ?? '').trim(),
+      enName: values.enName ? String(values.enName).trim() : undefined,
+    };
+
+    if (editing) {
+      await updateGenre.mutateAsync({ id: editing.id, data: input });
+    } else {
+      await createGenre.mutateAsync(input);
+    }
+    setFormOpen(false);
+    setEditing(null);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteGenre.mutateAsync(deleteTarget.id);
+      setDeleteTarget(null);
+    } catch {
+      // Lỗi đã được toast trong mutation — giữ dialog mở để user thử lại.
+    }
+  };
 
   return (
-    <div className="flex w-full flex-col gap-4">
-      <CrudToolbar
-        keyword={state.keywordInput}
-        onKeywordChange={state.setKeywordInput}
-        searchPlaceholder="Tìm thể loại…"
-        onAdd={state.openCreate}
-        addLabel="Thêm thể loại"
-      />
-
-      {list.isLoading ? (
-        <CrudTableSkeleton />
-      ) : list.isError ? (
-        <ErrorState
-          title="Không thể tải danh sách thể loại"
-          description="Vui lòng kiểm tra kết nối và thử lại."
-          onRetry={() => list.refetch()}
-        />
-      ) : (
-        <>
-          <DataTable
-            columns={COLUMNS}
-            items={list.data?.items ?? []}
-            rowKey={(genre) => genre.id}
-            onEdit={state.openEdit}
-            onDelete={(genre) => state.setDeleteTarget(genre)}
-            empty={
-              <EmptyState
-                title="Không có thể loại nào"
-                description="Thêm thể loại đầu tiên để phân loại phim."
-              />
-            }
-          />
-          {list.data ? (
-            <DataPagination
-              page={list.data.pagination.page}
-              totalPages={list.data.pagination.totalPages}
-              total={list.data.pagination.total}
-              onPageChange={state.setPage}
-              disabled={list.isFetching}
-              ariaLabel="Phân trang thể loại"
-            />
-          ) : null}
-        </>
-      )}
-
-      <CrudFormDialog<GenreForm>
-        open={state.dialogOpen}
-        onOpenChange={state.setDialogOpen}
-        title={state.editing ? 'Sửa thể loại' : 'Thêm thể loại'}
-        schema={schema}
-        fields={FIELDS}
-        defaultValues={defaultValues}
-        onSubmit={(values) =>
-          state.submit({
-            name: String(values.name ?? ''),
-            enName: values.enName ? String(values.enName) : undefined,
-          })
+    <AdminTablePage
+      table={table}
+      columns={columns}
+      data={genres}
+      total={total}
+      isLoading={genresQuery.isLoading}
+      isFetching={genresQuery.isFetching}
+      error={genresQuery.error}
+      onRetry={() => void genresQuery.refetch()}
+      searchPlaceholder="Tìm theo tên thể loại…"
+      searchLabel="Tìm kiếm thể loại"
+      filterFields={GENRE_FILTER_FIELDS}
+      entityLabel="thể loại"
+      emptyDescription="Thêm thể loại đầu tiên để gắn vào phim."
+      addLabel="Thêm thể loại"
+      onAdd={openCreate}
+    >
+      <AdminFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        title={editing ? 'Sửa thể loại' : 'Thêm thể loại'}
+        description={
+          editing
+            ? 'Cập nhật tên thể loại. Thay đổi áp dụng ngay cho danh sách phim.'
+            : 'Tạo thể loại mới để phân loại phim.'
         }
-        submitting={state.saving}
+        fields={GENRE_FORM_FIELDS}
+        defaultValues={defaultValues}
+        onSubmit={handleSubmit}
+        submitting={createGenre.isPending || updateGenre.isPending}
+        submitLabel={editing ? 'Lưu thay đổi' : 'Thêm thể loại'}
+        mapServerError={(error) =>
+          parseAxiosError(error).statusCode === 409
+            ? { field: 'name', message: 'Thể loại này đã tồn tại' }
+            : null
+        }
       />
 
-      <CrudDeleteDialog
-        target={state.deleteTarget ? { id: state.deleteTarget.id, label: state.deleteTarget.name } : null}
-        onCancel={() => state.setDeleteTarget(null)}
-        onConfirm={state.confirmDelete}
-        isPending={state.deleting}
-        entityLabel="thể loại"
+      <AdminDeleteDialog
+        open={deleteTarget !== null}
+        onOpenChange={(next) => {
+          if (!next) setDeleteTarget(null);
+        }}
+        title="Xóa thể loại?"
+        description={
+          <>
+            Thể loại{' '}
+            <span className="text-foreground font-medium">{deleteTarget?.name ?? 'này'}</span> sẽ bị
+            xóa khỏi tất cả phim liên quan. Hành động này không thể hoàn tác.
+          </>
+        }
+        onConfirm={handleDelete}
+        deleting={deleteGenre.isPending}
       />
-    </div>
+    </AdminTablePage>
   );
 }

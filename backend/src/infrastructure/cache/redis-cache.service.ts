@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { RedisService } from '@/infrastructure/redis/redis.service';
+import { idUtil } from '@/common/utils/id.util';
 
 export const CACHE_SERVICE = 'CACHE_SERVICE';
 // interface
@@ -138,7 +138,7 @@ export class RedisCacheService implements ICacheService {
 
   private async loadWithLock<T>(opts: CacheLoadOptions<T>): Promise<T> {
     const lockKey = `lock:${opts.key}`;
-    const token = randomUUID();
+    const token = idUtil.generateUUID();
     let locked = false;
 
     try {

@@ -1,15 +1,13 @@
 import { ApiPaginatedResponse, ApiResponse, Genre } from '@/shared/types/api.types';
+import { withListParams, type SearchListParams } from '@/shared/utils/list-params';
 import axiosClient from '../lib/axiosClient';
 
-export interface GenreQuery {
-  page?: number;
-  limit?: number;
-  keyword?: string;
-}
+/** Query params `GET /genres` — khớp `BaseSearchRequest`. */
+export type GenreQuery = SearchListParams;
 
 export const genreApi = {
   getAll: async (params: GenreQuery = {}): Promise<ApiPaginatedResponse<Genre[]>> => {
-    const { data } = await axiosClient.get('/genres', { params });
+    const { data } = await axiosClient.get(withListParams('/genres', params));
     return data;
   },
   getById: async (id: string): Promise<ApiResponse<Genre>> => {

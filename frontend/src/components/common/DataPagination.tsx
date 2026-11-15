@@ -14,6 +14,8 @@ interface DataPaginationProps {
   /** Vô hiệu hoá toàn bộ nút (ví dụ khi đang tải). */
   disabled?: boolean;
   ariaLabel?: string;
+  /** Hiển thị dòng "Trang x / y" bên trái (mặc định true). */
+  showSummary?: boolean;
 }
 
 /** Dựng dải số trang: 1 … (current-1, current, current+1) … total */
@@ -47,6 +49,7 @@ export function DataPagination({
   className,
   disabled = false,
   ariaLabel = 'Phân trang',
+  showSummary = true,
 }: DataPaginationProps) {
   if (totalPages <= 1) return null;
 
@@ -60,10 +63,12 @@ export function DataPagination({
         className,
       )}
     >
-      <p className="text-muted-foreground text-sm">
-        Trang <span className="text-foreground font-semibold">{page}</span> / {totalPages}
-        {typeof total === 'number' ? <span> — {total} kết quả</span> : null}
-      </p>
+      {showSummary ? (
+        <p className="text-muted-foreground text-sm">
+          Trang <span className="text-foreground font-semibold">{page}</span> / {totalPages}
+          {typeof total === 'number' ? <span> — {total} kết quả</span> : null}
+        </p>
+      ) : null}
 
       <div className="flex items-center gap-1">
         <Button

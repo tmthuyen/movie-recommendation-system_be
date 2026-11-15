@@ -1,5 +1,6 @@
 import { ApiPaginatedResponse, ApiResponse } from '@/shared/types/api.types';
 import { Comment } from '@/shared/types/comment.types';
+import { withListParams, type SearchListParams } from '@/shared/utils/list-params';
 import axiosClient from '../lib/axiosClient';
 
 export const commentApi = {
@@ -26,12 +27,9 @@ export const commentApi = {
     });
     return data;
   },
-  /** Toàn bộ bình luận (public, admin) — `{page, limit}`, join `user` + `movie`. */
-  getAll: async (params: {
-    page?: number;
-    limit?: number;
-  }): Promise<ApiPaginatedResponse<Comment[]>> => {
-    const { data } = await axiosClient.get('/comments', { params });
+  /** Toàn bộ bình luận (public, admin) — `BaseSearchRequest`, join `user` + `movie`. */
+  getAll: async (params: SearchListParams = {}): Promise<ApiPaginatedResponse<Comment[]>> => {
+    const { data } = await axiosClient.get(withListParams('/comments', params));
     return data;
   },
   /** Xóa bình luận (ADMIN). */

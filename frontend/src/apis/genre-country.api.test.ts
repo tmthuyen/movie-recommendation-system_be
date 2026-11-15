@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import qs from 'qs';
 import { countryApi } from './country.api';
 import { genreApi } from './genre.api';
 
@@ -17,7 +18,9 @@ vi.mock('@/lib/axiosClient', () => ({
   parseAxiosError: vi.fn(),
 }));
 
-const envelope = (result: unknown) => ({ data: { success: true, statusCode: 200, message: 'OK', result } });
+const envelope = (result: unknown) => ({
+  data: { success: true, statusCode: 200, message: 'OK', result },
+});
 
 describe('genreApi', () => {
   beforeEach(() => {
@@ -29,9 +32,9 @@ describe('genreApi', () => {
 
     const result = await genreApi.getAll({ page: 1, limit: 100 });
 
-    expect(mocks.client.get).toHaveBeenCalledWith('/genres', {
-      params: { page: 1, limit: 100 },
-    });
+    expect(mocks.client.get).toHaveBeenCalledWith(
+      `/genres?${qs.stringify({ page: 1, limit: 100 }, { arrayFormat: 'repeat' })}`,
+    );
     expect(result.result).toHaveLength(1);
   });
 
@@ -78,9 +81,9 @@ describe('countryApi', () => {
 
     const result = await countryApi.getAll({ page: 1, limit: 500 });
 
-    expect(mocks.client.get).toHaveBeenCalledWith('/countries', {
-      params: { page: 1, limit: 500 },
-    });
+    expect(mocks.client.get).toHaveBeenCalledWith(
+      `/countries?${qs.stringify({ page: 1, limit: 500 }, { arrayFormat: 'repeat' })}`,
+    );
     expect(result.result[0]).toMatchObject({ viName: 'Việt Nam' });
   });
 

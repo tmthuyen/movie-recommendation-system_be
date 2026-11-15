@@ -464,12 +464,27 @@ export class RecommendationsService implements IRecommendationsService {
     schema: z.ZodType<T>,
     accessToken?: string,
   ): Promise<T> {
-    const res = await fetch(`${AI_SERVICE_URL}${path}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      },
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${AI_SERVICE_URL}${path}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+      });
+    } catch (error) {
+      this.logger.error(
+        `Lỗi khi gọi AI service: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'Lỗi khi gọi AI service',
+        'The AI service returned an error.',
+        'AI_SERVICE_ERROR',
+      );
+    }
 
     if (!res.ok) {
       throw new AppException(
@@ -566,7 +581,7 @@ export class RecommendationsService implements IRecommendationsService {
       key,
       schema: RecommendationSnapshotSchema,
       ttlSeconds: CacheTtl.recommendation,
-      loader: () => this.loadSnapshotFromAi(movieId, this.window),
+      loader: () => this.loadSnapshotSimilarFromAi(movieId, this.window),
     });
 
     return {
@@ -633,36 +648,43 @@ export class RecommendationsService implements IRecommendationsService {
     };
   }
 
-  /** Lấy snapshot từ ai-service và chuẩn hoá `rank` về 1..n. */
-  private async loadSnapshotFromAi(
-    movieId: number,
-    window: number,
-  ): Promise<RecommendationItem[]> {
-    const res = await fetch(
-      `${AI_SERVICE_URL}/similar/${movieId}?topK=${window}`,
-    );
-    return this.parseAiSnapshotResponse(
-      res,
-      'Dữ liệu trả về phim liên quan không hợp lệ từ AI service',
-      'The AI service did not return a valid response for similar movies.',
-    );
-  }
+  // /** Lấy snapshot từ ai-service và chuẩn hoá `rank` về 1..n. */
+  // private async loadSnapshotSimilarFromAi(
+  //   movieId: number,
+  //   window: number,
+  // ): Promise<RecommendationItem[]> {
+  //   let res: Response;
+  //   try {
+  //     res = await fetch(`${AI_SERVICE_URL}/similar/${movieId}?topK=${window}`);
+  //   } catch (error) {
+  //     this.logger.error(
+  //       `Lỗi khi gọi AI service: ${
+  //         error instanceof Error ? error.message : String(error)
+  //       }`,
+  //     );
+  //     throw new AppException(
+  //       HttpStatus.BAD_REQUEST,
+  //       'Lỗi khi gọi AI service',
+  //       'The AI service returned an error.',
+  //       'AI_SERVICE_ERROR',
+  //     );
+  //   }
 
-  /** Lấy snapshot semantic search từ ai-service. */
-  private async loadSemanticSnapshotFromAi(
-    keyword: string,
-    window: number,
-  ): Promise<RecommendationItem[]> {
-    const url = `${AI_SERVICE_URL}/semantic-search?keyword=${encodeURIComponent(
-      keyword,
-    )}&topK=${window}`;
-    const res = await fetch(url);
-    return this.parseAiSnapshotResponse(
-      res,
-      'Dữ liệu trả về tìm kiếm ngữ nghĩa không hợp lệ từ AI service',
-      'The AI service did not return a valid response for semantic search.',
-    );
-  }
+  // /** Lấy snapshot semantic search từ ai-service. */
+  // private async loadSemanticSnapshotFromAi(
+  //   keyword: string,
+  //   window: number,
+  // ): Promise<RecommendationItem[]> {
+  //   const url = `${AI_SERVICE_URL}/semantic-search?keyword=${encodeURIComponent(
+  //     keyword,
+  //   )}&topK=${window}`;
+  //   const res = await fetch(url);
+  //   return this.parseAiSnapshotResponse(
+  //     res,
+  //     'Dữ liệu trả về tìm kiếm ngữ nghĩa không hợp lệ từ AI service',
+  //     'The AI service did not return a valid response for semantic search.',
+  //   );
+  // }
 
   /**
    * Gửi `keyword` sang AI-Service: ai-service tự chạy BM25 (Lexical) + Semantic rồi RRF rerank.

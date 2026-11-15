@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import qs from 'qs';
 import { userApi } from './user.api';
 
 const mocks = vi.hoisted(() => ({
@@ -17,7 +18,9 @@ vi.mock('@/lib/axiosClient', () => ({
   parseAxiosError: vi.fn(),
 }));
 
-const envelope = (result: unknown) => ({ data: { success: true, statusCode: 200, message: 'OK', result } });
+const envelope = (result: unknown) => ({
+  data: { success: true, statusCode: 200, message: 'OK', result },
+});
 
 describe('userApi', () => {
   beforeEach(() => {
@@ -29,9 +32,9 @@ describe('userApi', () => {
 
     const result = await userApi.getAllUsers({ page: 2, limit: 10, keyword: 'an' });
 
-    expect(mocks.client.get).toHaveBeenCalledWith('/users', {
-      params: { page: 2, limit: 10, keyword: 'an' },
-    });
+    expect(mocks.client.get).toHaveBeenCalledWith(
+      `/users?${qs.stringify({ page: 2, limit: 10, keyword: 'an' }, { arrayFormat: 'repeat' })}`,
+    );
     expect(result.result).toHaveLength(1);
   });
 

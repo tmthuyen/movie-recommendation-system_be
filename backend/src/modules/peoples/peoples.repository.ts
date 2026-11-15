@@ -1,19 +1,31 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { People } from './entities/people.entity';
-import { PaginationDto } from '@/common/dtos/pagination.dto';
+import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
 import { PaginatedResult } from '@/common/dtos/paginated-result.interface';
+import { SearchUtils } from '@/common/utils/search.util';
 
 export const IPeopleRepository = Symbol('IPeopleRepository');
 
 export interface IPeopleRepository {
-  findAll(paginationDto: PaginationDto): Promise<PaginatedResult<People>>;
+  findAll(request: BaseSearchRequest): Promise<PaginatedResult<People>>;
   findById(id: number): Promise<People | null>;
   create(people: Partial<People>): Promise<People>;
   update(id: number, people: Partial<People>): Promise<People | null>;
   remove(id: number): Promise<boolean>;
 }
+
+const PEOPLE_FIELD_MAP: Record<string, string> = {
+  id: 'people.id',
+  fullName: 'people.fullName',
+  nationality: 'people.nationality',
+  gender: 'people.gender',
+  mainRole: 'people.mainRole',
+  birthDate: 'people.birthDate',
+  createdAt: 'people.createdAt',
+  updatedAt: 'people.updatedAt',
+};
 
 @Injectable()
 export class PeopleRepository implements IPeopleRepository {
@@ -22,21 +34,42 @@ export class PeopleRepository implements IPeopleRepository {
     private readonly repo: Repository<People>,
   ) {}
 
-  async findAll(
-    paginationDto: PaginationDto,
-  ): Promise<PaginatedResult<People>> {
-    const { page = 1, limit = 10, keyword } = paginationDto;
+  async findAll(request: BaseSearchRequest): Promise<PaginatedResult<People>> {
+    const { page = 1, limit = 10, keyword, filters = [], sort } = request;
     const skip = (page - 1) * limit;
 
     const queryBuilder = this.repo.createQueryBuilder('people');
 
-    if (keyword) {
-      queryBuilder.where('people.fullName ILIKE :keyword', {
-        keyword: `%${keyword}%`,
-      });
+    const trimmedKeyword = keyword?.trim();
+    if (trimmedKeyword) {
+      queryBuilder.andWhere(
+        '(people.fullName ILIKE :keyword OR people.nationality ILIKE :keyword)',
+        { keyword: `%${trimmedKeyword}%` },
+      );
     }
 
-    queryBuilder.skip(skip).take(limit).orderBy('people.createdAt', 'DESC');
+    SearchUtils.applyFilters(queryBuilder, filters || [], PEOPLE_FIELD_MAP);
+
+    const sortOptions = SearchUtils.parseSort(
+      sort?.join(',') ?? 'createdAt:DESC',
+      Object.keys(PEOPLE_FIELD_MAP),
+    );
+
+    for (const option of sortOptions) {
+      const column = PEOPLE_FIELD_MAP[option.field];
+      if (!column) {
+        throw new BadRequestException(
+          `Sort field không hợp lệ: ${option.field}`,
+        );
+      }
+      queryBuilder.addOrderBy(column, option.direction);
+    }
+
+    if (!sortOptions.some(option => option.field === 'id')) {
+      queryBuilder.addOrderBy('people.id', 'ASC');
+    }
+
+    queryBuilder.skip(skip).take(limit);
 
     const [data, total] = await queryBuilder.getManyAndCount();
 

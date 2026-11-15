@@ -1,117 +1,206 @@
 'use client';
 
-import { CrudToolbar } from '@/components/admin/crud-toolbar';
-import { CrudTableSkeleton, DataTable, DataTableColumn } from '@/components/admin/data-table';
-import { CrudDeleteDialog } from '@/components/admin/delete-dialog';
-import { CrudFormDialog, CrudFormField, useCrudFormValues } from '@/components/admin/form-dialog';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { Plus, Search } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { roleApi, type RoleInput } from '@/apis/role.api';
+import { ActiveFilterChips } from '@/components/admin/data-view/active-filter-chips';
+import { DataTable } from '@/components/admin/data-view/data-table';
+import { DataTablePagination } from '@/components/admin/data-view/data-table-pagination';
+import { DataTableToolbar } from '@/components/admin/data-view/data-table-toolbar';
+import { FilterBuilder } from '@/components/admin/data-view/filter-builder';
 import { EmptyState } from '@/components/common/EmptyState';
-import { ErrorState } from '@/components/common/ErrorState';
-import { Badge } from '@/components/ui/badge';
-import { RoleInput } from '@/apis/role.api';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { adminRoles } from '@/hooks/tankstack/admin';
-import { useCrudPage } from '@/hooks/tankstack/admin-crud';
-import { Role } from '@/shared/types/api.types';
-import { z } from 'zod';
+import { useServerTable } from '@/hooks/use-server-table';
+import type { Role } from '@/shared/types/api.types';
+import { RoleDeleteDialog } from './role-delete-dialog';
+import { ROLE_FILTER_FIELDS } from './role-filter-fields';
+import { RoleFormDialog } from './role-form-dialog';
+import { createRoleColumns } from './roles-columns';
 
-type RoleForm = Record<string, unknown>;
+/** Identity ổn định cho fallback data (tránh reset row model mỗi render). */
+const EMPTY_ROLES: Role[] = [];
+const DEFAULT_SORTING = [{ id: 'createdAt', desc: true }];
 
-const FIELDS: CrudFormField[] = [
-  { name: 'code', label: 'Mã vai trò', placeholder: 'vd. ADMIN' },
-  { name: 'name', label: 'Tên vai trò', placeholder: 'vd. Quản trị viên' },
-  { name: 'description', label: 'Mô tả', type: 'textarea', placeholder: 'Mô tả ngắn (tùy chọn)' },
-];
-
-const schema = z.object({
-  code: z.string().min(1, 'Mã vai trò là bắt buộc'),
-  name: z.string().min(1, 'Tên vai trò là bắt buộc'),
-  description: z.string().optional(),
-}) as unknown as z.ZodType<RoleForm>;
-
-const COLUMNS: DataTableColumn<Role>[] = [
-  {
-    key: 'code',
-    header: 'Mã',
-    render: (role) => <Badge variant="outline" className="font-mono text-xs">{role.code}</Badge>,
-  },
-  {
-    key: 'name',
-    header: 'Tên vai trò',
-    render: (role) => <span className="font-medium">{role.name}</span>,
-  },
-  {
-    key: 'description',
-    header: 'Mô tả',
-    render: (role) => role.description ?? <span className="text-muted-foreground">—</span>,
-  },
-];
-
-/** CRUD Vai trò — backend `GET /api/roles` không phân trang (dùng chung DataTable với envelope giả lập). */
 export function RolesClient() {
-  const mutations = {
-    create: adminRoles.useCreate(),
-    update: adminRoles.useUpdate(),
-    remove: adminRoles.useDelete(),
+  const table = useServerTable({
+    initialPageSize: 10,
+    initialSorting: DEFAULT_SORTING,
+  });
+  const { clampPageIndex } = table;
+
+  const rolesQuery = useQuery({
+    queryKey: ['admin-roles', 'list', table.params],
+    queryFn: () => roleApi.getAll(table.params),
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
+  });
+
+  const roles = rolesQuery.data?.result ?? EMPTY_ROLES;
+  const total = rolesQuery.data?.pagination?.total ?? 0;
+
+  // Filter/search làm tổng bản ghi giảm → lùi về trang cuối hợp lệ.
+  useEffect(() => {
+    clampPageIndex(total);
+  }, [clampPageIndex, total]);
+
+  const createRole = adminRoles.useCreate();
+  const updateRole = adminRoles.useUpdate();
+  const deleteRole = adminRoles.useDelete();
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<Role | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Role | null>(null);
+
+  const openCreate = () => {
+    setEditing(null);
+    setFormOpen(true);
   };
-  const state = useCrudPage<Role, RoleInput>(mutations);
-  const list = adminRoles.useList({ page: state.page, limit: 10, keyword: state.keyword });
-  const defaultValues = useCrudFormValues<RoleForm>(FIELDS, state.editing);
+
+  const columns = useMemo(
+    () =>
+      createRoleColumns({
+        onEdit: (role) => {
+          setEditing(role);
+          setFormOpen(true);
+        },
+        onDelete: (role) => setDeleteTarget(role),
+      }),
+    [],
+  );
+
+  const handleSubmit = async (values: RoleInput) => {
+    if (editing) {
+      await updateRole.mutateAsync({ id: editing.id, data: values });
+    } else {
+      await createRole.mutateAsync(values);
+    }
+    setFormOpen(false);
+    setEditing(null);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteRole.mutateAsync(deleteTarget.id);
+      setDeleteTarget(null);
+    } catch {
+      // Lỗi đã được toast trong mutation — giữ dialog mở để user thử lại.
+    }
+  };
+
+  const hasQuery = Boolean(table.keyword) || table.filters.length > 0;
 
   return (
-    <div className="flex w-full flex-col gap-4">
-      <CrudToolbar
-        keyword={state.keywordInput}
-        onKeywordChange={state.setKeywordInput}
-        searchPlaceholder="Tìm vai trò…"
-        onAdd={state.openCreate}
-        addLabel="Thêm vai trò"
+    <div className="flex flex-col gap-4">
+      <DataTableToolbar
+        actions={
+          <Button type="button" className="h-11 gap-2" onClick={openCreate}>
+            <Plus className="size-4" aria-hidden />
+            Thêm vai trò
+          </Button>
+        }
+      >
+        <div className="relative w-full sm:max-w-xs">
+          <Search
+            className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+            aria-hidden
+          />
+          <Input
+            type="search"
+            value={table.keywordInput}
+            onChange={(event) => table.setKeywordInput(event.target.value)}
+            placeholder="Tìm theo tên hoặc mã vai trò…"
+            className="h-11 pl-9"
+            aria-label="Tìm kiếm vai trò"
+          />
+        </div>
+
+        <FilterBuilder
+          fields={ROLE_FILTER_FIELDS}
+          value={table.filters}
+          onChange={table.setFilters}
+        />
+      </DataTableToolbar>
+
+      <ActiveFilterChips
+        fields={ROLE_FILTER_FIELDS}
+        value={table.filters}
+        onRemove={table.removeFilter}
+        onClear={table.clearFilters}
       />
 
-      {list.isLoading ? (
-        <CrudTableSkeleton />
-      ) : list.isError ? (
-        <ErrorState
-          title="Không thể tải danh sách vai trò"
-          description="Bạn cần quyền ADMIN/MANAGER để xem danh sách này."
-          onRetry={() => list.refetch()}
-        />
-      ) : (
-        <DataTable
-          columns={COLUMNS}
-          items={list.data?.items ?? []}
-          rowKey={(role) => role.id}
-          onEdit={state.openEdit}
-          onDelete={(role) => state.setDeleteTarget(role)}
-          empty={
-            <EmptyState title="Không có vai trò nào" description="Thêm vai trò đầu tiên." />
-          }
-        />
-      )}
-
-      <CrudFormDialog
-        open={state.dialogOpen}
-        onOpenChange={state.setDialogOpen}
-        title={state.editing ? 'Sửa vai trò' : 'Thêm vai trò'}
-        schema={schema}
-        fields={FIELDS}
-        defaultValues={defaultValues}
-        onSubmit={(values) =>
-          state.submit({
-            code: String(values.code ?? ''),
-            name: String(values.name ?? ''),
-            description: values.description ? String(values.description) : undefined,
-          })
+      <DataTable
+        columns={columns}
+        data={roles}
+        pagination={table.pagination}
+        onPaginationChange={table.setPagination}
+        sorting={table.sorting}
+        onSortingChange={table.setSorting}
+        rowCount={total}
+        isLoading={rolesQuery.isLoading}
+        isFetching={rolesQuery.isFetching}
+        error={rolesQuery.error}
+        onRetry={() => void rolesQuery.refetch()}
+        empty={
+          <EmptyState
+            title={hasQuery ? 'Không tìm thấy vai trò phù hợp' : 'Chưa có vai trò nào'}
+            description={
+              hasQuery
+                ? 'Thử thay đổi từ khóa hoặc bộ lọc để tìm kết quả khác.'
+                : 'Thêm vai trò đầu tiên để bắt đầu phân quyền người dùng.'
+            }
+            action={
+              hasQuery ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11"
+                  onClick={() => {
+                    table.setKeywordInput('');
+                    table.clearFilters();
+                  }}
+                >
+                  Xóa tìm kiếm &amp; bộ lọc
+                </Button>
+              ) : (
+                <Button type="button" className="h-11 gap-2" onClick={openCreate}>
+                  <Plus className="size-4" aria-hidden />
+                  Thêm vai trò
+                </Button>
+              )
+            }
+          />
         }
-        submitting={state.saving}
       />
 
-      <CrudDeleteDialog
-        target={
-          state.deleteTarget ? { id: state.deleteTarget.id, label: state.deleteTarget.name } : null
-        }
-        onCancel={() => state.setDeleteTarget(null)}
-        onConfirm={state.confirmDelete}
-        isPending={state.deleting}
-        entityLabel="vai trò"
+      <DataTablePagination
+        pageIndex={table.pageIndex}
+        pageSize={table.pageSize}
+        total={total}
+        isFetching={rolesQuery.isFetching}
+        onPageChange={table.setPageIndex}
+        onPageSizeChange={table.setPageSize}
+      />
+
+      <RoleFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        role={editing}
+        onSubmit={handleSubmit}
+        submitting={createRole.isPending || updateRole.isPending}
+      />
+
+      <RoleDeleteDialog
+        open={deleteTarget !== null}
+        onOpenChange={(next) => {
+          if (!next) setDeleteTarget(null);
+        }}
+        role={deleteTarget}
+        onConfirm={handleDelete}
+        deleting={deleteRole.isPending}
       />
     </div>
   );

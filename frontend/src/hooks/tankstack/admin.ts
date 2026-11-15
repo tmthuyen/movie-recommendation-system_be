@@ -59,6 +59,12 @@ export type AdminUserInput = {
   fullName: string;
   password?: string;
   confirmPassword?: string;
+  phoneNumber?: string;
+  birthDate?: string;
+  gender?: string;
+  avatarUrl?: string;
+  /** Chỉ dùng khi tạo (`CreateUserDto`). */
+  roleIds?: number[];
 };
 
 export const adminUsers = createCrudHooks<User, AdminUserInput>({
@@ -69,21 +75,10 @@ export const adminUsers = createCrudHooks<User, AdminUserInput>({
   remove: userApi.deleteUser,
 });
 
-/**
- * Roles — backend `GET /api/roles` không phân trang → giả lập envelope
- * (`limit: 1000`, `totalPages: 1`) để dùng chung `DataTable`.
- */
-const rolesListNoPagination = async () => {
-  const response = await roleApi.getAll();
-  return {
-    ...response,
-    pagination: { total: response.result?.length ?? 0, page: 1, limit: 1000, totalPages: 1 },
-  };
-};
-
+/** Roles — `GET /api/roles` đã hỗ trợ phân trang + keyword/filter/sort. */
 export const adminRoles = createCrudHooks<Role, RoleInput>({
   domain: 'admin-roles',
-  list: rolesListNoPagination,
+  list: roleApi.getAll,
   create: roleApi.create,
   update: (id, data) => roleApi.update(id, data),
   remove: roleApi.remove,
@@ -91,7 +86,7 @@ export const adminRoles = createCrudHooks<Role, RoleInput>({
 
 /**
  * Trang admin Interaction — 3 danh sách read-only (tương tác/đánh giá/bình luận)
- * + xóa từng bản ghi. Backend không filter theo type → filter client-side.
+ * + xóa từng bản ghi. Cả 3 endpoint đã hỗ trợ `BaseSearchRequest` (keyword/filter/sort).
  */
 /* eslint-disable react-hooks/rules-of-hooks -- usePagedList là FACTORY (trả về hook), không gọi hook nào khi chạy ở module level;see admin-crud.ts */
 export const useAdminInteractions = usePagedList('admin-interactions', (params) =>

@@ -1,170 +1,206 @@
 'use client';
 
-import { CrudToolbar } from '@/components/admin/crud-toolbar';
-import { CrudTableSkeleton, DataTable, DataTableColumn } from '@/components/admin/data-table';
-import { CrudDeleteDialog } from '@/components/admin/delete-dialog';
-import { CrudFormDialog, CrudFormField, useCrudFormValues } from '@/components/admin/form-dialog';
-import { DataPagination } from '@/components/common/DataPagination';
-import { EmptyState } from '@/components/common/EmptyState';
-import { ErrorState } from '@/components/common/ErrorState';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
+import { peopleApi } from '@/apis/people.api';
+import { AdminDeleteDialog } from '@/components/admin/data-view/admin-delete-dialog';
+import { AdminFormDialog } from '@/components/admin/data-view/admin-form-dialog';
+import type {
+  AdminFormField,
+  AdminFormValues,
+} from '@/components/admin/data-view/admin-form-schema';
+import { AdminTablePage } from '@/components/admin/data-view/admin-table-page';
 import { adminPeoples } from '@/hooks/tankstack/admin';
-import { useCrudPage } from '@/hooks/tankstack/admin-crud';
-import { PeopleInput } from '@/apis/people.api';
-import { People } from '@/shared/types/movie.types';
-import { z } from 'zod';
+import { useServerTable } from '@/hooks/use-server-table';
+import { parseAxiosError } from '@/lib/axiosClient';
+import type { People } from '@/shared/types/movie.types';
+import { PEOPLE_FILTER_FIELDS } from './people-filter-fields';
+import { createPeopleColumns } from './people-columns';
 
-const FIELDS: CrudFormField[] = [
-  { name: 'fullName', label: 'Họ tên', placeholder: 'vd. Bong Joon-ho' },
-  { name: 'birthDate', label: 'Ngày sinh', placeholder: 'YYYY-MM-DD (để trống nếu chưa rõ)' },
-  { name: 'nationality', label: 'Quốc tịch', placeholder: 'vd. Hàn Quốc' },
+const EMPTY_PEOPLES: People[] = [];
+const DEFAULT_SORTING = [{ id: 'fullName', desc: false }];
+
+const PEOPLE_FORM_FIELDS: AdminFormField[] = [
   {
-    name: 'mainRole',
-    label: 'Vai trò chính',
-    type: 'select',
-    options: [
-      { value: '', label: '— Không rõ —' },
-      { value: 'actor', label: 'Diễn viên' },
-      { value: 'director', label: 'Đạo diễn' },
-      { value: 'writer', label: 'Biên kịch' },
-      { value: 'producer', label: 'Nhà sản xuất' },
-    ],
+    name: 'fullName',
+    label: 'Họ tên',
+    required: true,
+    maxLength: 100,
+    placeholder: 'VD: Tom Holland',
+    wide: true,
+  },
+  {
+    name: 'birthDate',
+    label: 'Ngày sinh',
+    type: 'date',
+  },
+  {
+    name: 'nationality',
+    label: 'Quốc tịch',
+    maxLength: 50,
+    placeholder: 'VD: British',
   },
   {
     name: 'gender',
     label: 'Giới tính',
-    type: 'select',
-    options: [
-      { value: '', label: '— Không rõ —' },
-      { value: 'male', label: 'Nam' },
-      { value: 'female', label: 'Nữ' },
-      { value: 'other', label: 'Khác' },
-    ],
+    maxLength: 20,
+    placeholder: 'VD: Male',
+  },
+  {
+    name: 'mainRole',
+    label: 'Vai trò chính',
+    maxLength: 50,
+    placeholder: 'VD: actor',
   },
 ];
 
-type PeopleForm = Record<string, unknown>;
+/** Tên hiển thị — ưu tiên `fullName` (entity), fallback `name` (type cũ). */
+function displayName(people: People): string {
+  return people.fullName ?? people.name ?? `#${people.id}`;
+}
 
-const schema = z.object({
-  fullName: z.string().min(1, 'Họ tên là bắt buộc'),
-  birthDate: z.string().optional(),
-  nationality: z.string().optional(),
-  mainRole: z.string().optional(),
-  gender: z.string().optional(),
-}) as unknown as z.ZodType<PeopleForm>;
-
-const COLUMNS: DataTableColumn<People>[] = [
-  { key: 'id', header: 'ID', className: 'w-20 text-muted-foreground', render: (people) => people.id },
-  {
-    key: 'fullName',
-    header: 'Họ tên',
-    render: (people) => <span className="font-medium">{people.fullName ?? people.name}</span>,
-  },
-  {
-    key: 'mainRole',
-    header: 'Vai trò',
-    render: (people) => people.mainRole ?? <span className="text-muted-foreground">—</span>,
-  },
-  {
-    key: 'nationality',
-    header: 'Quốc tịch',
-    hideOnMobile: true,
-    render: (people) => people.nationality ?? <span className="text-muted-foreground">—</span>,
-  },
-  {
-    key: 'birthDate',
-    header: 'Ngày sinh',
-    hideOnMobile: true,
-    render: (people) => people.birthDate ?? <span className="text-muted-foreground">—</span>,
-  },
-];
-
-/** CRUD Diễn viên/Đạo diễn — dùng chung DataTable/CrudFormDialog/CrudDeleteDialog của admin. */
 export function PeopleClient() {
-  const mutations = {
-    create: adminPeoples.useCreate(),
-    update: adminPeoples.useUpdate(),
-    remove: adminPeoples.useDelete(),
+  const table = useServerTable({
+    initialPageSize: 10,
+    initialSorting: DEFAULT_SORTING,
+  });
+  const { clampPageIndex } = table;
+
+  const peoplesQuery = useQuery({
+    queryKey: ['admin-peoples', 'list', table.params],
+    queryFn: () => peopleApi.getAll(table.params),
+    placeholderData: keepPreviousData,
+    staleTime: 60_000,
+  });
+
+  const peoples = peoplesQuery.data?.result ?? EMPTY_PEOPLES;
+  const total = peoplesQuery.data?.pagination?.total ?? 0;
+
+  useEffect(() => {
+    clampPageIndex(total);
+  }, [clampPageIndex, total]);
+
+  const createPeople = adminPeoples.useCreate();
+  const updatePeople = adminPeoples.useUpdate();
+  const deletePeople = adminPeoples.useDelete();
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<People | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<People | null>(null);
+
+  const openCreate = () => {
+    setEditing(null);
+    setFormOpen(true);
   };
-  const state = useCrudPage<People, PeopleInput>(mutations);
-  const list = adminPeoples.useList({ page: state.page, limit: 10, keyword: state.keyword });
-  const defaultValues = useCrudFormValues<PeopleForm>(FIELDS, state.editing);
+
+  const columns = useMemo(
+    () =>
+      createPeopleColumns({
+        onEdit: (people) => {
+          setEditing(people);
+          setFormOpen(true);
+        },
+        onDelete: (people) => setDeleteTarget(people),
+      }),
+    [],
+  );
+
+  const defaultValues = useMemo<AdminFormValues>(
+    () => ({
+      fullName: editing?.fullName ?? editing?.name ?? '',
+      birthDate: editing?.birthDate ? String(editing.birthDate).slice(0, 10) : '',
+      nationality: editing?.nationality ?? '',
+      gender: editing?.gender ?? '',
+      mainRole: editing?.mainRole ?? '',
+    }),
+    [editing],
+  );
+
+  const handleSubmit = async (values: AdminFormValues) => {
+    const input = {
+      fullName: String(values.fullName ?? '').trim(),
+      birthDate: values.birthDate ? String(values.birthDate) : undefined,
+      nationality: values.nationality ? String(values.nationality).trim() : undefined,
+      gender: values.gender ? String(values.gender).trim() : undefined,
+      mainRole: values.mainRole ? String(values.mainRole).trim() : undefined,
+    };
+
+    if (editing) {
+      await updatePeople.mutateAsync({ id: editing.id, data: input });
+    } else {
+      await createPeople.mutateAsync(input);
+    }
+    setFormOpen(false);
+    setEditing(null);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deletePeople.mutateAsync(deleteTarget.id);
+      setDeleteTarget(null);
+    } catch {
+      // Lỗi đã được toast trong mutation — giữ dialog mở để user thử lại.
+    }
+  };
 
   return (
-    <div className="flex w-full flex-col gap-4">
-      <CrudToolbar
-        keyword={state.keywordInput}
-        onKeywordChange={state.setKeywordInput}
-        searchPlaceholder="Tìm diễn viên/đạo diễn…"
-        onAdd={state.openCreate}
-        addLabel="Thêm người"
-      />
-
-      {list.isLoading ? (
-        <CrudTableSkeleton />
-      ) : list.isError ? (
-        <ErrorState
-          title="Không thể tải danh sách người tham gia"
-          description="Vui lòng kiểm tra kết nối và thử lại."
-          onRetry={() => list.refetch()}
-        />
-      ) : (
-        <>
-          <DataTable
-            columns={COLUMNS}
-            items={list.data?.items ?? []}
-            rowKey={(people) => people.id}
-            onEdit={state.openEdit}
-            onDelete={(people) => state.setDeleteTarget(people)}
-            empty={
-              <EmptyState
-                title="Chưa có người tham gia nào"
-                description="Thêm diễn viên/đạo diễn để gán vào phim."
-              />
-            }
-          />
-          {list.data ? (
-            <DataPagination
-              page={list.data.pagination.page}
-              totalPages={list.data.pagination.totalPages}
-              total={list.data.pagination.total}
-              onPageChange={state.setPage}
-              disabled={list.isFetching}
-              ariaLabel="Phân trang người tham gia"
-            />
-          ) : null}
-        </>
-      )}
-
-      <CrudFormDialog
-        open={state.dialogOpen}
-        onOpenChange={state.setDialogOpen}
-        title={state.editing ? 'Sửa người tham gia' : 'Thêm người tham gia'}
-        schema={schema}
-        fields={FIELDS}
-        defaultValues={defaultValues}
-        onSubmit={(values) =>
-          state.submit({
-            fullName: String(values.fullName ?? ''),
-            birthDate: values.birthDate ? String(values.birthDate) : undefined,
-            nationality: values.nationality ? String(values.nationality) : undefined,
-            mainRole: values.mainRole ? String(values.mainRole) : undefined,
-            gender: values.gender ? String(values.gender) : undefined,
-          })
+    <AdminTablePage
+      table={table}
+      columns={columns}
+      data={peoples}
+      total={total}
+      isLoading={peoplesQuery.isLoading}
+      isFetching={peoplesQuery.isFetching}
+      error={peoplesQuery.error}
+      onRetry={() => void peoplesQuery.refetch()}
+      searchPlaceholder="Tìm theo họ tên diễn viên…"
+      searchLabel="Tìm kiếm diễn viên / đạo diễn"
+      filterFields={PEOPLE_FILTER_FIELDS}
+      entityLabel="diễn viên"
+      emptyDescription="Thêm diễn viên hoặc đạo diễn đầu tiên để gắn vào phim."
+      addLabel="Thêm diễn viên"
+      onAdd={openCreate}
+    >
+      <AdminFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        title={editing ? 'Sửa thông tin' : 'Thêm diễn viên / đạo diễn'}
+        description={
+          editing
+            ? 'Cập nhật thông tin người tham gia phim đang chọn.'
+            : 'Tạo hồ sơ mới cho diễn viên hoặc đạo diễn.'
         }
-        submitting={state.saving}
-      />
-
-      <CrudDeleteDialog
-        target={
-          state.deleteTarget
-            ? { id: state.deleteTarget.id, label: state.deleteTarget.fullName ?? String(state.deleteTarget.id) }
+        fields={PEOPLE_FORM_FIELDS}
+        defaultValues={defaultValues}
+        onSubmit={handleSubmit}
+        submitting={createPeople.isPending || updatePeople.isPending}
+        submitLabel={editing ? 'Lưu thay đổi' : 'Thêm'}
+        mapServerError={(error) =>
+          parseAxiosError(error).statusCode === 409
+            ? { field: 'fullName', message: 'Họ tên này đã tồn tại' }
             : null
         }
-        onCancel={() => state.setDeleteTarget(null)}
-        onConfirm={state.confirmDelete}
-        isPending={state.deleting}
-        entityLabel="người tham gia"
       />
-    </div>
+
+      <AdminDeleteDialog
+        open={deleteTarget !== null}
+        onOpenChange={(next) => {
+          if (!next) setDeleteTarget(null);
+        }}
+        title="Xóa hồ sơ?"
+        description={
+          <>
+            Hồ sơ{' '}
+            <span className="text-foreground font-medium">
+              {deleteTarget ? displayName(deleteTarget) : 'này'}
+            </span>{' '}
+            sẽ bị xóa khỏi tất cả phim liên quan. Hành động này không thể hoàn tác.
+          </>
+        }
+        onConfirm={handleDelete}
+        deleting={deletePeople.isPending}
+      />
+    </AdminTablePage>
   );
 }

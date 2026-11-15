@@ -1,14 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Country } from './entities/country.entity';
-import { PaginationDto } from '@/common/dtos/pagination.dto';
+import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
 import { PaginatedResult } from '@/common/dtos/paginated-result.interface';
+import { SearchUtils } from '@/common/utils/search.util';
 
 export const ICountryRepository = Symbol('ICountryRepository');
 
 export interface ICountryRepository {
-  findAll(paginationDto: PaginationDto): Promise<PaginatedResult<Country>>;
+  findAll(request: BaseSearchRequest): Promise<PaginatedResult<Country>>;
   findById(id: number): Promise<Country | null>;
   create(country: Partial<Country>): Promise<Country>;
   update(id: number, country: Partial<Country>): Promise<Country | null>;
@@ -20,6 +21,17 @@ export interface ICountryRepository {
   ): Promise<Country | null>;
 }
 
+const COUNTRY_FIELD_MAP: Record<string, string> = {
+  id: 'country.id',
+  viName: 'country.viName',
+  enName: 'country.enName',
+  code: 'country.code',
+  region: 'country.region',
+  subregion: 'country.subregion',
+  createdAt: 'country.createdAt',
+  updatedAt: 'country.updatedAt',
+};
+
 @Injectable()
 export class CountryRepository implements ICountryRepository {
   constructor(
@@ -27,24 +39,42 @@ export class CountryRepository implements ICountryRepository {
     private readonly repo: Repository<Country>,
   ) {}
 
-  async findAll(
-    paginationDto: PaginationDto,
-  ): Promise<PaginatedResult<Country>> {
-    const { page = 1, limit = 10, keyword } = paginationDto;
+  async findAll(request: BaseSearchRequest): Promise<PaginatedResult<Country>> {
+    const { page = 1, limit = 10, keyword, filters = [], sort } = request;
     const skip = (page - 1) * limit;
 
     const queryBuilder = this.repo.createQueryBuilder('country');
 
-    if (keyword) {
-      queryBuilder.where(
-        'country.viName ILIKE :keyword OR country.enName ILIKE :keyword',
-        {
-          keyword: `%${keyword}%`,
-        },
+    const trimmedKeyword = keyword?.trim();
+    if (trimmedKeyword) {
+      queryBuilder.andWhere(
+        '(country.viName ILIKE :keyword OR country.enName ILIKE :keyword OR country.code ILIKE :keyword)',
+        { keyword: `%${trimmedKeyword}%` },
       );
     }
 
-    queryBuilder.skip(skip).take(limit).orderBy('country.viName', 'ASC');
+    SearchUtils.applyFilters(queryBuilder, filters || [], COUNTRY_FIELD_MAP);
+
+    const sortOptions = SearchUtils.parseSort(
+      sort?.join(',') ?? 'viName:ASC',
+      Object.keys(COUNTRY_FIELD_MAP),
+    );
+
+    for (const option of sortOptions) {
+      const column = COUNTRY_FIELD_MAP[option.field];
+      if (!column) {
+        throw new BadRequestException(
+          `Sort field không hợp lệ: ${option.field}`,
+        );
+      }
+      queryBuilder.addOrderBy(column, option.direction);
+    }
+
+    if (!sortOptions.some(option => option.field === 'id')) {
+      queryBuilder.addOrderBy('country.id', 'ASC');
+    }
+
+    queryBuilder.skip(skip).take(limit);
 
     const [data, total] = await queryBuilder.getManyAndCount();
 

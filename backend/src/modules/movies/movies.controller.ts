@@ -16,7 +16,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Roles } from '@/common/decorators/roles.decorator';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '@/modules/auth/guards/optional-jwt-auth.guard';
-import { PaginationDto } from '@/common/dtos/pagination.dto';
+import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
 import { type Request } from 'express';
 import { Req } from '@nestjs/common';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
@@ -48,8 +48,8 @@ export class MoviesController {
   // @Roles('ADMIN', 'SUPERADMIN')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Test movie created' })
-  testMovieCreated(@Body() createMovieDto: CreateMovieDto) {
-    const result = this.moviesService.testMovieCreated(createMovieDto);
+  async testMovieCreated(@Body() createMovieDto: CreateMovieDto) {
+    const result = await this.moviesService.testMovieCreated(createMovieDto);
     return {
       success: true,
       statusCode: 201,
@@ -68,9 +68,12 @@ export class MoviesController {
   // }
 
   @Get()
+  @UseGuards(JwtAuthGuard)
+  @Roles('ADMIN', 'SUPERADMIN')
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Lấy danh sách phim (Public)' })
-  async findAll(@Query() paginationDto: PaginationDto) {
-    const result = await this.moviesService.findAll(paginationDto);
+  async findAll(@Query() searchRequest: BaseSearchRequest) {
+    const result = await this.moviesService.findAll(searchRequest);
     return {
       success: true,
       statusCode: 200,

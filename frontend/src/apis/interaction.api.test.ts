@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import qs from 'qs';
 import { interactionApi } from './interaction.api';
 
 const mocks = vi.hoisted(() => ({
@@ -15,7 +16,9 @@ vi.mock('@/lib/axiosClient', () => ({
   parseAxiosError: vi.fn(),
 }));
 
-const envelope = (result: unknown) => ({ data: { success: true, statusCode: 200, message: 'OK', result } });
+const envelope = (result: unknown) => ({
+  data: { success: true, statusCode: 200, message: 'OK', result },
+});
 
 describe('interactionApi', () => {
   beforeEach(() => {
@@ -23,9 +26,7 @@ describe('interactionApi', () => {
   });
 
   it('toggleLike POST /interactions với body { type, movieId }', async () => {
-    mocks.client.post.mockResolvedValue(
-      envelope({ action: 'added', type: 'like', likeCount: 3 }),
-    );
+    mocks.client.post.mockResolvedValue(envelope({ action: 'added', type: 'like', likeCount: 3 }));
 
     const result = await interactionApi.toggleLike({ movieId: 7, type: 'like' });
 
@@ -77,9 +78,9 @@ describe('interactionApi', () => {
 
     await interactionApi.getAll({ page: 1, limit: 20 });
 
-    expect(mocks.client.get).toHaveBeenCalledWith('/interactions', {
-      params: { page: 1, limit: 20 },
-    });
+    expect(mocks.client.get).toHaveBeenCalledWith(
+      `/interactions?${qs.stringify({ page: 1, limit: 20 }, { arrayFormat: 'repeat' })}`,
+    );
   });
 
   it('remove gọi DELETE /interactions/:id', async () => {

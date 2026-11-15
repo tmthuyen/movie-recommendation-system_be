@@ -15,7 +15,7 @@ import { UpdatePeopleDto } from './dto/update-people.dto';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Roles } from '@/common/decorators/roles.decorator';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
-import { PaginationDto } from '@/common/dtos/pagination.dto';
+import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
 
 @ApiTags('Peoples (Diễn viên/Đạo diễn)')
 @Controller('peoples')
@@ -39,8 +39,8 @@ export class PeoplesController {
 
   @Get()
   @ApiOperation({ summary: 'Lấy danh sách (Public)' })
-  async findAll(@Query() paginationDto: PaginationDto) {
-    const result = await this.peoplesService.findAll(paginationDto);
+  async findAll(@Query() searchRequest: BaseSearchRequest) {
+    const result = await this.peoplesService.findAll(searchRequest);
     return {
       success: true,
       statusCode: 200,

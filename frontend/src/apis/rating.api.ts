@@ -1,5 +1,6 @@
 import { ApiPaginatedResponse, ApiResponse } from '@/shared/types/api.types';
 import { Rating } from '@/shared/types/rating.types';
+import { withListParams, type SearchListParams } from '@/shared/utils/list-params';
 import axiosClient from '../lib/axiosClient';
 
 export const ratingApi = {
@@ -16,12 +17,9 @@ export const ratingApi = {
     const { data } = await axiosClient.get(`/ratings/movie/${movieId}`, { params });
     return data;
   },
-  /** Toàn bộ đánh giá (public, admin) — `{page, limit}`, join `user` + `movie`. */
-  getAll: async (params: {
-    page?: number;
-    limit?: number;
-  }): Promise<ApiPaginatedResponse<Rating[]>> => {
-    const { data } = await axiosClient.get('/ratings', { params });
+  /** Toàn bộ đánh giá (public, admin) — `BaseSearchRequest`, join `user` + `movie`. */
+  getAll: async (params: SearchListParams = {}): Promise<ApiPaginatedResponse<Rating[]>> => {
+    const { data } = await axiosClient.get(withListParams('/ratings', params));
     return data;
   },
   /** Xóa đánh giá (ADMIN). */

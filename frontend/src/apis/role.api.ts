@@ -1,4 +1,9 @@
-import { ApiResponse, Role } from '@/shared/types/api.types';
+import { ApiPaginatedResponse, ApiResponse, Role } from '@/shared/types/api.types';
+import {
+  serializeListParams,
+  withListParams,
+  type SearchListParams,
+} from '@/shared/utils/list-params';
 import axiosClient from '../lib/axiosClient';
 
 /** Input tạo role — khớp `CreateRoleDto`; `UpdateRoleDto` = Partial. */
@@ -8,10 +13,21 @@ export interface RoleInput {
   description?: string;
 }
 
+/**
+ * Query params cho `GET /roles` — khớp `BaseSearchRequest` của backend.
+ * Xem whitelist field/operator trong `docs/BACKEND.md`.
+ */
+export type RoleListParams = SearchListParams;
+
+/** Giữ export cũ cho tương thích (uỷ quyền cho serializer dùng chung). */
+export function serializeRoleListParams(params: RoleListParams): string {
+  return serializeListParams(params);
+}
+
 export const roleApi = {
-  /** Danh sách vai trò (ADMIN/MANAGER) — backend không nhận phân trang. */
-  getAll: async (): Promise<ApiResponse<Role[]>> => {
-    const { data } = await axiosClient.get('/roles');
+  /** Danh sách vai trò có phân trang + keyword/filter/sort (ADMIN/MANAGER). */
+  getAll: async (params: RoleListParams = {}): Promise<ApiPaginatedResponse<Role[]>> => {
+    const { data } = await axiosClient.get(withListParams('/roles', params));
     return data;
   },
   /** Tạo vai trò (JWT). */

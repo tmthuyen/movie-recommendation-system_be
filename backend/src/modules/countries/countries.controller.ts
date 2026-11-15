@@ -15,7 +15,7 @@ import { UpdateCountryDto } from './dto/update-country.dto';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Roles } from '@/common/decorators/roles.decorator';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
-import { PaginationDto } from '@/common/dtos/pagination.dto';
+import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
 
 @ApiTags('Countries')
 @Controller('countries')
@@ -43,9 +43,9 @@ export class CountriesController {
 
   @Get()
   @ApiOperation({ summary: 'Lấy danh sách quốc gia (Public)' })
-  async findAll(@Query() paginationDto: PaginationDto) {
+  async findAll(@Query() searchRequest: BaseSearchRequest) {
     const { data, ...pagination } =
-      await this.countriesService.findAll(paginationDto);
+      await this.countriesService.findAll(searchRequest);
     return {
       success: true,
       statusCode: 200,
