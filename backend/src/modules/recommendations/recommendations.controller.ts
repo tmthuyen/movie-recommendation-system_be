@@ -89,8 +89,7 @@ export class RecommendationsController {
     @Query('topK') topK?: number,
     @Query('query') queryAlias?: string,
   ) {
-    const searchKeyword =
-      keyword || queryAlias || cursorQuery?.keyword || cursorQuery?.query || '';
+    const searchKeyword = keyword || queryAlias || '';
     this.logger.log(
       `Received request for semantic search keyword="${searchKeyword}", topK=${topK}`,
     );
@@ -151,8 +150,7 @@ export class RecommendationsController {
     @Query('topK') topK?: number,
     @Query('query') queryAlias?: string,
   ) {
-    const searchKeyword =
-      keyword || queryAlias || cursorQuery?.keyword || cursorQuery?.query || '';
+    const searchKeyword = keyword || queryAlias || '';
     this.logger.log(
       `Received request for lexical+semantic rerank keyword="${searchKeyword}", topK=${topK}`,
     );

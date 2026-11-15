@@ -22,6 +22,7 @@ from infra.messaging.message_queue import MessageQueue
 from infra.monitoring.prometheus import configure_monitoring, update_metrics
 from infra.redis.redis_service import RedisStore
 from infra.tracing.telemetry import configure_tracing
+from services.bm25_index_service import Bm25IndexService
 from services.embedding_service import embedding_service
 from services.mapping_service import mapping_service
 from services.recommend_service import RecommendService
@@ -48,10 +49,15 @@ async def lifespan(application: FastAPI):
     await vector_store.start()
     vector_db_health = await log_vector_db_health(vector_store, settings)
 
+    # 1.5. Nap index BM25 (Lexical cho Hybrid Search) mot lan; thieu file -> chi dung Semantic
+    bm25_index = Bm25IndexService(settings.bm25_model_path)
+    await asyncio.to_thread(bm25_index.load)
+
     # 2. Khoi tao RecommendService (xu ly semantic search va vector CRUD)
     recommend_svc = RecommendService(
         vector_store=vector_store,
         embedding_service=embedding_service,
+        bm25_index=bm25_index,
     )
 
     # 3. Khoi tao MovieEventHandler (dispatcher theo event_type)
@@ -99,6 +105,7 @@ async def lifespan(application: FastAPI):
     application.state.vector_store = vector_store
     application.state.vector_db_health = vector_db_health
     application.state.recommend_service = recommend_svc
+    application.state.bm25_index = bm25_index
     application.state.message_queue = mq
     application.state.interaction_queue = interaction_mq
     application.state.redis = redis_store

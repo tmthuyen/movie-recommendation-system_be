@@ -71,6 +71,9 @@ class Settings(BaseSettings):
     # Relative paths resolve from the ai-service/ directory, not the process CWD.
     chroma_persist_dir: str = "./data/chroma_db"
 
+    # BM25 (Lexical) index cho Hybrid Search — build bằng scripts/build_bm25_index.py.
+    # Relative paths resolve from the ai-service/ directory, not the process CWD.
+    bm25_model_dir: str = "./data/bm25"
     # SBERT model used for embedding (also referenced by build_vector_db.py)
     embedding_model_name: str = "paraphrase-multilingual-MiniLM-L12-v2"
 
@@ -103,6 +106,14 @@ class Settings(BaseSettings):
     def chroma_persist_path(self) -> Path:
         """Resolve Chroma storage from ai-service/, independent of process CWD."""
         path = Path(self.chroma_persist_dir).expanduser()
+        if path.is_absolute():
+            return path.resolve()
+        return (Path(__file__).resolve().parents[2] / path).resolve()
+
+    @property
+    def bm25_model_path(self) -> Path:
+        """Resolve thư mục index BM25 từ ai-service/, không phụ thuộc CWD."""
+        path = Path(self.bm25_model_dir).expanduser()
         if path.is_absolute():
             return path.resolve()
         return (Path(__file__).resolve().parents[2] / path).resolve()

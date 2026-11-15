@@ -90,7 +90,10 @@ class LexicalSemanticRerankRequest(BaseModel):
     )
     lexicalIds: list[int] = Field(
         default_factory=list,
-        description="Danh sách movie ID tìm được từ PostgreSQL (Lexical Search)",
+        description=(
+            "(Tuỳ chọn, deprecated) Danh sách movie ID do client truyền. "
+            "Lexical mặc định do ai-service tự chạy BM25; chỉ dùng khi chưa nạp index BM25."
+        ),
     )
     topK: int = Field(
         default=100, ge=1, le=200, description="Số lượng kết quả trả về sau rerank"

@@ -79,7 +79,7 @@ async def search_lexical_semantic_rerank(
     body: LexicalSemanticRerankRequest,
     app_request: Request,
 ) -> PaginatedResponse[list[dict]]:
-    """Ket hop danh sach Lexical (tu PostgreSQL) voi Semantic Search (Vector DB) bang RRF."""
+    """Ket hop Lexical (BM25 do ai-service tu chay) voi Semantic Search (Vector DB) bang RRF."""
     svc = await _get_recommend_service(app_request)
     data = await svc.search_lexical_semantic_rerank(
         query=body.keyword,

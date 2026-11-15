@@ -416,25 +416,33 @@ describe('RecommendationsService', () => {
   });
 
   describe('searchLexicalSemanticRerank & searchLexicalSemanticRerankByCursor', () => {
-    it('kết hợp kết quả lexical từ movieService.search rồi gọi POST /search/rerank của AI', async () => {
-      (movieService as any).search = jest.fn().mockResolvedValue({
-        result: [{ id: 1 }, { id: 3 }],
-      });
+    it('chỉ gửi keyword sang POST /search/rerank (AI tự chạy BM25), không query lexical Postgres', async () => {
+      (movieService as any).search = jest.fn();
       const fetchMock = mockFetchJson(buildAiResponseForIds([3, 1, 2]));
 
       const res = await service.searchLexicalSemanticRerank('hành tinh cát', 2);
 
-      expect((movieService as any).search).toHaveBeenCalledTimes(1);
+      expect((movieService as any).search).not.toHaveBeenCalled();
       expect(fetchMock).toHaveBeenCalledTimes(1);
       const [calledUrl, options] = fetchMock.mock.calls[0];
       expect(calledUrl).toContain('/search/rerank');
       expect(options.method).toBe('POST');
-      expect(JSON.parse(options.body)).toMatchObject({
-        keyword: 'hành tinh cát',
-        lexicalIds: [1, 3],
-        topK: 100,
-      });
+      const body = JSON.parse(options.body);
+      expect(body).toMatchObject({ keyword: 'hành tinh cát', topK: 100 });
+      expect(body).not.toHaveProperty('lexicalIds');
       expect(res.result.map(item => item.id)).toEqual([3, 1]);
+    });
+
+    it('mỗi phim trả về luôn có id, rank, similarityScore', async () => {
+      mockFetchJson(buildAiResponseForIds([2, 1]));
+
+      const res = await service.searchLexicalSemanticRerank('batman', 2);
+
+      for (const item of res.result) {
+        expect(item.id).toEqual(expect.any(Number));
+        expect(item.rank).toEqual(expect.any(Number));
+        expect(item.similarityScore).toEqual(expect.any(Number));
+      }
     });
 
     it('searchLexicalSemanticRerankByCursor hỗ trợ load-more bằng cursor', async () => {

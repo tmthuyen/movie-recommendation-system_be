@@ -511,40 +511,19 @@ export class RecommendationsService implements IRecommendationsService {
     );
   }
 
-  /** Tìm ứng viên Lexical từ PostgreSQL rồi gửi sang AI-Service rerank với Semantic. */
+  /**
+   * Gửi `keyword` sang AI-Service: ai-service tự chạy BM25 (Lexical) + Semantic rồi RRF rerank.
+   * Backend chỉ nhận id + điểm; thông tin phim lấy từ PostgreSQL ở bước hydrate.
+   */
   private async loadLexicalRerankSnapshotFromAi(
     keyword: string,
     window: number,
   ): Promise<RecommendationItem[]> {
-    let lexicalIds: number[] = [];
-    if (typeof (this.movieService as any).search === 'function') {
-      try {
-        const lexRes = await (this.movieService as any).search({
-          keyword,
-          page: 1,
-          limit: Math.min(window, 50),
-          sort: 'releaseDate:DESC',
-        });
-        if (lexRes && Array.isArray(lexRes.result)) {
-          lexicalIds = lexRes.result
-            .map((m: { id: number }) => Number(m.id))
-            .filter((id: number) => Number.isFinite(id) && id > 0);
-        }
-      } catch (err) {
-        this.logger.warn(
-          `Không thể lấy lexical candidates từ PostgreSQL cho keyword="${keyword}": ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
-      }
-    }
-
     const res = await fetch(`${AI_SERVICE_URL}/search/rerank`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         keyword,
-        lexicalIds,
         topK: window,
         candidateK: window,
       }),

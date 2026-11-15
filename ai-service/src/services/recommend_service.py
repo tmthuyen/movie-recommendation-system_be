@@ -11,7 +11,7 @@ Genre-based reranking và Search Lexical+Semantic reranking đã được tách 
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.integrations import VectorStore
 from data.data_loader import build_search_text as _build_search_text
@@ -21,6 +21,9 @@ from services.mapping_service import mapping_service
 from services.search_rerank_service import SearchRerankService
 from utils import setup_logger
 from utils.genre_utils import extract_genres
+
+if TYPE_CHECKING:
+    from services.bm25_index_service import Bm25IndexService
 
 logger = setup_logger(name=__name__, filename=__name__)
 
@@ -61,13 +64,18 @@ def _format_item(item: dict[str, Any]) -> dict[str, Any]:
 
 class RecommendService:
     def __init__(
-        self, vector_store: VectorStore, embedding_service: EmbeddingService
+        self,
+        vector_store: VectorStore,
+        embedding_service: EmbeddingService,
+        bm25_index: Bm25IndexService | None = None,
     ) -> None:
         """Gợi ý phim theo ngữ nghĩa (Semantic Search), phim tương tự (Item-to-Item) và Hybrid CF."""
         self._vs = vector_store
         self._emb = embedding_service
         self._genre_reranker = GenreRerankService(vector_store)
-        self._search_reranker = SearchRerankService(vector_store, embedding_service)
+        self._search_reranker = SearchRerankService(
+            vector_store, embedding_service, bm25_index
+        )
         self.cf_weight = 0.6
         self.semantic_weight = 0.4
 
@@ -130,7 +138,7 @@ class RecommendService:
         top_k: int = 10,
         candidate_k: int = 50,
     ) -> list[dict[str, Any]]:
-        """Kết hợp kết quả tìm kiếm Lexical (PostgreSQL) và Semantic (Vector DB) qua RRF."""
+        """Kết hợp kết quả tìm kiếm Lexical (BM25) và Semantic (Vector DB) qua RRF."""
         reranked = await self._search_reranker.rerank_lexical_and_semantic(
             query=query,
             lexical_ids=lexical_ids,
