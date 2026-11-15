@@ -65,6 +65,7 @@ function hashKeyword(keyword: string): string {
 }
 
 export const IRecommendationsService = Symbol('IRecommendationsService');
+
 export interface IRecommendationsService {
   getSimilarMovies(
     movieId: number,
@@ -115,6 +116,10 @@ export class RecommendationsService implements IRecommendationsService {
   ) {
     this.window = RECOMMENDATION_WINDOW;
   }
+
+  // =============
+  // SIMILAR MOVIES
+  // =============
 
   async getSimilarMovies(
     movieId: number,
@@ -202,6 +207,10 @@ export class RecommendationsService implements IRecommendationsService {
     };
   }
 
+  // =============
+  // SEMANTIC SEARCH
+  // =============
+
   async semanticSearch(
     keyword: string,
     topK?: number,
@@ -212,7 +221,6 @@ export class RecommendationsService implements IRecommendationsService {
       Math.max(Number(topK) || DEFAULT_TOP_K, 1),
       this.window,
     );
-
     const key = `cache:recommendation:semantic:${encodeURIComponent(keyword)}:k${this.window}`;
     const { items, total } = await this.readWindow(
       key,
@@ -264,100 +272,9 @@ export class RecommendationsService implements IRecommendationsService {
     };
   }
 
-  async searchLexicalSemanticRerank(
-    keyword: string,
-    topK?: number,
-  ): Promise<ResultWithPagination<SimilarMovieResponseDto>> {
-    const cleanKeyword = (keyword ?? '').trim();
-    if (!cleanKeyword) {
-      throw new AppException(
-        HttpStatus.BAD_REQUEST,
-        'Từ khóa tìm kiếm không được để trống.',
-        'Keyword must not be empty.',
-        'INVALID_KEYWORD',
-      );
-    }
-
-    const requested = Math.min(
-      Math.max(Number(topK) || DEFAULT_TOP_K, 1),
-      this.window,
-    );
-
-    let { key, items } = await this.getLexicalRerankSnapshot(cleanKeyword);
-    let page = await this.hydrate(items.slice(0, requested));
-
-    const expected = Math.min(requested, items.length);
-    if (
-      expected > 0 &&
-      page.result.length < expected * (1 - MAX_MISSING_RATIO)
-    ) {
-      await this.cache.del(key);
-      ({ key, items } = await this.getLexicalRerankSnapshot(cleanKeyword));
-      page = await this.hydrate(
-        items.slice(0, Math.min(requested, items.length)),
-      );
-    }
-
-    return {
-      result: page.result,
-      pagination: {
-        page: 1,
-        limit: requested,
-        total: items.length,
-        totalPages: items.length > 0 ? 1 : 0,
-      },
-    };
-  }
-
-  async searchLexicalSemanticRerankByCursor(
-    keyword: string,
-    query: CursorQueryDto,
-  ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>> {
-    const cleanKeyword = (keyword ?? '').trim();
-    if (!cleanKeyword) {
-      throw new AppException(
-        HttpStatus.BAD_REQUEST,
-        'Từ khóa tìm kiếm không được để trống.',
-        'Keyword must not be empty.',
-        'INVALID_KEYWORD',
-      );
-    }
-
-    const limit = clampCursorLimit(
-      query.limit,
-      DEFAULT_CURSOR_LIMIT,
-      MAX_CURSOR_LIMIT,
-    );
-    const { items, version, fingerprint } =
-      await this.getLexicalRerankSnapshot(cleanKeyword);
-    const scope = buildCursorScope('lexical-rerank', hashKeyword(cleanKeyword));
-
-    const offset = resolveCursorOffset(
-      query.cursor,
-      { version, scope, fingerprint },
-      items.length,
-    );
-
-    const page = await hydrateCursorPage({
-      items,
-      offset,
-      limit,
-      hydrate: async chunk => (await this.hydrate(chunk)).result,
-    });
-
-    return {
-      result: page.result,
-      pagination: buildCursorPagination({
-        limit,
-        total: items.length,
-        offset: page.nextOffset,
-        version,
-        scope,
-        fingerprint,
-      }),
-    };
-  }
-
+  // =============
+  // FOR-YOU / HYBRID RECOMMENDATIONS
+  // =============
   async hybridSearch(
     userId: string,
     accessToken: string,
@@ -418,6 +335,106 @@ export class RecommendationsService implements IRecommendationsService {
         hasMore,
         nextCursor: hasMore ? lastRank : null,
       },
+    };
+  }
+
+  // =============
+  // LEXICAL + SEMANTIC RERANK
+  // =============
+
+  async searchLexicalSemanticRerank(
+    keyword: string,
+    topK?: number,
+  ): Promise<ResultWithPagination<SimilarMovieResponseDto>> {
+    const cleanKeyword = (keyword ?? '').trim();
+    if (!cleanKeyword) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'Từ khóa tìm kiếm không được để trống.',
+        'Keyword must not be empty.',
+        'INVALID_KEYWORD',
+      );
+    }
+
+    const requested = Math.min(
+      Math.max(Number(topK) || DEFAULT_TOP_K, 1),
+      this.window,
+    );
+
+    let { key, items } = await this.getLexicalRerankSnapshot(cleanKeyword);
+    let result = await this.hydrate(
+      items.slice(0, requested),
+      SimilarMovieResponseDto,
+    );
+
+    const expected = Math.min(requested, items.length);
+    if (expected > 0 && result.length < expected * (1 - MAX_MISSING_RATIO)) {
+      await this.cache.del(key);
+      ({ key, items } = await this.getLexicalRerankSnapshot(cleanKeyword));
+      result = await this.hydrate(
+        items.slice(0, Math.min(requested, items.length)),
+        SimilarMovieResponseDto,
+      );
+    }
+
+    return {
+      result: result,
+      pagination: {
+        page: 1,
+        limit: requested,
+        total: items.length,
+        totalPages: items.length > 0 ? 1 : 0,
+      },
+    };
+  }
+
+  async searchLexicalSemanticRerankByCursor(
+    keyword: string,
+    query: CursorQueryDto,
+  ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>> {
+    const cleanKeyword = (keyword ?? '').trim();
+    if (!cleanKeyword) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'Từ khóa tìm kiếm không được để trống.',
+        'Keyword must not be empty.',
+        'INVALID_KEYWORD',
+      );
+    }
+
+    const limit = clampCursorLimit(
+      query.limit,
+      DEFAULT_CURSOR_LIMIT,
+      MAX_CURSOR_LIMIT,
+    );
+    const { items, version, fingerprint } =
+      await this.getLexicalRerankSnapshot(cleanKeyword);
+    const scope = buildCursorScope('lexical-rerank', hashKeyword(cleanKeyword));
+
+    const offset = resolveCursorOffset(
+      query.cursor,
+      { version, scope, fingerprint },
+      items.length,
+    );
+
+    const page = await hydrateCursorPage({
+      items,
+      offset,
+      limit,
+      hydrate: async chunk =>
+        await this.hydrate(chunk, SimilarMovieResponseDto),
+    });
+
+    return {
+      result: page.result,
+      pagination: buildCursorPagination({
+        limit,
+        total: items.length,
+        offset: page.nextOffset,
+        version,
+        scope,
+        fingerprint,
+      }),
     };
   }
 
@@ -592,34 +609,117 @@ export class RecommendationsService implements IRecommendationsService {
     };
   }
 
-  private async getSemanticSnapshot(keyword: string): Promise<{
-    key: string;
-    items: RecommendationItem[];
-    version: number;
-    fingerprint: string;
-  }> {
-    const version = await this.cache.getCounter(CacheKeys.movie.listVersion());
-    const key = CacheKeys.recommendation.semantic(
-      keyword,
-      this.window,
-      version,
-    );
+  /** Lấy snapshot từ ai-service và chuẩn hoá `rank` về 1..n. */
+  private async loadSnapshotSimilarFromAi(
+    movieId: number,
+    window: number,
+  ): Promise<RecommendationItem[]> {
+    let res: Response;
+    try {
+      res = await fetch(`${AI_SERVICE_URL}/similar/${movieId}?topK=${window}`);
+    } catch (error) {
+      this.logger.error(
+        `Lỗi khi gọi AI service: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'Lỗi khi gọi AI service',
+        'The AI service returned an error.',
+        'AI_SERVICE_ERROR',
+      );
+    }
 
-    const items = await this.cache.getOrLoad<RecommendationItem[]>({
-      key,
-      schema: RecommendationSnapshotSchema,
-      ttlSeconds: CacheTtl.recommendation,
-      loader: () => this.loadSemanticSnapshotFromAi(keyword, this.window),
-    });
+    let parsedResponse: SimilarFromAiServiceResponse;
+    try {
+      const raw = await res.json();
+      // this.logger.log(
+      //   `Dữ liệu trả về từ AI service (status=${res.status}): ${JSON.stringify(raw)}`,
+      // );
 
-    return {
-      key,
-      items,
-      version,
-      fingerprint: fingerprintIds(items.map(item => item.id)),
-    };
+      parsedResponse = SimilarFromAiServiceResponseSchema.parse(raw);
+    } catch (error) {
+      this.logger.error(
+        `Dữ liệu trả về không hợp lệ từ AI service (status=${res.status}): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'Dữ liệu trả về phim liên quan không hợp lệ từ AI service',
+        'The AI service did not return a valid response for similar movies.',
+        'AI_SERVICE_ERROR',
+      );
+    }
+
+    if (!parsedResponse || !parsedResponse.result) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'Dữ liệu trả về không hợp lệ từ AI service',
+        'The AI service did not return a valid response for similar movies.',
+        'AI_SERVICE_ERROR',
+      );
+    }
+
+    const seen = new Set<number>();
+    const snapshot: RecommendationItem[] = [];
+    for (const item of parsedResponse.result) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      snapshot.push({
+        id: item.id,
+        score: item.similarityScore,
+        rank: snapshot.length + 1,
+      });
+    }
+
+    return snapshot;
   }
 
+  /** Ghép id trong snapshot với dữ liệu phim trong DB. */
+  private async hydrate<T>(
+    items: RecommendationItem[],
+    dtoClass: new () => T,
+  ): Promise<T[]> {
+    if (items.length === 0) return [];
+
+    const itemIds = items.map(item => item.id);
+
+    const movies = await this.movieService.findByIds(itemIds);
+
+    this.logger.log(`
+      Số phim trong snapshot: ${items.length}, số phim tìm thấy trong DB: ${movies.length}`);
+
+    const movieById = new Map<number, Movie>();
+    for (const movie of movies) {
+      movieById.set(Number(movie.id), movie);
+    }
+
+    const mappedData = items
+      .map(item => {
+        const movie = movieById.get(Number(item.id));
+
+        if (!movie) {
+          this.logger.warn(
+            `Movie with id ${item.id} not found in database, skipping.`,
+          );
+          return null;
+        }
+        return {
+          ...movie,
+          score: item.score,
+          rank: item.rank,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+
+    return plainToInstance(dtoClass, mappedData, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  // rerank snapshot
   private async getLexicalRerankSnapshot(keyword: string): Promise<{
     key: string;
     items: RecommendationItem[];
@@ -648,48 +748,7 @@ export class RecommendationsService implements IRecommendationsService {
     };
   }
 
-  // /** Lấy snapshot từ ai-service và chuẩn hoá `rank` về 1..n. */
-  // private async loadSnapshotSimilarFromAi(
-  //   movieId: number,
-  //   window: number,
-  // ): Promise<RecommendationItem[]> {
-  //   let res: Response;
-  //   try {
-  //     res = await fetch(`${AI_SERVICE_URL}/similar/${movieId}?topK=${window}`);
-  //   } catch (error) {
-  //     this.logger.error(
-  //       `Lỗi khi gọi AI service: ${
-  //         error instanceof Error ? error.message : String(error)
-  //       }`,
-  //     );
-  //     throw new AppException(
-  //       HttpStatus.BAD_REQUEST,
-  //       'Lỗi khi gọi AI service',
-  //       'The AI service returned an error.',
-  //       'AI_SERVICE_ERROR',
-  //     );
-  //   }
-
-  // /** Lấy snapshot semantic search từ ai-service. */
-  // private async loadSemanticSnapshotFromAi(
-  //   keyword: string,
-  //   window: number,
-  // ): Promise<RecommendationItem[]> {
-  //   const url = `${AI_SERVICE_URL}/semantic-search?keyword=${encodeURIComponent(
-  //     keyword,
-  //   )}&topK=${window}`;
-  //   const res = await fetch(url);
-  //   return this.parseAiSnapshotResponse(
-  //     res,
-  //     'Dữ liệu trả về tìm kiếm ngữ nghĩa không hợp lệ từ AI service',
-  //     'The AI service did not return a valid response for semantic search.',
-  //   );
-  // }
-
-  /**
-   * Gửi `keyword` sang AI-Service: ai-service tự chạy BM25 (Lexical) + Semantic rồi RRF rerank.
-   * Backend chỉ nhận id + điểm; thông tin phim lấy từ PostgreSQL ở bước hydrate.
-   */
+  /** Tìm ứng viên Lexical từ PostgreSQL rồi gửi sang AI-Service rerank với Semantic. */
   private async loadLexicalRerankSnapshotFromAi(
     keyword: string,
     window: number,
@@ -756,47 +815,5 @@ export class RecommendationsService implements IRecommendationsService {
     }
 
     return snapshot;
-  }
-
-  /** Ghép id trong snapshot với dữ liệu phim trong DB. */
-  private async hydrate<T>(
-    items: RecommendationItem[],
-    dtoClass: new () => T,
-  ): Promise<T[]> {
-    if (items.length === 0) return [];
-
-    const itemIds = items.map(item => item.id);
-
-    const movies = await this.movieService.findByIds(itemIds);
-
-    this.logger.log(`
-      Số phim trong snapshot: ${items.length}, số phim tìm thấy trong DB: ${movies.length}`);
-
-    const movieById = new Map<number, Movie>();
-    for (const movie of movies) {
-      movieById.set(Number(movie.id), movie);
-    }
-
-    const mappedData = items
-      .map(item => {
-        const movie = movieById.get(Number(item.id));
-
-        if (!movie) {
-          this.logger.warn(
-            `Movie with id ${item.id} not found in database, skipping.`,
-          );
-          return null;
-        }
-        return {
-          ...movie,
-          score: item.score,
-          rank: item.rank,
-        };
-      })
-      .filter((item): item is NonNullable<typeof item> => item !== null);
-
-    return plainToInstance(dtoClass, mappedData, {
-      excludeExtraneousValues: true,
-    });
   }
 }

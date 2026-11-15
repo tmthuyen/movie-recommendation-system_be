@@ -10,11 +10,6 @@ describe('RecommendationsController', () => {
     getSimilarMoviesByCursor: jest.Mock;
     semanticSearch: jest.Mock;
     semanticSearchByCursor: jest.Mock;
-<<<<<<< HEAD
-    searchLexicalSemanticRerank: jest.Mock;
-    searchLexicalSemanticRerankByCursor: jest.Mock;
-=======
->>>>>>> 735052f (fea: recommendation)
     hybridSearch: jest.Mock;
     hybridSearchByCursor: jest.Mock;
   };
@@ -25,11 +20,6 @@ describe('RecommendationsController', () => {
       getSimilarMoviesByCursor: jest.fn(),
       semanticSearch: jest.fn(),
       semanticSearchByCursor: jest.fn(),
-<<<<<<< HEAD
-      searchLexicalSemanticRerank: jest.fn(),
-      searchLexicalSemanticRerankByCursor: jest.fn(),
-=======
->>>>>>> 735052f (fea: recommendation)
       hybridSearch: jest.fn(),
       hybridSearchByCursor: jest.fn(),
     };

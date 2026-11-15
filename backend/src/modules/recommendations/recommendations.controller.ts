@@ -133,11 +133,9 @@ export class RecommendationsController {
     summary: 'Tìm kiếm kết hợp Lexical (PostgreSQL) + Semantic Rerank (AI)',
   })
   async searchLexicalSemanticRerank(
-    @Query('keyword') keyword?: string,
+    @Query('keyword') keyword: string,
     @Query('topK') topK?: number,
-    @Query('query') queryAlias?: string,
   ) {
-    const keyword = keyword || queryAlias || '';
     this.logger.log(
       `Received request for lexical+semantic rerank keyword="${keyword}", topK=${topK}`,
     );
@@ -162,12 +160,9 @@ export class RecommendationsController {
     summary: 'Load-more tìm kiếm kết hợp Lexical + Semantic Rerank bằng cursor',
   })
   async searchLexicalSemanticRerankByCursor(
-    @Query('keyword') keyword?: string,
-    @Query('query') queryAlias?: string,
+    @Query('keyword') keyword: string,
     @Query() cursorQuery?: CursorQueryDto,
   ) {
-    const keyword =
-      keyword || queryAlias || cursorQuery?.keyword || cursorQuery?.query || '';
     this.logger.log(
       `Received request for lexical+semantic rerank cursor keyword="${keyword}", limit=${cursorQuery?.limit}`,
     );
@@ -195,16 +190,13 @@ export class RecommendationsController {
       'Cursor là rank cuối cùng của trang trước. Trang đầu bỏ trống cursor.',
   })
   @ApiQuery({ name: 'keyword', required: false, type: String })
-  @ApiQuery({ name: 'query', required: false, type: String })
   @ApiQuery({ name: 'cursor', required: false, type: Number, example: 12 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 12 })
   async semanticSearchByCursor(
-    @Query('keyword') keyword?: string,
-    @Query('query') searchQuery?: string,
+    @Query('keyword') keyword: string,
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: number,
   ) {
-    const keyword = keyword ?? searchQuery;
     if (!keyword) {
       throw new AppException(
         HttpStatus.BAD_REQUEST,

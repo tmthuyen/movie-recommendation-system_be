@@ -104,7 +104,6 @@ async def lifespan(application: FastAPI):
     movie_vector_service = MovieVectorService(
         vector_store=vector_store,
         embedding_service=embedding_service,
-        bm25_index=bm25_index,
     )
     user_vector_service = UserVectorService(
         vector_store=vector_store,
