@@ -104,9 +104,10 @@ class Bm25IndexService:
 
     def load(self) -> bool:
         """Nạp model BM25. Trả ``False`` (không raise) nếu chưa build hoặc file hỏng."""
-        if not (self._model_dir / MODEL_FILE).is_file() or not (
-            self._model_dir / IDS_FILE
-        ).is_file():
+        if (
+            not (self._model_dir / MODEL_FILE).is_file()
+            or not (self._model_dir / IDS_FILE).is_file()
+        ):
             logger.warning(
                 "BM25 index chua duoc build tai %s. Chay: python scripts/build_bm25_index.py",
                 self._model_dir,

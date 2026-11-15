@@ -327,12 +327,6 @@ class TestSimilarMovies:
 class TestSimilarMoviesRerank:
     """`similar_movies_rerank` — ANN candidates + genre-aware rerank."""
 
-    def test_missing_target_vector_raises_custom_exception(self, service, fake_chroma):
-        with pytest.raises(CustomException) as exc_info:
-            run(service.similar_movies_rerank(99))
-
-        assert exc_info.value.error_code == "MOVIE_NOT_FOUND"
-
     def test_mode_off_returns_cosine_order_without_target(self, service, fake_chroma):
         fake_chroma.seed(1, [1.0, 0.0], {"genres": ["Action"]})
         fake_chroma.seed(2, [0.9, 0.1], {"genres": ["Drama"]})

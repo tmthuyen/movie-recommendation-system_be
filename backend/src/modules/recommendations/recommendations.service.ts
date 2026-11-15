@@ -80,7 +80,6 @@ export interface IRecommendationsService {
     topK?: number,
   ): Promise<ResultWithPagination<SimilarMovieResponseDto>>;
   semanticSearchByCursor(
-    keyword: string,
     query: CursorQueryDto,
   ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>>;
   searchLexicalSemanticRerank(
@@ -88,7 +87,6 @@ export interface IRecommendationsService {
     topK?: number,
   ): Promise<ResultWithPagination<SimilarMovieResponseDto>>;
   searchLexicalSemanticRerankByCursor(
-    keyword: string,
     query: CursorQueryDto,
   ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>>;
 
@@ -236,19 +234,29 @@ export class RecommendationsService implements IRecommendationsService {
   }
 
   async semanticSearchByCursor(
-    keyword: string,
     query: CursorQueryDto,
   ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>> {
     this.logger.log(
-      `Semantic search (cursor): keyword="${keyword}", limit=${query.limit}, cursor=${query.cursor ?? 0}`,
+      `Semantic search (cursor): keyword="${query.keyword}", limit=${query.limit}, cursor=${query.cursor ?? 0}`,
     );
+
+    const { keyword, cursor } = query;
+
+    if (!keyword || !keyword.trim()) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'Thiếu từ khoá tìm kiếm.',
+        'keyword is required.',
+        'VALIDATION_ERROR',
+      );
+    }
 
     const limit = clampCursorLimit(
       query.limit,
       DEFAULT_CURSOR_LIMIT,
       MAX_CURSOR_LIMIT,
     );
-    const afterRank = Math.max(0, Number(query.cursor) || 0);
+    const afterRank = Math.max(0, Number(cursor) || 0);
     const key = `cache:recommendation:semantic:${encodeURIComponent(keyword)}:k${this.window}`;
     const { items, total } = await this.readWindow(
       key,
@@ -389,10 +397,9 @@ export class RecommendationsService implements IRecommendationsService {
   }
 
   async searchLexicalSemanticRerankByCursor(
-    keyword: string,
     query: CursorQueryDto,
   ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>> {
-    const cleanKeyword = (keyword ?? '').trim();
+    const cleanKeyword = (query.keyword ?? '').trim();
     if (!cleanKeyword) {
       throw new AppException(
         HttpStatus.BAD_REQUEST,

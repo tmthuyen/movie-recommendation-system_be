@@ -160,16 +160,14 @@ export class RecommendationsController {
     summary: 'Load-more tìm kiếm kết hợp Lexical + Semantic Rerank bằng cursor',
   })
   async searchLexicalSemanticRerankByCursor(
-    @Query('keyword') keyword: string,
     @Query() cursorQuery?: CursorQueryDto,
   ) {
     this.logger.log(
-      `Received request for lexical+semantic rerank cursor keyword="${keyword}", limit=${cursorQuery?.limit}`,
+      `Received request for lexical+semantic rerank cursor keyword="${cursorQuery?.keyword}", limit=${cursorQuery?.limit}`,
     );
 
     const res =
       await this.recommendationsService.searchLexicalSemanticRerankByCursor(
-        keyword,
         cursorQuery ?? {},
       );
 
@@ -189,14 +187,8 @@ export class RecommendationsController {
     description:
       'Cursor là rank cuối cùng của trang trước. Trang đầu bỏ trống cursor.',
   })
-  @ApiQuery({ name: 'keyword', required: false, type: String })
-  @ApiQuery({ name: 'cursor', required: false, type: Number, example: 12 })
-  @ApiQuery({ name: 'limit', required: false, type: Number, example: 12 })
-  async semanticSearchByCursor(
-    @Query('keyword') keyword: string,
-    @Query('cursor') cursor?: string,
-    @Query('limit') limit?: number,
-  ) {
+  async semanticSearchByCursor(@Query() cursorQuery: CursorQueryDto) {
+    const { keyword, cursor, limit } = cursorQuery;
     if (!keyword) {
       throw new AppException(
         HttpStatus.BAD_REQUEST,
@@ -206,13 +198,11 @@ export class RecommendationsController {
       );
     }
 
-    const res = await this.recommendationsService.semanticSearchByCursor(
+    const res = await this.recommendationsService.semanticSearchByCursor({
+      cursor,
       keyword,
-      {
-        cursor,
-        limit: limit === undefined ? undefined : Number(limit),
-      },
-    );
+      limit: limit === undefined ? undefined : Number(limit),
+    });
 
     return {
       success: true,

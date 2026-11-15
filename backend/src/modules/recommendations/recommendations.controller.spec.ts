@@ -12,6 +12,8 @@ describe('RecommendationsController', () => {
     semanticSearchByCursor: jest.Mock;
     hybridSearch: jest.Mock;
     hybridSearchByCursor: jest.Mock;
+    searchLexicalSemanticRerank: jest.Mock;
+    searchLexicalSemanticRerankByCursor: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -22,6 +24,8 @@ describe('RecommendationsController', () => {
       semanticSearchByCursor: jest.fn(),
       hybridSearch: jest.fn(),
       hybridSearchByCursor: jest.fn(),
+      searchLexicalSemanticRerank: jest.fn(),
+      searchLexicalSemanticRerankByCursor: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -130,7 +134,7 @@ describe('RecommendationsController', () => {
       pagination: { page: 1, limit: 10, total: 1, totalPages: 1 },
     });
 
-    const res = await controller.semanticSearch('hành động', undefined, 10);
+    const res = await controller.semanticSearch('hành động', 10);
 
     expect(recommendationsService.semanticSearch).toHaveBeenCalledWith(
       'hành động',
@@ -156,18 +160,17 @@ describe('RecommendationsController', () => {
       },
     });
 
-    const res = await controller.semanticSearchByCursor(
-      'hành động',
-      undefined,
-      {
-        limit: 12,
-      },
-    );
+    const res = await controller.semanticSearchByCursor({
+      keyword: 'hành động',
+      cursor: undefined,
+      limit: 12,
+    });
 
-    expect(recommendationsService.semanticSearchByCursor).toHaveBeenCalledWith(
-      'hành động',
-      { limit: 12 },
-    );
+    expect(recommendationsService.semanticSearchByCursor).toHaveBeenCalledWith({
+      keyword: 'hành động',
+      cursor: undefined,
+      limit: 12,
+    });
     expect(res).toEqual({
       success: true,
       statusCode: 200,

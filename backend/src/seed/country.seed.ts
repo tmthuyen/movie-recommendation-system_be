@@ -215,4 +215,3 @@ bootstrap().catch(err => {
 });
 
 // run code: npx ts-node -r tsconfig-paths/register src/seed/country.seed.ts
-

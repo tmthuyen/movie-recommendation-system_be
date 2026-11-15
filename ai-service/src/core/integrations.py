@@ -148,6 +148,26 @@ class MemoryVectorBackend(VectorBackend):
         if id in self.items:
             del self.items[id]
 
+    async def get_by_id(
+        self,
+        id: int,
+        collection_name: str | None = None,
+    ) -> dict | None:
+
+        item = self.items.get(id)
+
+        if item is None:
+            return None
+
+        return {
+            "id": id,
+            "vector": item["vector"],
+            "payload": item["payload"],
+        }
+
+    async def close(self) -> None:
+        self.items.clear()
+
     @property
     def location(self) -> str | None:
         return "memory"

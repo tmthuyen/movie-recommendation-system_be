@@ -6,9 +6,11 @@ import { Expose, Type } from 'class-transformer';
 
 export class MovieResponseDto extends BaseResponseDto {
   @Expose()
+  @Type(() => Number)
   id: number;
 
   @Expose()
+  @Type(() => Number)
   tmdbId: number;
 
   @Expose()
@@ -45,9 +47,11 @@ export class MovieResponseDto extends BaseResponseDto {
   originalLanguage: string;
 
   @Expose()
+  @Type(() => Number)
   budget: number;
 
   @Expose()
+  @Type(() => Number)
   revenue: number;
 
   @Expose()
@@ -60,18 +64,23 @@ export class MovieResponseDto extends BaseResponseDto {
   isAiTranslated: boolean;
 
   @Expose()
+  @Type(() => Number)
   tmdbRating: number;
 
   @Expose()
+  @Type(() => Number)
   voteAverage: number;
 
   @Expose()
+  @Type(() => Number)
   voteCount: number;
 
   @Expose()
+  @Type(() => Number)
   viewCount: number;
 
   @Expose()
+  @Type(() => Number)
   likeCount: number;
 
   // relations

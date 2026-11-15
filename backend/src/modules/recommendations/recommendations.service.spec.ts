@@ -3,74 +3,89 @@ import { HttpStatus } from '@nestjs/common';
 import { RecommendationsService } from './recommendations.service';
 import { MoviesService } from '@/modules/movies/movies.service';
 import { FakeCacheService } from '@/infrastructure/cache/testing/fake-cache.service';
-import { RedisService } from '@/infrastructure/redis/redis.service';
 import {
   encodeCursor,
   fingerprintIds,
 } from '@/common/utils/cursor-pagination.util';
+import { RedisService } from '@/infrastructure/redis/redis.service';
 
 /** Redis sorted set tối giản cho test (score = rank). */
-function createFakeRedis() {
+/** Minimal mock of RedisService satisfying the full interface for unit tests. */
+function createFakeRedis(): RedisService {
   const store = new Map<string, Array<{ score: number; member: string }>>();
 
-  return {
+  const mock: any = {
+    // Core sorted‑set operations used by RecommendationsService
     zadd: jest.fn(
       (
         key: string,
         entries: Array<{ score: number; member: string }>,
-      ): Promise<void> => {
-        const current = store.get(key) ?? [];
-        for (const entry of entries) {
-          const index = current.findIndex(item => item.member === entry.member);
-          if (index >= 0) current[index] = entry;
-          else current.push(entry);
+        ttlSeconds?: number,
+      ) => {
+        const cur = store.get(key) ?? [];
+        for (const e of entries) {
+          const idx = cur.findIndex(i => i.member === e.member);
+          if (idx >= 0) cur[idx] = e;
+          else cur.push(e);
         }
-        store.set(key, current);
+        store.set(key, cur);
         return Promise.resolve();
       },
     ),
-    zrangeByScore: jest.fn(
-      (
-        key: string,
-        min: string | number,
-        max: string | number,
-        limit: number,
-      ): Promise<string[]> => {
-        const exclusive = typeof min === 'string' && min.startsWith('(');
-        const minValue = Number(
-          typeof min === 'string' ? min.replace('(', '') : min,
-        );
-        const maxValue =
-          max === '+inf'
-            ? Number.POSITIVE_INFINITY
-            : Number(typeof max === 'string' ? max.replace('(', '') : max);
-
-        return Promise.resolve(
-          [...(store.get(key) ?? [])]
-            .sort((a, b) => a.score - b.score)
-            .filter(item =>
-              exclusive ? item.score > minValue : item.score >= minValue,
-            )
-            .filter(item => item.score <= maxValue)
-            .slice(0, limit)
-            .map(item => item.member),
-        );
-      },
-    ),
-    zcard: jest.fn((key: string): Promise<number> =>
+    zrangeByScore: jest.fn((key, min, max, limit) => {
+      const exclusive = typeof min === 'string' && min.startsWith('(');
+      const minVal = Number(
+        typeof min === 'string' ? min.replace('(', '') : min,
+      );
+      const maxVal =
+        max === '+inf'
+          ? Number.POSITIVE_INFINITY
+          : Number(typeof max === 'string' ? max.replace('(', '') : max);
+      return Promise.resolve(
+        [...(store.get(key) ?? [])]
+          .sort((a, b) => a.score - b.score)
+          .filter(i => (exclusive ? i.score > minVal : i.score >= minVal))
+          .filter(i => i.score <= maxVal)
+          .slice(0, limit)
+          .map(i => i.member),
+      );
+    }),
+    zcard: jest.fn((key: string) =>
       Promise.resolve(store.get(key)?.length ?? 0),
     ),
+    // Stubbed members required by the full interface but not used in these tests
+    redisClient: {} as any,
+    getClient: jest.fn(() => ({}) as any),
+    acquireLock: jest.fn(() => Promise.resolve(null as any)),
+    eval: jest.fn(() => Promise.resolve()),
+    // other methods stubs
+    set: jest.fn(() => Promise.resolve()),
+    get: jest.fn(() => Promise.resolve(null)),
+    del: jest.fn(() => Promise.resolve()),
+    delByPattern: jest.fn(() => Promise.resolve()),
+    getKeys: jest.fn(() => Promise.resolve([])),
+    sadd: jest.fn(() => Promise.resolve()),
+    smembers: jest.fn(() => Promise.resolve([])),
+    srem: jest.fn(() => Promise.resolve()),
+    hset: jest.fn(() => Promise.resolve()),
+    hget: jest.fn(() => Promise.resolve(null)),
+    hdel: jest.fn(() => Promise.resolve()),
+    hgetall: jest.fn(() => Promise.resolve({})),
+    lpush: jest.fn(() => Promise.resolve()),
+    rpush: jest.fn(() => Promise.resolve()),
+    lrange: jest.fn(() => Promise.resolve([])),
+    lrem: jest.fn(() => Promise.resolve()),
+    lpop: jest.fn(() => Promise.resolve(null)),
+    // onModuleDestroy is not used in tests
+    onModuleDestroy: jest.fn(),
   };
+  return mock as RedisService;
 }
 
 describe('RecommendationsService', () => {
   let service: RecommendationsService;
   let cache: FakeCacheService;
-  let redis: {
-    zadd: jest.Mock;
-    zrangeByScore: jest.Mock;
-    zcard: jest.Mock;
-  };
+  let redis: RedisService;
   let movieService: { findOne: jest.Mock; findByIds: jest.Mock };
 
   const buildAiResponse = (overrides: Record<string, unknown> = {}) => ({
@@ -139,6 +154,16 @@ describe('RecommendationsService', () => {
   });
 
   afterEach(() => {
+    jest.restoreAllMocks();
+    // Clean up the global fetch mock to avoid leaking between tests
+    if (
+      (global as any).fetch &&
+      typeof (global as any).fetch.mockReset === 'function'
+    ) {
+      (global as any).fetch.mockReset();
+    }
+    delete (global as any).fetch;
+
     jest.restoreAllMocks();
   });
 
@@ -463,14 +488,18 @@ describe('RecommendationsService', () => {
     it('trang sau đọc ZSET, không gọi ai-service lần nữa', async () => {
       const fetchMock = mockFetchJson(buildSemanticResponse([1, 2, 3, 4, 5]));
 
-      const page1 = await service.semanticSearchByCursor('hành động', {
+      const page1 = await service.semanticSearchByCursor({
+        keyword: 'hành động',
+        cursor: undefined,
         limit: 2,
       });
-      const page2 = await service.semanticSearchByCursor('hành động', {
+      const page2 = await service.semanticSearchByCursor({
+        keyword: 'hành động',
         limit: 2,
         cursor: String(page1.pagination.nextCursor),
       });
-      const page3 = await service.semanticSearchByCursor('hành động', {
+      const page3 = await service.semanticSearchByCursor({
+        keyword: 'hành động',
         limit: 2,
         cursor: String(page2.pagination.nextCursor),
       });
@@ -490,7 +519,9 @@ describe('RecommendationsService', () => {
     it('cursor là rank (số) — nextCursor = rank cuối trang', async () => {
       mockFetchJson(buildSemanticResponse([1, 2, 3]));
 
-      const page1 = await service.semanticSearchByCursor('hành động', {
+      const page1 = await service.semanticSearchByCursor({
+        keyword: 'hành động',
+        cursor: undefined,
         limit: 2,
       });
 
@@ -505,7 +536,9 @@ describe('RecommendationsService', () => {
     it('limit vượt max bị clamp về 50', async () => {
       mockFetchJson(buildSemanticResponse([1, 2, 3]));
 
-      const res = await service.semanticSearchByCursor('hành động', {
+      const res = await service.semanticSearchByCursor({
+        keyword: 'hành động',
+        cursor: undefined,
         limit: 100,
       });
 
@@ -548,26 +581,22 @@ describe('RecommendationsService', () => {
       for (const item of res.result) {
         expect(item.id).toEqual(expect.any(Number));
         expect(item.rank).toEqual(expect.any(Number));
-        expect(item.similarityScore).toEqual(expect.any(Number));
+        expect(item.score).toEqual(expect.any(Number));
       }
     });
 
     it('searchLexicalSemanticRerankByCursor hỗ trợ load-more bằng cursor', async () => {
       const fetchMock = mockFetchJson(buildAiResponseForIds([2, 1, 3]));
 
-      const page1 = await service.searchLexicalSemanticRerankByCursor(
-        'marvel',
-        {
-          limit: 2,
-        },
-      );
-      const page2 = await service.searchLexicalSemanticRerankByCursor(
-        'marvel',
-        {
-          limit: 2,
-          cursor: page1.pagination.nextCursor as string,
-        },
-      );
+      const page1 = await service.searchLexicalSemanticRerankByCursor({
+        keyword: 'marvel',
+        limit: 2,
+      });
+      const page2 = await service.searchLexicalSemanticRerankByCursor({
+        keyword: 'marvel',
+        limit: 2,
+        cursor: page1.pagination.nextCursor as string,
+      });
 
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(page1.result.map(item => item.id)).toEqual([2, 1]);

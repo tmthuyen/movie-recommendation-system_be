@@ -40,7 +40,9 @@ export class MoviesController {
       success: true,
       statusCode: 201,
       message: 'Created movie successfully',
-      result,
+      result: plainToInstance(MovieResponseDto, result, {
+        excludeExtraneousValues: true,
+      }),
     };
   }
   @Post('/test-created')
@@ -54,7 +56,9 @@ export class MoviesController {
       success: true,
       statusCode: 201,
       message: 'Tested movie created successfully',
-      result,
+      result: plainToInstance(MovieResponseDto, result, {
+        excludeExtraneousValues: true,
+      }),
     };
   }
   // @Post('/seed-created-movie')
@@ -78,7 +82,9 @@ export class MoviesController {
       success: true,
       statusCode: 200,
       message: 'Get movies successfully',
-      result: result.data,
+      result: plainToInstance(MovieResponseDto, result.data, {
+        excludeExtraneousValues: true,
+      }),
       pagination: {
         total: result.total,
         page: result.page,
@@ -112,7 +118,9 @@ export class MoviesController {
       success: true,
       statusCode: 200,
       message: 'Get movie details successfully',
-      result,
+      result: plainToInstance(MovieResponseDto, result, {
+        excludeExtraneousValues: true,
+      }),
     };
   }
 
@@ -145,7 +153,9 @@ export class MoviesController {
       success: true,
       statusCode: 200,
       message: 'Updated movie successfully',
-      result,
+      result: plainToInstance(MovieResponseDto, result, {
+        excludeExtraneousValues: true,
+      }),
     };
   }
 

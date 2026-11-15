@@ -148,7 +148,7 @@ class RecommendService:
         logger.info(
             f"[RecommendService] Found {len(similar_movies)} similar movies for movieId={movie_id} (Top-{top_k})"
         )
-        return [_format_item(item) for item in filtered]
+        return formatted_results
 
     async def similar_movies_rerank(
         self,

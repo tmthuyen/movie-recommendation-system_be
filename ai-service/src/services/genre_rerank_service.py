@@ -61,4 +61,3 @@ class GenreRerankService:
             top_k=top_k,
         )
         return reranked
-

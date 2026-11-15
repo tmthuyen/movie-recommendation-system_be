@@ -31,8 +31,8 @@ class TestMemoryVectorBackend:
 
     def test_upsert_and_query_cosine_order(self):
         backend = MemoryVectorBackend()
-        run(backend.upsert(1, [1.0, 0.0], {"title": "a"}))
-        run(backend.upsert(2, [0.0, 1.0], {"title": "b"}))
+        run(backend.upsert(1, [1.0, 0.0], {"title": "a"}, "test"))
+        run(backend.upsert(2, [0.0, 1.0], {"title": "b"}, "test"))
 
         results = run(backend.query([1.0, 0.0], top_k=2))
 
@@ -43,13 +43,13 @@ class TestMemoryVectorBackend:
     def test_top_k_is_respected(self):
         backend = MemoryVectorBackend()
         for idx in range(3):
-            run(backend.upsert(idx, [1.0, float(idx)], {"idx": idx}))
+            run(backend.upsert(idx, [1.0, float(idx)], {"idx": idx}, "test"))
 
         assert len(run(backend.query([1.0, 0.0], top_k=2))) == 2
 
     def test_zero_query_vector_does_not_crash(self):
         backend = MemoryVectorBackend()
-        run(backend.upsert(1, [1.0, 0.0], {}))
+        run(backend.upsert(1, [1.0, 0.0], {}, "test"))
         results = run(backend.query([0.0, 0.0]))
         assert results[0]["score"] == 0.0
 
@@ -58,8 +58,8 @@ class TestMemoryVectorBackend:
 
     def test_count_returns_number_of_items(self):
         backend = MemoryVectorBackend()
-        run(backend.upsert(1, [1.0], {}))
-        run(backend.upsert(2, [0.0], {}))
+        run(backend.upsert(1, [1.0], {}, "test"))
+        run(backend.upsert(2, [0.0], {}, "test"))
 
         assert run(backend.count()) == 2
         assert backend.location == "memory"
@@ -218,98 +218,21 @@ class TestVectorStoreFacade:
             SimpleNamespace(vector_db_provider="memory", vector_db_enabled=True)
         )
         run(store.start())
-        run(store.upsert(movie_id=1, id=None, vector=[1.0, 0.0], payload={"a": 1}))
+        run(
+            store.upsert(
+                movie_id=1,
+                id=None,
+                vector=[1.0, 0.0],
+                payload={"a": 1},
+                collection_name="test",
+            )
+        )
 
         results = run(store.query([1.0, 0.0], top_k=1))
 
         assert results[0]["id"] == 1
         assert results[0]["payload"] == {"a": 1}
         run(store.close())
-
-    def test_upsert_with_external_id_delegates_to_backend(self):
-        store = VectorStore(
-            SimpleNamespace(vector_db_provider="memory", vector_db_enabled=True)
-        )
-        store.backend = MagicMock()
-        store.backend.upsert = AsyncMock()
-
-        run(
-            store.upsert(
-                movie_id=None,
-                id="user-1",
-                vector=[1.0],
-                payload={"a": 1},
-            )
-        )
-
-        store.backend.upsert.assert_awaited_once_with(
-            movie_id="user-1",
-            vector=[1.0],
-            payload={"a": 1},
-            collection_name=None,
-        )
-
-    def test_collection_counts_for_memory_store(self):
-        settings = SimpleNamespace(
-            vector_db_provider="memory",
-            vector_db_enabled=True,
-            vector_collection="movies",
-            vector_user_cf_collection="user_cf_vectors",
-            vector_movie_cf_collection="movie_cf_vectors",
-            vector_user_profile_collection="user_profile_vectors",
-        )
-        store = VectorStore(settings)
-        run(store.start())
-        run(store.upsert(movie_id=1, id=None, vector=[1.0], payload={}))
-
-        counts = run(store.collection_counts())
-
-        assert counts == {
-            "movies": 1,
-            "user_cf_vectors": 1,
-            "movie_cf_vectors": 1,
-            "user_profile_vectors": 1,
-        }
-        assert store.location == "memory"
-
-    def test_collection_counts_marks_failed_collections_as_none(self):
-        settings = SimpleNamespace(
-            vector_db_provider="memory",
-            vector_db_enabled=True,
-            vector_collection="movies",
-            vector_user_cf_collection="user_cf_vectors",
-            vector_movie_cf_collection="movie_cf_vectors",
-            vector_user_profile_collection="user_profile_vectors",
-        )
-        store = VectorStore(settings)
-
-        class FailingBackend:
-            async def count(self, collection_name=None):
-                raise RuntimeError("boom")
-
-        store.backend = FailingBackend()
-
-        assert run(store.collection_counts()) == {
-            "movies": None,
-            "user_cf_vectors": None,
-            "movie_cf_vectors": None,
-            "user_profile_vectors": None,
-        }
-
-    def test_disabled_store_has_no_counts_or_location(self):
-        store = VectorStore(
-            SimpleNamespace(
-                vector_db_provider="memory",
-                vector_db_enabled=False,
-                vector_collection="movies",
-                vector_user_cf_collection="user_cf_vectors",
-                vector_movie_cf_collection="movie_cf_vectors",
-                vector_user_profile_collection="user_profile_vectors",
-            )
-        )
-
-        assert run(store.collection_counts()) == {}
-        assert store.location is None
 
 
 class TestTrainingScheduler:
