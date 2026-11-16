@@ -12,8 +12,7 @@ const parseCountryCodes = (countryString: string): string[] => {
   }
 
   // xoa cac ky tu ngoai le nhu [ ] ' "
-  // countryString = countryString.replace(/[\[\]'"]/g, '');
-  throw new Error('Mở comment để chạy code nha kkkkkkkkkkk');
+  countryString = countryString.replace(/[\[\]'"]/g, '');
 
   const splitCodes = countryString.split(',').map(code => code.trim());
 
