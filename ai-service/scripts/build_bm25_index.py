@@ -96,12 +96,21 @@ def load_corpus() -> tuple[list[str], list[int]]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build BM25 index từ PostgreSQL")
-    parser.add_argument("--force", action="store_true", help="Build lại dù corpus không đổi")
-    parser.add_argument("--output-dir", default=None, help="Mặc định: settings.bm25_model_path")
+    parser = argparse.ArgumentParser(
+        description="Build Qdrant BM25 Sparse Vector index từ PostgreSQL"
+    )
+    parser.add_argument(
+        "--force", action="store_true", help="Build lại dù corpus không đổi"
+    )
+    parser.add_argument(
+        "--output-dir", default=None, help="Mặc định: settings.bm25_model_path"
+    )
     args = parser.parse_args()
 
-    output_dir = Path(args.output_dir) if args.output_dir else get_settings().bm25_model_path
+    settings = get_settings()
+    output_dir = (
+        Path(args.output_dir) if args.output_dir else settings.bm25_model_path
+    )
 
     t0 = time.time()
     corpus, ids = load_corpus()
@@ -109,7 +118,9 @@ def main() -> int:
 
     fingerprint = compute_corpus_fingerprint(corpus, ids)
     if not args.force and not is_index_stale(output_dir, fingerprint):
-        print(f"Index BM25 con moi (fingerprint {fingerprint[:12]}...). Bo qua; dung --force de build lai.")
+        print(
+            f"Index BM25 Qdrant con moi (fingerprint {fingerprint[:12]}...). Bo qua; dung --force de build lai."
+        )
         return 0
 
     t1 = time.time()
@@ -119,9 +130,12 @@ def main() -> int:
         output_dir,
         tokenizer=UndertheseaTokenizer(),
         source="postgresql:movies+movie_genres+genres",
+        qdrant_url=settings.bm25_qdrant_url,
+        qdrant_api_key=settings.bm25_qdrant_api_key,
+        collection_name=settings.bm25_qdrant_collection,
     )
     print(
-        f"Da build BM25 {manifest['doc_count']:,} phim -> {output_dir} "
+        f"Da build Qdrant BM25 {manifest['doc_count']:,} phim -> {output_dir} "
         f"({time.time() - t1:.1f}s, fingerprint {manifest['corpus_fingerprint'][:12]}...)"
     )
     return 0

@@ -70,9 +70,12 @@ class Settings(BaseSettings):
     # Relative paths resolve from the ai-service/ directory, not the process CWD.
     chroma_persist_dir: str = "./data/chroma_db"
 
-    # BM25 (Lexical) index cho Hybrid Search — build bằng scripts/build_bm25_index.py.
+    # BM25 (Lexical) index trên Qdrant Sparse Vector cho Hybrid Search — build bằng scripts/build_bm25_index.py.
     # Relative paths resolve from the ai-service/ directory, not the process CWD.
     bm25_model_dir: str = "./data/bm25"
+    bm25_qdrant_collection: str = "movies_bm25"
+    bm25_qdrant_url: str | None = None
+    bm25_qdrant_api_key: str | None = None
     # SBERT model used for embedding (also referenced by build_vector_db.py)
     embedding_model_name: str = "paraphrase-multilingual-MiniLM-L12-v2"
 
