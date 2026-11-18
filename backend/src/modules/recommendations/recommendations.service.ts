@@ -9,6 +9,7 @@ import {
   CursorQueryDto,
   DEFAULT_CURSOR_LIMIT,
   MAX_CURSOR_LIMIT,
+  SearchCursorQueryDto,
 } from '@/common/dtos/cursor-query.dto';
 import {
   buildCursorPagination,
@@ -80,25 +81,26 @@ export interface IRecommendationsService {
     topK?: number,
   ): Promise<ResultWithPagination<SimilarMovieResponseDto>>;
   semanticSearchByCursor(
-    query: CursorQueryDto,
+    query: SearchCursorQueryDto,
   ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>>;
   searchLexicalSemanticRerank(
     keyword: string,
     topK?: number,
   ): Promise<ResultWithPagination<SimilarMovieResponseDto>>;
   searchLexicalSemanticRerankByCursor(
-    query: CursorQueryDto,
+    query: SearchCursorQueryDto,
   ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>>;
 
-  hybridSearch(
+  forYou(
     userId: string,
     accessToken: string,
     topK?: number,
   ): Promise<ResultWithPagination<HybridMovieResponseDto>>;
-  hybridSearchByCursor(
+  forYouByCursor(
     userId: string,
     accessToken: string,
-    query: CursorQueryDto,
+    cursor?: string,
+    limit?: number,
   ): Promise<ResultWithCursorPagination<HybridMovieResponseDto>>;
 }
 
@@ -234,7 +236,7 @@ export class RecommendationsService implements IRecommendationsService {
   }
 
   async semanticSearchByCursor(
-    query: CursorQueryDto,
+    query: SearchCursorQueryDto,
   ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>> {
     this.logger.log(
       `Semantic search (cursor): keyword="${query.keyword}", limit=${query.limit}, cursor=${query.cursor ?? 0}`,
@@ -281,9 +283,9 @@ export class RecommendationsService implements IRecommendationsService {
   }
 
   // =============
-  // FOR-YOU / HYBRID RECOMMENDATIONS
+  // FOR-YOU RECOMMENDATIONS
   // =============
-  async hybridSearch(
+  async forYou(
     userId: string,
     accessToken: string,
     topK?: number,
@@ -308,27 +310,28 @@ export class RecommendationsService implements IRecommendationsService {
     };
   }
 
-  async hybridSearchByCursor(
+  async forYouByCursor(
     userId: string,
     accessToken: string,
-    query: CursorQueryDto,
+    cursor?: string,
+    limit?: number,
   ): Promise<ResultWithCursorPagination<HybridMovieResponseDto>> {
     this.logger.log(
-      `For-you (cursor): userId=${userId}, limit=${query.limit}, cursor=${query.cursor ?? 0}`,
+      `For-you (cursor): userId=${userId}, limit=${limit}, cursor=${cursor ?? 0}`,
     );
 
-    const limit = clampCursorLimit(
-      query.limit,
+    const clampedLimit = clampCursorLimit(
+      limit,
       DEFAULT_CURSOR_LIMIT,
       MAX_CURSOR_LIMIT,
     );
-    const afterRank = Math.max(0, Number(query.cursor) || 0);
+    const afterRank = Math.max(0, Number(cursor) || 0);
     const key = `cache:recommendation:for-you:${userId}:k${this.window}`;
     const { items, total } = await this.readWindow(
       key,
       () => this.loadForYouFromAi(accessToken),
       afterRank,
-      limit,
+      clampedLimit,
     );
 
     const lastRank =
@@ -338,7 +341,7 @@ export class RecommendationsService implements IRecommendationsService {
     return {
       result: await this.hydrate(items, HybridMovieResponseDto),
       pagination: {
-        limit,
+        limit: clampedLimit,
         total,
         hasMore,
         nextCursor: hasMore ? lastRank : null,
@@ -397,7 +400,7 @@ export class RecommendationsService implements IRecommendationsService {
   }
 
   async searchLexicalSemanticRerankByCursor(
-    query: CursorQueryDto,
+    query: SearchCursorQueryDto,
   ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>> {
     const cleanKeyword = (query.keyword ?? '').trim();
     if (!cleanKeyword) {

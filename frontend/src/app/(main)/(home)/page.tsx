@@ -294,6 +294,7 @@ export default function HomePage() {
   const { isAuthenticated, user } = useAuthStore();
   const { data: forYouData, isLoading: isForYouLoading } = useRecommendation.useForYou({
     topK: 12,
+    enabled: isAuthenticated,
   });
   const forYouMovies = forYouData ?? [];
 
@@ -416,7 +417,7 @@ export default function HomePage() {
         <MovieRowSection
           title={`Dành cho bạn, ${user?.fullName || 'thành viên'}`}
           description="Gợi ý dựa trên sở thích và hoạt động gần đây"
-          href="/recommendations"
+          href="/for-you"
           movies={forYouMovies.slice(0, 12)}
           isLoading={isForYouLoading}
         />

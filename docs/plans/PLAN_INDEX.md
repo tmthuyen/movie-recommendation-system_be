@@ -52,6 +52,7 @@ Bảng theo dõi danh sách plan trong `docs/plans/`. Dùng để xác định `
 | 32 | V32_fullstack_user-profile-vector-events.md | backend + frontend + ai | fullstack-user-profile-vector-events | Luồng user profile qua RabbitMQ để cập nhật vector AI | ✅ Hoàn thành |
 | 33 | V33_backend-auth-user-consumers.md | backend | auth-user-consumers | Tách queue user/auth và xử lý email qua event | 🟡 Đang triển khai |
 | 34 | V34_frontend_admin-table-upgrade.md | frontend | admin-table-upgrade | Nâng cấp UI danh sách admin bằng TanStack Table v9 → rollout toàn bộ trang (users/genres/countries/peoples/movies/interactions) + lọc null/rỗng, lọc quan hệ, cột ID, cột count, xem chi tiết phim | ✅ Hoàn thành (QA thủ công chưa chạy) |
+| 35 | V35_frontend_search-for-you-infinite.md | frontend | search-for-you-infinite | Trang tìm kiếm semantic/rerank/lexical + "Dành cho bạn" (tab chi tiết + `/for-you`) + grid phim infinite scroll dùng chung; sửa vỡ layout grid; chuẩn hoá comment; review UI bình luận (review-only) | 🟡 Task 1–2 code + gate tự động xong; Task 3 review xong, không sửa code; QA thủ công chưa chạy; chờ endpoint `lexical-search/cursor` |
 
 ## Ghi chú legacy
 
@@ -62,11 +63,11 @@ Bảng theo dõi danh sách plan trong `docs/plans/`. Dùng để xác định `
 
 ## Cách tính next_index
 
-`max(index) = 34` → `next_index = 35`
+`max(index) = 35` → `next_index = 36`
 
 ## next_index
 
-`35`
+`36`
 
 ## Cách xác định index khi tạo plan mới
 

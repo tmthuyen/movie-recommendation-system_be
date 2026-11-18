@@ -104,7 +104,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 ## 4. Đa màn hình (responsive) 🔴
 
 - Viết theo **mobile-first**: style mặc định cho mobile, rồi nâng cấp bằng breakpoint `sm:` / `md:` / `lg:` chuẩn của Tailwind.
-- Grid danh sách phim: **≥2 cột ở mobile** (`grid-cols-2`) và **4–6 cột ở desktop** (`md:grid-cols-4 lg:grid-cols-6`), kèm `gap` hợp lý. ⚠️ Hiện trạng `movie-grid.tsx` là `grid-cols-1` ở mobile → lệch rule, sửa khi làm UI.
+- Grid danh sách phim: dùng **`MovieGrid`** (`grid-cols-1 sm:grid-cols-2 md:grid-cols-3`) — dev đã chốt breakpoint; không tự đặt lại grid riêng cho từng trang.
 - Mọi phần tử bấm được (button, icon toggle, menu item) phải có **touch target ≥ 44px** (dùng `size-11`/`h-11` hoặc padding tương đương).
 - Bắt buộc kiểm tra giao diện ở **width 375px** (iPhone SE) trước khi coi là xong; không để tràn ngang/xuất hiện scroll ngang (hover scale có thể tràn 1–2px → `overflow-x-hidden` ở container nếu cần).
 - Sidebar/header phải hoạt động ở cả mobile (drawer/sheet) lẫn desktop (fixed sidebar).
@@ -355,6 +355,8 @@ Stagger bằng CSS: `style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }
 
 ### 11.1 Comment & JSDoc
 
+- Comment phải **trung lập**, mô tả ý nghĩa của biến/hàm/class, tham số và giá trị trả về; chỉ mô tả hiện trạng code.
+- **Cấm** comment dạng ghi chú (note) công việc, nhắc việc, kế hoạch/dự định, hoặc trò chuyện với người đọc (ví dụ: "cần sửa sau", "tạm thời", "backend sẽ bổ sung", "chỗ này…", "để tránh…").
 - **Được phép** viết JSDoc ngắn cho function/component/hook để tra cứu nhanh: chức năng, `@param`, `@returns`.
 - **Không** viết block comment đầu file/đầu component để giải thích quy ước, lý do thiết kế, lịch sử chỉnh sửa, so sánh với cách làm khác hoặc mô tả "hiện trạng".
 - Comment nội dòng chỉ dùng khi logic thực sự khó hiểu; không kể lại code đang làm gì.
@@ -398,7 +400,7 @@ export function MovieCard() { ... }
 - [ ] Hover elevation; không trộn CSS transform với motion whileHover
 - [ ] Có useReducedMotion; tắt translate/scale khi reduced motion
 - [ ] Chỉ animate transform/opacity; stagger ≤ 300ms tổng
-- [ ] 375px không tràn ngang; grid ≥2 cột mobile
+- [ ] 375px không tràn ngang; grid dùng `MovieGrid` (1 → 2 → 3 cột)
 - [ ] Touch target ≥44px; focus-visible ring; icon-only có aria-label
 - [ ] Text tiếng Việt; số/ngày format vi-VN
 - [ ] Loading skeleton + empty + error state đầy đủ
@@ -412,7 +414,7 @@ export function MovieCard() { ... }
 |---|---|---|---|
 | 1 | `movie-card.tsx` đã có motion entrance (`motion.article` + `cardVariants`) và hover elevation (`whileHover`), không còn CSS transform trùng | ✅ | Giữ nguyên pattern; chỉnh thông số trong `src/lib/motion.ts` nếu cần |
 | 2 | `motion@14` đã có trong `package.json`/`node_modules` | ✅ | Chạy `npm i` sau khi clone |
-| 3 | `movie-grid.tsx` mobile `grid-cols-1` (lệch yêu cầu ≥2 cột) | ⚠️ | Đổi `grid-cols-2`, desktop 4–6 cột |
+| 3 | `movie-grid.tsx`: `grid-cols-1 sm:grid-cols-2 md:grid-cols-3` (dev đã chốt) | ✅ | Giữ nguyên, không tự đổi grid |
 | 4 | `similar-movies.tsx` (`MovieColumn`) đã bọc `MotionStagger when="in-view"` | ✅ | Giữ `when="in-view"` cho list dọc dài |
 | 5 | `movie-row.tsx` carousel đã stagger bằng `MotionReveal` (Pattern B, delay theo index) | ✅ | Giữ delay giới hạn bởi `MOTION_MAX_DELAY` |
 | 6 | Poster card dùng `aspect-[6/3]`, rule yêu cầu `aspect-[2/3]` | ⚠️ | **Dev chốt tỉ lệ**; nếu đổi phải cập nhật skeleton + `sizes` |

@@ -11,7 +11,10 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { IRecommendationsService } from './recommendations.service';
-import { CursorQueryDto } from '@/common/dtos/cursor-query.dto';
+import {
+  CursorQueryDto,
+  SearchCursorQueryDto,
+} from '@/common/dtos/cursor-query.dto';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
 import { type Request } from 'express';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
@@ -160,15 +163,15 @@ export class RecommendationsController {
     summary: 'Load-more tìm kiếm kết hợp Lexical + Semantic Rerank bằng cursor',
   })
   async searchLexicalSemanticRerankByCursor(
-    @Query() cursorQuery?: CursorQueryDto,
+    @Query() cursorQuery: SearchCursorQueryDto,
   ) {
     this.logger.log(
-      `Received request for lexical+semantic rerank cursor keyword="${cursorQuery?.keyword}", limit=${cursorQuery?.limit}`,
+      `Received request for lexical+semantic rerank cursor keyword="${cursorQuery.keyword}", limit=${cursorQuery.limit}`,
     );
 
     const res =
       await this.recommendationsService.searchLexicalSemanticRerankByCursor(
-        cursorQuery ?? {},
+        cursorQuery,
       );
 
     return {
@@ -187,7 +190,7 @@ export class RecommendationsController {
     description:
       'Cursor là rank cuối cùng của trang trước. Trang đầu bỏ trống cursor.',
   })
-  async semanticSearchByCursor(@Query() cursorQuery: CursorQueryDto) {
+  async semanticSearchByCursor(@Query() cursorQuery: SearchCursorQueryDto) {
     const { keyword, cursor, limit } = cursorQuery;
     if (!keyword) {
       throw new AppException(
@@ -218,7 +221,7 @@ export class RecommendationsController {
   @Get('/for-you')
   @ApiOperation({ summary: 'Gợi ý phim cá nhân hoá (topK)' })
   @ApiQuery({ name: 'topK', required: false, type: Number, example: 20 })
-  async hybridSearch(@Req() req: Request, @Query('topK') topK?: number) {
+  async forYou(@Req() req: Request, @Query('topK') topK?: number) {
     const { sub } = req.user as JwtPayload;
 
     const accessToken = req.headers['authorization']?.split(' ')[1];
@@ -231,7 +234,7 @@ export class RecommendationsController {
       );
     }
 
-    const res = await this.recommendationsService.hybridSearch(
+    const res = await this.recommendationsService.forYou(
       sub,
       accessToken,
       Number(topK),
@@ -256,11 +259,7 @@ export class RecommendationsController {
   })
   @ApiQuery({ name: 'cursor', required: false, type: Number, example: 12 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 12 })
-  async hybridSearchByCursor(
-    @Req() req: Request,
-    @Query('cursor') cursor?: string,
-    @Query('limit') limit?: number,
-  ) {
+  async forYouByCursor(@Req() req: Request, @Query() query: CursorQueryDto) {
     const { sub } = req.user as JwtPayload;
 
     const accessToken = req.headers['authorization']?.split(' ')[1];
@@ -273,13 +272,11 @@ export class RecommendationsController {
       );
     }
 
-    const res = await this.recommendationsService.hybridSearchByCursor(
+    const res = await this.recommendationsService.forYouByCursor(
       sub,
       accessToken,
-      {
-        cursor,
-        limit: limit === undefined ? undefined : Number(limit),
-      },
+      query.cursor,
+      query.limit,
     );
 
     return {
