@@ -7,6 +7,7 @@ import {
 } from '@aws-sdk/client-s3';
 
 import { S3StorageService } from './storage.service';
+import { Readable } from 'stream';
 
 // uuid v14 là ESM-only nên mock để Jest (CommonJS) load được và key ổn định.
 jest.mock('uuid', () => ({
@@ -15,19 +16,21 @@ jest.mock('uuid', () => ({
 
 const BUCKET = 'movie-bucket';
 const PUBLIC_URL = 'https://cdn.example.com';
-
 const makeFile = (
   overrides: Partial<Express.Multer.File> = {},
-): Express.Multer.File =>
-  ({
-    fieldname: 'file',
-    originalname: 'avatar.png',
-    encoding: '7bit',
-    mimetype: 'image/png',
-    size: 3,
-    buffer: Buffer.from('abc'),
-    ...overrides,
-  }) as unknown as Express.Multer.File;
+): Express.Multer.File => ({
+  fieldname: 'file',
+  originalname: 'avatar.png',
+  encoding: '7bit',
+  mimetype: 'image/png',
+  size: 3,
+  buffer: Buffer.from('abc'),
+  stream: Readable.from(Buffer.from('abc')),
+  destination: '',
+  filename: 'avatar.png',
+  path: '',
+  ...overrides,
+});
 
 describe('S3StorageService', () => {
   let service: S3StorageService;

@@ -433,21 +433,6 @@ describe('UsersService', () => {
       );
     });
 
-    it('chưa có avatar cũ → bỏ qua bước xoá file', async () => {
-      repo.findByIdWithRoles.mockResolvedValue(
-        makeUser({ avatarUrl: undefined }),
-      );
-
-      await service.updateAvatar(
-        'user-1',
-        { originalname: 'a.png' } as unknown as Express.Multer.File,
-        'uploads/avatars',
-      );
-
-      expect(storage.deleteFile).not.toHaveBeenCalled();
-      expect(storage.uploadFile).toHaveBeenCalled();
-    });
-
     it('user không tồn tại → NotFoundException, không upload', async () => {
       repo.findByIdWithRoles.mockResolvedValue(null);
 

@@ -10,8 +10,8 @@ describe('RecommendationsController', () => {
     getSimilarMoviesByCursor: jest.Mock;
     semanticSearch: jest.Mock;
     semanticSearchByCursor: jest.Mock;
-    hybridSearch: jest.Mock;
-    hybridSearchByCursor: jest.Mock;
+    forYou: jest.Mock;
+    forYouByCursor: jest.Mock;
     searchLexicalSemanticRerank: jest.Mock;
     searchLexicalSemanticRerankByCursor: jest.Mock;
   };
@@ -22,8 +22,8 @@ describe('RecommendationsController', () => {
       getSimilarMoviesByCursor: jest.fn(),
       semanticSearch: jest.fn(),
       semanticSearchByCursor: jest.fn(),
-      hybridSearch: jest.fn(),
-      hybridSearchByCursor: jest.fn(),
+      forYou: jest.fn(),
+      forYouByCursor: jest.fn(),
       searchLexicalSemanticRerank: jest.fn(),
       searchLexicalSemanticRerankByCursor: jest.fn(),
     };
@@ -206,7 +206,7 @@ describe('RecommendationsController', () => {
   });
 
   it('GET /for-you gọi service với userId/token từ request và trả envelope', async () => {
-    recommendationsService.hybridSearch.mockResolvedValue({
+    recommendationsService.forYou.mockResolvedValue({
       result: [{ id: 5, title: 'Phim', score: 0.9 }],
       pagination: { page: 1, limit: 10, total: 1, totalPages: 1 },
     });
@@ -215,9 +215,9 @@ describe('RecommendationsController', () => {
       headers: { authorization: 'Bearer access-token' },
     } as unknown as Request;
 
-    const res = await controller.hybridSearch(req, 10);
+    const res = await controller.forYou(req, 10);
 
-    expect(recommendationsService.hybridSearch).toHaveBeenCalledWith(
+    expect(recommendationsService.forYou).toHaveBeenCalledWith(
       'user-1',
       'access-token',
       10,
@@ -232,7 +232,7 @@ describe('RecommendationsController', () => {
   });
 
   it('GET /for-you/cursor gọi service và trả pagination cursor', async () => {
-    recommendationsService.hybridSearchByCursor.mockResolvedValue({
+    recommendationsService.forYouByCursor.mockResolvedValue({
       result: [{ id: 5, title: 'Phim', score: 0.9 }],
       pagination: { limit: 12, total: 20, hasMore: true, nextCursor: 12 },
     });
@@ -241,12 +241,16 @@ describe('RecommendationsController', () => {
       headers: { authorization: 'Bearer access-token' },
     } as unknown as Request;
 
-    const res = await controller.hybridSearchByCursor(req, undefined, 12);
+    const res = await controller.forYouByCursor(req, {
+      cursor: undefined,
+      limit: 12,
+    });
 
-    expect(recommendationsService.hybridSearchByCursor).toHaveBeenCalledWith(
+    expect(recommendationsService.forYouByCursor).toHaveBeenCalledWith(
       'user-1',
       'access-token',
-      { cursor: undefined, limit: 12 },
+      undefined,
+      12,
     );
     expect(res).toEqual({
       success: true,

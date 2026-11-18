@@ -4,13 +4,13 @@ import { Search, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 
-/** Điều hướng tới trang danh sách phim với keyword trên URL (share được, seed được). */
+/** Trả về hàm điều hướng tới `/search` với keyword trên query string. */
 function useSearchSubmit() {
   const router = useRouter();
 
   return (keyword: string) => {
     const trimmed = keyword.trim();
-    router.push(trimmed ? `/movies?keyword=${encodeURIComponent(trimmed)}` : '/movies');
+    router.push(trimmed ? `/search?q=${encodeURIComponent(trimmed)}` : '/search');
   };
 }
 
@@ -45,12 +45,12 @@ export function DesktopSearch() {
         onChange={(event) => setValue(event.target.value)}
         placeholder="Tìm phim…"
         aria-label="Tìm phim theo tên"
-        className="border-input bg-background/60 placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-full border py-1.5 pr-3 pl-9 text-sm outline-none transition-colors focus-visible:ring-2"
+        className="border-input bg-background/60 placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full rounded-full border py-1.5 pr-3 pl-9 text-sm transition-colors outline-none focus-visible:ring-2"
       />
       <button
         type="submit"
         aria-label="Tìm kiếm"
-        className="bg-accent text-accent-foreground hover:bg-accent/70 absolute right-0 flex h-9 w-10 items-center justify-center rounded-full border transition-colors"
+        className="bg-accent text-accent-foreground hover:bg-accent/70 absolute right-0 flex h-9 w-10 cursor-pointer items-center justify-center rounded-full border transition-colors"
       >
         <Search className="size-4" aria-hidden="true" />
       </button>
@@ -65,7 +65,7 @@ export function MobileSearchToggle({ onClick }: { onClick: () => void }) {
       type="button"
       onClick={onClick}
       aria-label="Mở tìm kiếm"
-      className="text-muted-foreground hover:bg-accent flex size-9 items-center justify-center rounded-full transition-colors md:hidden"
+      className="text-muted-foreground hover:bg-accent flex size-9 cursor-pointer items-center justify-center rounded-full transition-colors md:hidden"
     >
       <Search className="size-5" aria-hidden="true" />
     </button>
@@ -97,7 +97,7 @@ export function MobileSearchExpanded({ onClose }: { onClose: () => void }) {
         type="button"
         onClick={onClose}
         aria-label="Đóng tìm kiếm"
-        className="text-muted-foreground hover:bg-accent flex size-9 shrink-0 items-center justify-center rounded-full transition-colors"
+        className="text-muted-foreground hover:bg-accent flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors"
       >
         <X className="size-5" aria-hidden="true" />
       </button>
@@ -108,12 +108,12 @@ export function MobileSearchExpanded({ onClose }: { onClose: () => void }) {
         onChange={(event) => setValue(event.target.value)}
         placeholder="Tìm phim…"
         aria-label="Tìm phim theo tên"
-        className="border-input bg-background/60 placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full min-w-0 rounded-full border px-3 text-sm outline-none transition-colors focus-visible:ring-2"
+        className="border-input bg-background/60 placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 h-9 w-full min-w-0 rounded-full border px-3 text-sm transition-colors outline-none focus-visible:ring-2"
       />
       <button
         type="submit"
         aria-label="Tìm kiếm"
-        className="bg-accent text-accent-foreground hover:bg-accent/70 flex size-9 shrink-0 items-center justify-center rounded-full border transition-colors"
+        className="bg-accent text-accent-foreground hover:bg-accent/70 flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full border transition-colors"
       >
         <Search className="size-4" aria-hidden="true" />
       </button>

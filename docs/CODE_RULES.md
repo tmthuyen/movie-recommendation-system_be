@@ -614,6 +614,7 @@ Báo cáo: hiện tượng → nguyên nhân → phương án + rủi ro → ch�
 
 ```md
 - [ ] Không có `console.log`/`console.error` mới trong backend
+- [ ] Comment trung lập, mô tả ý nghĩa biến/hàm/class/tham số/return; không có comment ghi chú hay trò chuyện
 - [ ] Logger có context = tên class; log create/update/delete/auth/event/external/cron
 - [ ] Không log password/token/OTP/Authorization/PII
 - [ ] Không còn floating promise; không `forEach(async)`; không `async` thừa
@@ -623,3 +624,16 @@ Báo cáo: hiện tượng → nguyên nhân → phương án + rủi ro → ch�
 - [ ] lint + type-check + test + build xanh
 - [ ] Plan đã cập nhật; rủi ro/follow-up đã ghi
 ```
+
+---
+
+## 6. Comment trong code (mọi service) 🔴
+
+Áp dụng cho `backend/`, `frontend/`, `ai-service/` và mọi file code mới hoặc sửa.
+
+- Comment phải **trung lập**: giải thích ý nghĩa của biến/hàm/class, hoạt động, tham số và giá trị trả về.
+- **Cấm** comment dạng ghi chú (note) công việc, nhắc việc, kế hoạch/dự định hoặc trò chuyện với người đọc.
+  - Sai: `// cần sửa sau`, `// tạm thời để tránh lỗi`, `// backend sẽ bổ sung`, `// chỗ này chưa ổn`.
+  - Đúng: `/** Trả về danh sách phim theo cursor; `limit` là số item mỗi trang. */`
+- Comment chỉ mô tả hiện trạng code, không kể lại code đang làm gì và không giữ comment của code đã xóa.
+- JSDoc/docstring chỉ dùng để tra cứu nhanh chức năng, `@param`, `@returns`; không dùng để giải thích lịch sử, so sánh cách làm hoặc quy ước dự án.

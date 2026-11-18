@@ -1,6 +1,13 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 
 /** Số item mặc định cho một trang cursor. */
 export const DEFAULT_CURSOR_LIMIT = 12;
@@ -9,7 +16,7 @@ export const DEFAULT_CURSOR_LIMIT = 12;
 export const MAX_CURSOR_LIMIT = 50;
 
 /**
- * Query dùng chung cho các endpoint cursor (similar/hybrid/semantic).
+ * Query cursor cho các endpoint không có keyword (similar, for-you).
  * `cursor` là opaque string do backend sinh ra, client không parse.
  */
 export class CursorQueryDto {
@@ -19,12 +26,6 @@ export class CursorQueryDto {
   @IsOptional()
   @IsString()
   cursor?: string;
-
-  @ApiPropertyOptional({
-    description: 'Từ khóa tìm kiếm.',
-  })
-  @IsString()
-  keyword?: string;
 
   @ApiPropertyOptional({
     description: 'Số item mỗi trang.',
@@ -38,4 +39,17 @@ export class CursorQueryDto {
   @Min(1)
   @Max(MAX_CURSOR_LIMIT)
   limit?: number = DEFAULT_CURSOR_LIMIT;
+}
+
+/**
+ * Query cursor cho các endpoint tìm kiếm (semantic, rerank).
+ * `keyword` bắt buộc; `cursor` và `limit` kế thừa từ `CursorQueryDto`.
+ */
+export class SearchCursorQueryDto extends CursorQueryDto {
+  @ApiProperty({
+    description: 'Từ khóa tìm kiếm.',
+  })
+  @IsString()
+  @IsNotEmpty()
+  keyword: string;
 }

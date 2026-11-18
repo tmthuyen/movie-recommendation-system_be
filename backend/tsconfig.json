@@ -14,21 +14,11 @@
     "experimentalDecorators": true,
     "allowSyntheticDefaultImports": true,
     "paths": {
-      "@/*": [
-        "./src/*"
-      ],
-      "@config/*": [
-        "./src/config/*"
-      ],
-      "@modules/*": [
-        "./src/modules/*"
-      ],
-      "@common/*": [
-        "./src/common/*"
-      ],
-      "@infrastructure/*": [
-        "./src/infrastructure/*"
-      ]
+      "@/*": ["./src/*"],
+      "@config/*": ["./src/config/*"],
+      "@modules/*": ["./src/modules/*"],
+      "@common/*": ["./src/common/*"],
+      "@infrastructure/*": ["./src/infrastructure/*"]
     },
     "target": "ES2023",
     "sourceMap": true,
@@ -40,15 +30,10 @@
     "noImplicitAny": false,
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false,
-    "strictPropertyInitialization": false
+    "strictPropertyInitialization": false,
+    "types": ["node", "jest", "multer", "express"], // whitelist of types
+    "typeRoots": ["./node_modules/@types", "./src/types"] // default scan all types in node_modules/@types and src/types
   },
-  "typeRoots": [
-    "./node_modules/@types",
-    "./src/types"
-  ],
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.d.ts",
-    "test/**/*.ts"
-  ]
+  // "typeRoots": ["./node_modules/@types", "./src/types"],
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "test/**/*.ts"]
 }

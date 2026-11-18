@@ -1,3 +1,7 @@
+'use client';
+
+import type { ReactNode } from 'react';
+import { ForYouMoviesInfinite } from './for-you-movies-infinite';
 import { SimilarMoviesInfinite } from './similar-movies-infinite';
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -5,20 +9,17 @@ import { Movie } from '@/shared/types/movie.types';
 import { HorizontalScroller } from '@/components/common/CarouselCustom';
 import { MovieColumn, MovieColumnLoading } from '@/components/movie/movie-column';
 import useMovie from '@/hooks/tankstack/useMovie';
+import { useAuthStore } from '@/stores/auth.store';
 
 export function MovieDetailTabs({ movie }: { movie: Movie }) {
   const genreIds = movie.genres?.map((g) => g.id);
+  const { isAuthenticated, isLoading } = useAuthStore();
 
-  const tabs = [
+  const tabs: Array<{ value: string; label: string; contentComponent: ReactNode }> = [
     {
       value: 'similarity',
       label: 'Phim tương tự',
       contentComponent: <SimilarMoviesInfinite movieId={movie.id} genres={movie.genres} />,
-    },
-    {
-      value: 'forYou',
-      label: 'Dành cho bạn',
-      contentComponent: <p>Chưa phát triển</p>,
     },
     {
       value: 'topRated',
@@ -36,6 +37,15 @@ export function MovieDetailTabs({ movie }: { movie: Movie }) {
       contentComponent: <MovieColumnSection typeFilter="sameGenre" genreIds={genreIds} />,
     },
   ];
+
+  if (isAuthenticated && !isLoading) {
+    tabs.splice(1, 0, {
+      value: 'forYou',
+      label: 'Dành cho bạn',
+      contentComponent: <ForYouMoviesInfinite />,
+    });
+  }
+
   return (
     <Tabs defaultValue="similarity" className="w-full min-w-0">
       <HorizontalScroller gap={8}>
