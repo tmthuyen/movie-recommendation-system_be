@@ -6,7 +6,7 @@ from typing import Any
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from chromadb import Collection
 from qdrant_client import AsyncQdrantClient
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from qdrant_client.models import Distance, PointIdsList, PointStruct, VectorParams
 from redis.asyncio import Redis
 
 from api.schemas import TrainRequest
@@ -227,9 +227,7 @@ class QdrantVectorBackend(VectorBackend):
             url=self.settings.vector_db_url,
             api_key=self.settings.vector_db_api_key,
         )
-        collections = await self.client.get_collections()
-        names = {collection.name for collection in collections.collections}
-        if self.settings.vector_collection not in names:
+        if not await self.client.collection_exists(self.settings.vector_collection):
             await self.client.create_collection(
                 collection_name=self.settings.vector_collection,
                 vectors_config=VectorParams(
@@ -261,12 +259,55 @@ class QdrantVectorBackend(VectorBackend):
     ) -> list[dict[str, Any]]:
         if self.client is None:
             raise RuntimeError("Qdrant vector backend has not started")
-        hits = await self.client.search(
-            collection_name=collection_name or self.settings.vector_collection,
-            query_vector=vector,
-            limit=top_k,
-        )
-        return [{"id": h.id, "score": h.score, "payload": h.payload} for h in hits]
+        coll = collection_name or self.settings.vector_collection
+        if hasattr(self.client, "query_points"):
+            res = await self.client.query_points(
+                collection_name=coll,
+                query=vector,
+                limit=top_k,
+            )
+            hits = res.points
+        else:
+            hits = await self.client.search(
+                collection_name=coll,
+                query_vector=vector,
+                limit=top_k,
+            )
+        return [{"id": int(h.id), "score": float(h.score), "payload": h.payload or {}} for h in hits]
+
+    async def get_by_id(
+        self, id: int, collection_name: str | None = None
+    ) -> dict[str, Any] | None:
+        if not id:
+            raise CustomException(
+                "id and collection_name are required for get_by_id",
+                status_code=400,
+                error_code="BAD_REQUEST",
+            )
+        if self.client is None:
+            raise RuntimeError("Qdrant vector backend has not started")
+        coll = collection_name or self.settings.vector_collection
+        try:
+            records = await self.client.retrieve(
+                collection_name=coll,
+                ids=[int(id)],
+                with_vectors=True,
+                with_payload=True,
+            )
+            if not records:
+                return None
+            rec = records[0]
+            vec = rec.vector
+            if isinstance(vec, dict):
+                vec = list(vec.values())[0]
+            return {
+                "id": int(rec.id),
+                "vector": vec,
+                "payload": rec.payload or {},
+            }
+        except Exception as exc:
+            logger.warning("Qdrant get_by_id error id=%s: %s", id, exc)
+            return None
 
     async def delete_by_id(self, id: str | int, collection_name: str):
         """Xóa theo id
@@ -279,14 +320,17 @@ class QdrantVectorBackend(VectorBackend):
             raise RuntimeError("Qdrant vector backend has not started")
         await self.client.delete(
             collection_name=collection_name,
-            points_selector={"ids": [id]},
+            points_selector=PointIdsList(points=[int(id)]),
         )
 
     async def count(self, collection_name: str | None = None) -> int:
         if self.client is None:
             raise RuntimeError("Qdrant vector backend has not started")
+        coll = collection_name or self.settings.vector_collection
+        if not await self.client.collection_exists(coll):
+            return 0
         result = await self.client.count(
-            collection_name=collection_name or self.settings.vector_collection,
+            collection_name=coll,
             exact=True,
         )
         return int(result.count)

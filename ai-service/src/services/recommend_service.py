@@ -90,7 +90,6 @@ class RecommendService:
         self._vs = vector_store
         self._emb = embedding_service
         self._bm25 = bm25_index
-        self._movie_vectors = MovieVectorService(vector_store, embedding_service)
         self._genre_reranker = GenreRerankService(vector_store)
         self._search_reranker = SearchRerankService(
             vector_store, embedding_service, bm25_index
@@ -111,13 +110,13 @@ class RecommendService:
 
     async def upsert_movie_vector(self, movie_data: dict[str, Any]) -> None:
         """Thêm mới hoặc cập nhật đồng thời Vector (Semantic) và Qdrant BM25 (Lexical)."""
-        await self._movie_vectors.upsert_movie_vector(movie_data)
+        await self._movie_vector_service.upsert_movie_vector(movie_data)
         if self._bm25 is not None:
             await self._bm25.upsert_movie_async(movie_data)
 
     async def delete_movie_vector(self, movie_id: int) -> bool:
         """Xoá đồng thời Vector (Semantic) và Qdrant BM25 (Lexical) của phim."""
-        deleted_vs = await self._movie_vectors.delete_movie_vector(movie_id)
+        deleted_vs = await self._movie_vector_service.delete_movie_vector(movie_id)
         deleted_bm25 = False
         if self._bm25 is not None:
             deleted_bm25 = await self._bm25.delete_movie_async(movie_id)

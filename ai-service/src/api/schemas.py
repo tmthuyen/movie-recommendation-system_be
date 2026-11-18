@@ -61,9 +61,9 @@ class SimilarMoviesResponse(BaseModel):
     similarityScore: float
     score: float | None = None
     rank: int | None = None
-    title: str
+    title: str | None = None
     titleVi: str | None = None
-    overview: str
+    overview: str | None = None
     overviewVi: str | None = None
 
 

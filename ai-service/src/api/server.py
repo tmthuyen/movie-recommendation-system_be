@@ -111,9 +111,17 @@ async def lifespan(application: FastAPI):
     )
 
     # CF model: ALS
-    als_model = ALS_Implicit.load(path="data/training/models/als_model.npz")
     als_model_service = ALSModelService()
-    als_model_service.set_model(als_model)
+    als_model_path = Path("data/training/models/als_model.npz")
+    if als_model_path.is_file():
+        try:
+            als_model = ALS_Implicit.load(path=str(als_model_path))
+            als_model_service.set_model(als_model)
+            logger.info("Da nap CF model ALS tu %s", als_model_path)
+        except Exception as exc:
+            logger.warning("Khong the nap ALS model (%s): %s", als_model_path, exc)
+    else:
+        logger.warning("Chua co file model ALS tai %s (se dung fallback)", als_model_path)
 
     # recommend service
     recommend_svc = RecommendService(
@@ -122,6 +130,7 @@ async def lifespan(application: FastAPI):
         movie_vector_service=movie_vector_service,
         user_vector_service=user_vector_service,
         als_model_service=als_model_service,
+        bm25_index=bm25_index,
     )
 
     # =======================
@@ -133,7 +142,11 @@ async def lifespan(application: FastAPI):
     # =======================
 
     # khởi tạo các event handler
-    event_handler = MovieEventHandler(movie_vector_service=movie_vector_service)
+    event_handler = MovieEventHandler(
+        movie_vector_service=movie_vector_service,
+        recommend_service=recommend_svc,
+        bm25_index=bm25_index,
+    )
     interaction_handler = InteractionEventHandler(
         training_scheduler=training_scheduler,
         user_vector_service=user_vector_service,
