@@ -6,6 +6,7 @@ import AppContext from '@/contexts/AppContext';
 import ReactQueryProvider from '@/lib/ReactQueryProvider';
 import { ThemeProvider } from 'next-themes';
 import { AuthInit } from '@/components/auth/InitAuth';
+import { ChatWidget } from '@/components/chatbot/chat-widget';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -37,6 +38,7 @@ export default function RootLayout({
           <ReactQueryProvider>
             <AuthInit />
             <AppContext>{children}</AppContext>
+            <ChatWidget />
             <Toaster richColors position="top-right" />
           </ReactQueryProvider>
         </ThemeProvider>

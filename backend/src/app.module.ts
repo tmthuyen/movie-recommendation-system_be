@@ -41,6 +41,7 @@ import { FailedEvent } from './modules/failed-events/entities/failed-event.entit
 import { FailedEventsModule } from './modules/failed-events/failed-events.module';
 import { InteractionsModule } from './modules/interactions/interactions.module';
 import { RecommendationsModule } from './modules/recommendations/recommendations.module';
+import { ChatModule } from './modules/chat/chat.module';
 @Module({
   imports: [
     // Configuration
@@ -118,6 +119,7 @@ import { RecommendationsModule } from './modules/recommendations/recommendations
     FailedEventsModule,
     InteractionsModule,
     RecommendationsModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],
