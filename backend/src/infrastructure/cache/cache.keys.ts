@@ -4,16 +4,16 @@ const PREFIX = 'cache';
 
 /** TTL cache (giây). */
 export const CacheTtl = {
-  movieDetail: 60,
-  movieList: 180,
-  movieKeyword: 60,
+  movieDetail: 300,
+  movieList: 300,
+  movieKeyword: 300,
   lookup: 3600,
   interactionStats: 60,
   recommendation: 900,
 } as const;
 
 /** Số trang tối đa được cache cho list/search. */
-export const MAX_CACHED_PAGE = 3;
+export const MAX_CACHED_PAGE = 5;
 
 /** Số phim gợi ý lấy một lần từ ai-service. */
 export const RECOMMENDATION_WINDOW = 100;

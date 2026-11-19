@@ -32,7 +32,7 @@ export class RateLimitGuard implements CanActivate {
     const options: RateLimitOptions = specificOptions || {
       strategy: 'fixed-window',
       type: 'ip',
-      limit: 100,
+      limit: 50000,
       windowMs: 60000,
     };
 
