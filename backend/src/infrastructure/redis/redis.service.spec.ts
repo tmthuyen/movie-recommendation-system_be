@@ -6,24 +6,21 @@ type RedisMock = Record<
   | 'set'
   | 'get'
   | 'del'
-  | 'keys'
+  | 'mget'
   | 'sadd'
   | 'expire'
   | 'smembers'
   | 'srem'
   | 'hset'
-  | 'hget'
-  | 'hdel'
+  | 'hsetnx'
   | 'hgetall'
-  | 'lpush'
-  | 'rpush'
-  | 'lrange'
-  | 'lrem'
-  | 'lpop'
+  | 'hincrby'
   | 'multi'
+  | 'zadd'
   | 'zrangebyscore'
   | 'zcard'
-  | 'disconnect',
+  | 'zincrby'
+  | 'zrevrange',
   jest.Mock
 >;
 
@@ -49,34 +46,27 @@ describe('RedisService', () => {
       set: jest.fn().mockResolvedValue('OK'),
       get: jest.fn().mockResolvedValue(null),
       del: jest.fn().mockResolvedValue(1),
-      keys: jest.fn().mockResolvedValue([]),
+      mget: jest.fn().mockResolvedValue([]),
       sadd: jest.fn().mockResolvedValue(1),
       expire: jest.fn().mockResolvedValue(1),
       smembers: jest.fn().mockResolvedValue([]),
       srem: jest.fn().mockResolvedValue(1),
       hset: jest.fn().mockResolvedValue(1),
-      hget: jest.fn().mockResolvedValue(null),
-      hdel: jest.fn().mockResolvedValue(1),
+      hsetnx: jest.fn().mockResolvedValue(1),
       hgetall: jest.fn().mockResolvedValue({}),
-      lpush: jest.fn().mockResolvedValue(1),
-      rpush: jest.fn().mockResolvedValue(1),
-      lrange: jest.fn().mockResolvedValue([]),
-      lrem: jest.fn().mockResolvedValue(1),
-      lpop: jest.fn().mockResolvedValue(null),
+      hincrby: jest.fn().mockResolvedValue(1),
       multi: jest.fn(() => multi),
+      zadd: jest.fn().mockResolvedValue(1),
       zrangebyscore: jest.fn().mockResolvedValue([]),
       zcard: jest.fn().mockResolvedValue(0),
-      disconnect: jest.fn(),
+      zincrby: jest.fn().mockResolvedValue('1'),
+      zrevrange: jest.fn().mockResolvedValue([]),
     };
 
     service = new RedisService(client as unknown as Redis);
   });
 
   afterEach(() => jest.restoreAllMocks());
-
-  it('getClient trả đúng instance client được inject', () => {
-    expect(service.getClient()).toBe(client);
-  });
 
   describe('string', () => {
     it('set có TTL → dùng lệnh SET kèm EX', async () => {
@@ -106,30 +96,12 @@ describe('RedisService', () => {
 
       expect(client.del).toHaveBeenCalledWith('k');
     });
-  });
 
-  describe('keys', () => {
-    it('delByPattern xoá toàn bộ key khớp pattern', async () => {
-      client.keys.mockResolvedValue(['a:1', 'a:2']);
+    it('mget truyền danh sách key và trả kết quả theo thứ tự', async () => {
+      client.mget.mockResolvedValue(['a', null]);
 
-      await service.delByPattern('a:*');
-
-      expect(client.keys).toHaveBeenCalledWith('a:*');
-      expect(client.del).toHaveBeenCalledWith('a:1', 'a:2');
-    });
-
-    it('delByPattern không gọi DEL khi không có key nào', async () => {
-      client.keys.mockResolvedValue([]);
-
-      await service.delByPattern('a:*');
-
-      expect(client.del).not.toHaveBeenCalled();
-    });
-
-    it('getKeys trả danh sách key', async () => {
-      client.keys.mockResolvedValue(['x', 'y']);
-
-      await expect(service.getKeys('*')).resolves.toEqual(['x', 'y']);
+      await expect(service.mget(['k1', 'k2'])).resolves.toEqual(['a', null]);
+      expect(client.mget).toHaveBeenCalledWith('k1', 'k2');
     });
   });
 
@@ -161,36 +133,38 @@ describe('RedisService', () => {
       expect(client.expire).toHaveBeenCalledWith('user:1', 120);
     });
 
-    it('hget / hdel / hgetall chuyển tiếp đúng tham số', async () => {
-      client.hget.mockResolvedValue('A');
+    it('hgetall chuyển tiếp đúng tham số', async () => {
       client.hgetall.mockResolvedValue({ name: 'A' });
 
-      await expect(service.hget('user:1', 'name')).resolves.toBe('A');
-      await service.hdel('user:1', 'name');
       await expect(service.hgetall('user:1')).resolves.toEqual({ name: 'A' });
-
-      expect(client.hget).toHaveBeenCalledWith('user:1', 'name');
-      expect(client.hdel).toHaveBeenCalledWith('user:1', 'name');
       expect(client.hgetall).toHaveBeenCalledWith('user:1');
     });
-  });
 
-  describe('list', () => {
-    it('lpush / rpush / lrange / lrem / lpop chuyển tiếp đúng tham số', async () => {
-      client.lrange.mockResolvedValue(['a', 'b']);
-      client.lpop.mockResolvedValue('a');
+    it('hincrby trả giá trị số', async () => {
+      client.hincrby.mockResolvedValue('7');
 
-      await service.lpush('queue', 'a');
-      await service.rpush('queue', 'b');
-      await expect(service.lrange('queue', 0, -1)).resolves.toEqual(['a', 'b']);
-      await service.lrem('queue', 1, 'a');
-      await expect(service.lpop('queue')).resolves.toBe('a');
+      await expect(service.hincrby('user:1', 'likeCount', 1)).resolves.toBe(7);
+      expect(client.hincrby).toHaveBeenCalledWith('user:1', 'likeCount', 1);
+    });
 
-      expect(client.lpush).toHaveBeenCalledWith('queue', 'a');
-      expect(client.rpush).toHaveBeenCalledWith('queue', 'b');
-      expect(client.lrange).toHaveBeenCalledWith('queue', 0, -1);
-      expect(client.lrem).toHaveBeenCalledWith('queue', 1, 'a');
-      expect(client.lpop).toHaveBeenCalledWith('queue');
+    it('hsetIfAbsent chỉ ghi hash khi HSETNX thành công', async () => {
+      const obj = { likeCount: '0' };
+      client.hsetnx.mockResolvedValueOnce(1);
+
+      await service.hsetIfAbsent('user:1', obj, 120);
+
+      expect(client.hsetnx).toHaveBeenCalledWith('user:1', 'likeCount', '0');
+      expect(client.hset).toHaveBeenCalledWith('user:1', obj);
+      expect(client.expire).toHaveBeenCalledWith('user:1', 120);
+    });
+
+    it('hsetIfAbsent bỏ qua khi field đã tồn tại', async () => {
+      client.hsetnx.mockResolvedValueOnce(0);
+
+      await service.hsetIfAbsent('user:1', { likeCount: '0' }, 120);
+
+      expect(client.hset).not.toHaveBeenCalled();
+      expect(client.expire).not.toHaveBeenCalled();
     });
   });
 
@@ -216,6 +190,12 @@ describe('RedisService', () => {
       expect(multi.exec).toHaveBeenCalledTimes(1);
     });
 
+    it('zadd bỏ qua khi không có entry', async () => {
+      await service.zadd('rec:semantic:k100', [], 900);
+
+      expect(client.multi).not.toHaveBeenCalled();
+    });
+
     it('zrangeByScore truyền LIMIT 0 limit', async () => {
       client.zrangebyscore.mockResolvedValue(['a', 'b']);
 
@@ -238,17 +218,50 @@ describe('RedisService', () => {
       await expect(service.zcard('rec:semantic:k100')).resolves.toBe(5);
       expect(client.zcard).toHaveBeenCalledWith('rec:semantic:k100');
     });
+
+    it('zincrby trả điểm mới và set expire', async () => {
+      client.zincrby.mockResolvedValue('3');
+
+      await expect(
+        service.zincrby('stats:hot:view:all', 1, '1', 3600),
+      ).resolves.toBe(3);
+      expect(client.zincrby).toHaveBeenCalledWith('stats:hot:view:all', 1, '1');
+      expect(client.expire).toHaveBeenCalledWith('stats:hot:view:all', 3600);
+    });
+
+    it('zaddMax chỉ ghi điểm lớn hơn điểm cũ', async () => {
+      await service.zaddMax('stats:hot:view:all', 5, '1', 3600);
+
+      expect(client.zadd).toHaveBeenCalledWith(
+        'stats:hot:view:all',
+        'GT',
+        5,
+        '1',
+      );
+      expect(client.expire).toHaveBeenCalledWith('stats:hot:view:all', 3600);
+    });
+
+    it('zrevrangeWithScores trả danh sách member kèm điểm', async () => {
+      client.zrevrange.mockResolvedValue(['1', '5', '2', '3']);
+
+      await expect(
+        service.zrevrangeWithScores('stats:hot:view:all', 0, 9),
+      ).resolves.toEqual([
+        { member: '1', score: 5 },
+        { member: '2', score: 3 },
+      ]);
+      expect(client.zrevrange).toHaveBeenCalledWith(
+        'stats:hot:view:all',
+        0,
+        9,
+        'WITHSCORES',
+      );
+    });
   });
 
   it('lỗi từ client được ném lại cho caller (không nuốt)', async () => {
     client.get.mockRejectedValue(new Error('connection lost'));
 
     await expect(service.get('k')).rejects.toThrow('connection lost');
-  });
-
-  it('onModuleDestroy ngắt kết nối client', () => {
-    service.onModuleDestroy();
-
-    expect(client.disconnect).toHaveBeenCalledTimes(1);
   });
 });

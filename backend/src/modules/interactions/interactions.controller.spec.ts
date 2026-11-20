@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { InteractionsController } from './interactions.controller';
 import { InteractionsService } from './interactions.service';
@@ -8,6 +9,7 @@ describe('InteractionsController', () => {
     findAll: jest.Mock;
     getHistory: jest.Mock;
     getFavorites: jest.Mock;
+    getMovieRanking: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -15,6 +17,7 @@ describe('InteractionsController', () => {
       findAll: jest.fn(),
       getHistory: jest.fn(),
       getFavorites: jest.fn(),
+      getMovieRanking: jest.fn().mockResolvedValue([{ movieId: 3, score: 9 }]),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -74,6 +77,58 @@ describe('InteractionsController', () => {
         page: 2,
         limit: 5,
       });
+    });
+  });
+
+  describe('xếp hạng hot/popular/top', () => {
+    it('popular dùng period all và trả envelope có pagination', async () => {
+      const response = await controller.getPopular('5');
+
+      expect(service.getMovieRanking).toHaveBeenCalledWith(
+        'popular',
+        'all',
+        'all',
+        5,
+      );
+      expect(response.result).toEqual([{ movieId: 3, score: 9 }]);
+      expect(response.pagination).toEqual({
+        total: 1,
+        page: 1,
+        limit: 5,
+        totalPages: 1,
+      });
+    });
+
+    it('hot nhận period day/week/month', async () => {
+      await controller.getHot('week', '10');
+      expect(service.getMovieRanking).toHaveBeenCalledWith(
+        'hot',
+        'week',
+        'week',
+        10,
+      );
+    });
+
+    it('top nhận metric + period', async () => {
+      await controller.getTop('rating', 'month', '20');
+      expect(service.getMovieRanking).toHaveBeenCalledWith(
+        'top',
+        'rating',
+        'month',
+        20,
+      );
+    });
+
+    it('từ chối metric/period/limit sai', async () => {
+      await expect(controller.getPopular('0')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      await expect(controller.getHot('all')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      await expect(controller.getTop('like', 'nope')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
     });
   });
 });

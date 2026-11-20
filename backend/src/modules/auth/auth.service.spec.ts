@@ -8,7 +8,7 @@ import { AuthService } from './auth.service';
 import { UsersService } from '@/modules/users/users.service';
 import { RolesService } from '@/modules/roles/roles.service';
 import { SessionService } from './session.service';
-import { RedisService } from '@/infrastructure/redis/redis.service';
+import type { IRedisService } from '@/infrastructure/redis/redis.service';
 import { UserProducer } from '@/infrastructure/messaging/producers/user.producer';
 import { IMailService } from '@/infrastructure/mail/mail.service';
 import { User, UserStatus } from '@/modules/users/entities/user.entity';
@@ -42,7 +42,7 @@ describe('AuthService', () => {
   let rolesService: Record<string, jest.Mock>;
   let jwtService: { sign: jest.Mock };
   let sessionService: Record<string, jest.Mock>;
-  let redisService: Record<string, jest.Mock>;
+  let redis: Record<string, jest.Mock>;
   let userProducer: Record<string, jest.Mock>;
   let configService: { get: jest.Mock };
   let mailService: Record<string, jest.Mock>;
@@ -69,7 +69,7 @@ describe('AuthService', () => {
       generateOpaqueToken: jest.fn().mockReturnValue('opaque-token'),
       getAllSessionsForUser: jest.fn(),
     };
-    redisService = {
+    redis = {
       set: jest.fn(),
       get: jest.fn(),
       del: jest.fn(),
@@ -90,7 +90,7 @@ describe('AuthService', () => {
       rolesService as unknown as RolesService,
       jwtService as unknown as JwtService,
       sessionService as unknown as SessionService,
-      redisService as unknown as RedisService,
+      redis as unknown as IRedisService,
       userProducer as unknown as UserProducer,
       configService as unknown as ConfigService,
       mailService as unknown as IMailService,
@@ -258,7 +258,7 @@ describe('AuthService', () => {
 
   describe('verifyEmail', () => {
     it('token không tồn tại → BadRequestException', async () => {
-      redisService.get.mockResolvedValue(null);
+      redis.get.mockResolvedValue(null);
 
       await expect(service.verifyEmail('bad')).rejects.toBeInstanceOf(
         BadRequestException,
@@ -266,7 +266,7 @@ describe('AuthService', () => {
     });
 
     it('token hợp lệ → active hoá user, xoá token, publish event', async () => {
-      redisService.get.mockResolvedValue('1');
+      redis.get.mockResolvedValue('1');
       usersService.findByIdWithRoles.mockResolvedValue(activeUser());
 
       await service.verifyEmail('good');
@@ -276,7 +276,7 @@ describe('AuthService', () => {
         UserStatus.ACTIVE,
         true,
       );
-      expect(redisService.del).toHaveBeenCalledWith('auth:verify_email:good');
+      expect(redis.del).toHaveBeenCalledWith('auth:verify_email:good');
       expect(userProducer.publishEmailVerified).toHaveBeenCalledWith({
         userId: 1,
         email: 'a@example.com',
@@ -299,7 +299,7 @@ describe('AuthService', () => {
 
       await service.forgotPassword('a@example.com');
 
-      expect(redisService.set).toHaveBeenCalledWith(
+      expect(redis.set).toHaveBeenCalledWith(
         'auth:reset_password:opaque-token',
         '1',
         15 * 60,
@@ -320,7 +320,7 @@ describe('AuthService', () => {
     });
 
     it('token reset hết hạn → BadRequestException', async () => {
-      redisService.get.mockResolvedValue(null);
+      redis.get.mockResolvedValue(null);
 
       await expect(
         service.resetPassword({
@@ -332,7 +332,7 @@ describe('AuthService', () => {
     });
 
     it('reset thành công → đổi mật khẩu, logout toàn bộ session', async () => {
-      redisService.get.mockResolvedValue('1');
+      redis.get.mockResolvedValue('1');
       bcryptHash.mockResolvedValue('hashed-new');
 
       await service.resetPassword({
@@ -346,7 +346,7 @@ describe('AuthService', () => {
         'hashed-new',
       );
       expect(sessionService.removeAllSessions).toHaveBeenCalledWith('1');
-      expect(redisService.del).toHaveBeenCalledWith('auth:reset_password:t');
+      expect(redis.del).toHaveBeenCalledWith('auth:reset_password:t');
     });
   });
 
@@ -447,7 +447,7 @@ describe('AuthService', () => {
       expect(usersService.create).toHaveBeenCalledWith(
         expect.objectContaining({ roleIds: [3], password: 'hashed' }),
       );
-      expect(redisService.set).toHaveBeenCalledWith(
+      expect(redis.set).toHaveBeenCalledWith(
         'auth:verify_email:opaque-token',
         '5',
         24 * 60 * 60,

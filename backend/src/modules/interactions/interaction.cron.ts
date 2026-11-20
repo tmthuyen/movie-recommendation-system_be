@@ -8,7 +8,8 @@ import {
   type IRedisLockService,
   REDIS_LOCK_SERVICE,
 } from '@/infrastructure/redis/redis-lock.service';
-import { RedisService } from '@/infrastructure/redis/redis.service';
+import { REDIS_SERVICE } from '@/infrastructure/redis/redis.service';
+import type { IRedisService } from '@/infrastructure/redis/redis.service';
 import {
   type IStorageService,
   STORAGE_SERVICE,
@@ -29,7 +30,7 @@ export class InteractionCronService {
     private readonly interactionProducer: InteractionProducer,
     @Inject(REDIS_LOCK_SERVICE)
     private readonly redisLockService: IRedisLockService,
-    private readonly redisService: RedisService,
+    @Inject(REDIS_SERVICE) private readonly redis: IRedisService,
     @Inject(STORAGE_SERVICE)
     private readonly storageService: IStorageService,
   ) {}
@@ -52,7 +53,7 @@ export class InteractionCronService {
       this.logger.log('Starting batch interaction fetch for AI training...');
 
       // lấy checkpoint mới nhất nếu có
-      const checkpoint = await this.redisService.hgetall(this.checkpointKey);
+      const checkpoint = await this.redis.hgetall(this.checkpointKey);
       this.logger.log(
         `Fetched checkpoint from Redis: ${JSON.stringify(checkpoint)}`,
       );
@@ -206,7 +207,7 @@ export class InteractionCronService {
       };
       const checkpointTtlSeconds = 24 * 60 * 60; // 1 day
 
-      await this.redisService.hset(
+      await this.redis.hset(
         this.checkpointKey,
         checkpoint,
         checkpointTtlSeconds,

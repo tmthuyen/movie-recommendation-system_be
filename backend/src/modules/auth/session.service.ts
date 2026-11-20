@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { RedisService } from '@/infrastructure/redis/redis.service';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { REDIS_SERVICE } from '@/infrastructure/redis/redis.service';
+import type { IRedisService } from '@/infrastructure/redis/redis.service';
 import * as crypto from 'crypto';
 
 export type SessionData = {
@@ -19,7 +20,7 @@ export type SessionData = {
 @Injectable()
 export class SessionService {
   private readonly logger = new Logger(SessionService.name);
-  constructor(private readonly redisService: RedisService) {}
+  constructor(@Inject(REDIS_SERVICE) private readonly redis: IRedisService) {}
 
   private getSessionKey(sessionId: string): string {
     return `auth:session:${sessionId}`;
@@ -67,14 +68,14 @@ export class SessionService {
     };
 
     // auth:session:<sessionId> -> SessionData
-    await this.redisService.set(
+    await this.redis.set(
       this.getSessionKey(sessionId),
       JSON.stringify(session),
       ttlSeconds,
     );
 
     // auth:user:<userId>:sessions -> Set of sessionIds
-    await this.redisService.sadd(
+    await this.redis.sadd(
       this.getUserSessionsKey(userId),
       sessionId,
       ttlSeconds,
@@ -83,7 +84,7 @@ export class SessionService {
   }
 
   async getSession(sessionId: string): Promise<SessionData | null> {
-    const data = await this.redisService.get(this.getSessionKey(sessionId));
+    const data = await this.redis.get(this.getSessionKey(sessionId));
     if (!data) return null;
     return JSON.parse(data) as SessionData;
   }
@@ -98,7 +99,7 @@ export class SessionService {
   //     (sessionData.expiresAt - Date.now()) / 1000,
   //   );
   //   if (remainingTtl > 0) {
-  //     await this.redisService.set(
+  //     await this.redis.set(
   //       this.getSessionKey(userId, deviceId),
   //       JSON.stringify(sessionData),
   //       remainingTtl,
@@ -115,15 +116,11 @@ export class SessionService {
       return;
     }
     if (session && session.jti) {
-      await this.redisService.set(
-        this.getBlacklistKey(session.jti),
-        'true',
-        3600,
-      ); // Blacklist for 1h
+      await this.redis.set(this.getBlacklistKey(session.jti), 'true', 3600); // Blacklist for 1h
     }
 
     // Remove the session from Redis
-    await this.redisService.del(this.getSessionKey(sessionId));
+    await this.redis.del(this.getSessionKey(sessionId));
     this.logger.log(
       `[Session Removed] Session: ${this.getSessionKey(sessionId)} removed.`,
     );
@@ -132,19 +129,15 @@ export class SessionService {
     this.logger.log(
       '[Before Sessions]' +
         JSON.stringify(
-          await this.redisService.smembers(
-            this.getUserSessionsKey(session.userId),
-          ),
+          await this.redis.smembers(this.getUserSessionsKey(session.userId)),
         ),
     );
     const userSessionsKey = this.getUserSessionsKey(session.userId);
-    await this.redisService.srem(userSessionsKey, sessionId);
+    await this.redis.srem(userSessionsKey, sessionId);
     this.logger.log(
       '[After Sessions]' +
         JSON.stringify(
-          await this.redisService.smembers(
-            this.getUserSessionsKey(session.userId),
-          ),
+          await this.redis.smembers(this.getUserSessionsKey(session.userId)),
         ),
     );
 
@@ -155,7 +148,7 @@ export class SessionService {
 
   // all sessions of a user
   async getAllSessionsForUser(userId: string): Promise<SessionData[]> {
-    const sessionIds = await this.redisService.smembers(
+    const sessionIds = await this.redis.smembers(
       this.getUserSessionsKey(userId),
     );
     const sessions: SessionData[] = [];
@@ -171,7 +164,7 @@ export class SessionService {
   // Remove all sessions for a user
   async removeAllSessions(userId: string): Promise<void> {
     const userSessionsKey = this.getUserSessionsKey(userId);
-    const sessionIds = await this.redisService.smembers(userSessionsKey);
+    const sessionIds = await this.redis.smembers(userSessionsKey);
     for (const sessionId of sessionIds) {
       await this.removeSession(sessionId);
     }

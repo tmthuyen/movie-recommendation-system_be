@@ -21,7 +21,7 @@ describe('CommentsService', () => {
   let dataSource: { transaction: jest.Mock };
   let gateway: Record<string, jest.Mock>;
   let producer: { publishInteractionCreated: jest.Mock };
-  let statsService: { getStats: jest.Mock };
+  let statsService: { getStats: jest.Mock; recordComment: jest.Mock };
 
   const stats = { likeCount: 1, commentCount: 4, viewCount: 7 };
 
@@ -51,7 +51,10 @@ describe('CommentsService', () => {
       broadcastInteraction: jest.fn(),
     };
     producer = { publishInteractionCreated: jest.fn() };
-    statsService = { getStats: jest.fn().mockResolvedValue(stats) };
+    statsService = {
+      getStats: jest.fn().mockResolvedValue(stats),
+      recordComment: jest.fn().mockResolvedValue(stats),
+    };
 
     service = new CommentsService(
       repo as unknown as ICommentRepository,
@@ -191,11 +194,12 @@ describe('CommentsService', () => {
     });
 
     it('remove xoá theo id và trả success', async () => {
-      repo.findById.mockResolvedValue({ id: 5 });
+      repo.findById.mockResolvedValue({ id: 5, movie: { id: 7 } });
       repo.remove.mockResolvedValue(undefined);
 
       await expect(service.remove(5)).resolves.toEqual({ success: true });
       expect(repo.remove).toHaveBeenCalledWith(5);
+      expect(statsService.recordComment).toHaveBeenCalledWith(7, -1);
     });
   });
 });

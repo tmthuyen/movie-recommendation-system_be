@@ -4,12 +4,14 @@ const PREFIX = 'cache';
 
 /** TTL cache (giây). */
 export const CacheTtl = {
-  movieDetail: 300,
-  movieList: 300,
-  movieKeyword: 300,
+  movieDetail: 43200,
+  movieList: 600,
+  movieKeyword: 600,
   lookup: 3600,
-  interactionStats: 60,
-  recommendation: 900,
+  interactionStats: 604800,
+  recommendation: 1800,
+  statsDetail: 604800,
+  statsHot: 2592000,
 } as const;
 
 /** Số trang tối đa được cache cho list/search. */
@@ -17,6 +19,16 @@ export const MAX_CACHED_PAGE = 5;
 
 /** Số phim gợi ý lấy một lần từ ai-service. */
 export const RECOMMENDATION_WINDOW = 100;
+
+/** Chuẩn hoá keyword cho cache key: bỏ dấu, lower, gộp khoảng trắng. */
+export function normalizeCacheKeyword(keyword: string): string {
+  return (keyword ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
 
 function buildKey(...parts: (string | number | undefined)[]): string {
   return [
@@ -125,7 +137,7 @@ export const CacheKeys = {
       buildKey(
         'recommendation',
         'semantic',
-        `q${hashFilters({ keyword: keyword.trim().toLowerCase() })}`,
+        `q${hashFilters({ keyword: normalizeCacheKeyword(keyword) })}`,
         `k${window}`,
         `v${version}`,
       ),
@@ -133,10 +145,26 @@ export const CacheKeys = {
       buildKey(
         'recommendation',
         'lexical-rerank',
-        `q${hashFilters({ keyword: keyword.trim().toLowerCase() })}`,
+        `q${hashFilters({ keyword: normalizeCacheKeyword(keyword) })}`,
+        `k${window}`,
+        `v${version}`,
+      ),
+    forYou: (userId: string, window: number, version: number) =>
+      buildKey(
+        'recommendation',
+        'for-you',
+        `u${hashFilters({ userId })}`,
         `k${window}`,
         `v${version}`,
       ),
     globalVersion: () => buildKey('recommendation', 'ver', 'global'),
+  },
+  stats: {
+    detail: (movieId: number) => buildKey('stats', 'movie', movieId),
+    popular: () => buildKey('stats', 'popular', 'all'),
+    hot: (period: string) => buildKey('stats', 'hot', period),
+    top: (metric: string, period: string) =>
+      buildKey('stats', 'top', metric, period),
+    dirty: () => buildKey('stats', 'dirty'),
   },
 } as const;

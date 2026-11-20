@@ -57,7 +57,7 @@ describe('RateLimitGuard', () => {
   afterEach(() => jest.restoreAllMocks());
 
   describe('không có decorator (global limit)', () => {
-    it('áp dụng mặc định 100 req/60s theo IP và key có hậu tố :global', async () => {
+    it('áp dụng mặc định 50000 req/60s theo IP và key có hậu tố :global', async () => {
       decorate(undefined);
       const context = makeContext({ ip: '10.0.0.1', path: '/api/movies' });
 
@@ -69,7 +69,7 @@ describe('RateLimitGuard', () => {
       ]);
       expect(rateLimitService.checkFixedWindow).toHaveBeenCalledWith(
         'rl:fixed-window:ip:10.0.0.1:global',
-        100,
+        50000,
         60000,
       );
     });
@@ -82,7 +82,7 @@ describe('RateLimitGuard', () => {
 
       expect(rateLimitService.checkFixedWindow).toHaveBeenCalledWith(
         'rl:fixed-window:ip:unknown:global',
-        100,
+        50000,
         60000,
       );
     });

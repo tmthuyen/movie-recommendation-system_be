@@ -12,8 +12,8 @@ import {
 } from '@/modules/interactions/entities/interaction.entity';
 import { Rating } from './entities/rating.entity';
 import { EventsGateway } from '@/modules/events/events.gateway';
-import { Movie } from '@/modules/movies/entities/movie.entity';
 import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
+import { MovieInteractionStatsService } from '@/modules/interactions/movie-interaction-stats.service';
 
 @Injectable()
 export class RatingsService {
@@ -23,14 +23,14 @@ export class RatingsService {
     private readonly dataSource: DataSource,
     private readonly eventsGateway: EventsGateway,
     private readonly interactionProducer: InteractionProducer,
+    private readonly statsService: MovieInteractionStatsService,
   ) {}
 
   async create(userId: string, createRatingDto: CreateRatingDto) {
     const { movieId, rating } = createRatingDto;
 
-    const { savedRating, voteCount, voteAverage } =
+    const { savedRating, isNewRating, previousScore } =
       await this.dataSource.transaction(async manager => {
-        // Check existing rating for upsert
         const existingRating = await manager.findOne(Rating, {
           where: {
             user: { id: userId },
@@ -39,23 +39,30 @@ export class RatingsService {
         });
 
         let saved: Rating;
+        let isNewRating: boolean;
+        let previousScore: number;
+
         if (existingRating) {
+          previousScore = Number(existingRating.rating) || 0;
+          isNewRating = false;
           existingRating.rating = rating;
           existingRating.timestamp = new Date();
           saved = await manager.save(existingRating);
         } else {
-          // Create Rating
-          const newRating = manager.create(Rating, {
-            rating,
-            movie: { id: movieId } as any,
-            user: { id: userId } as any,
-            timestamp: new Date(),
-          });
-          saved = await manager.save(newRating);
+          previousScore = 0;
+          isNewRating = true;
+          saved = await manager.save(
+            manager.create(Rating, {
+              rating,
+              movie: { id: movieId } as any,
+              user: { id: userId } as any,
+              timestamp: new Date(),
+            }),
+          );
         }
 
         // Upsert Interaction — score = đúng số sao người dùng nhập (band 5)
-        let interaction = await manager.findOne(Interaction, {
+        const interaction = await manager.findOne(Interaction, {
           where: {
             user: { id: userId },
             movie: { id: movieId },
@@ -66,44 +73,31 @@ export class RatingsService {
           interaction.score = rating;
           await manager.save(interaction);
         } else {
-          interaction = manager.create(Interaction, {
-            score: rating,
-            type: InteractionType.RATING,
-            movie: { id: movieId } as any,
-            user: { id: userId } as any,
-          });
-          await manager.save(interaction);
+          await manager.save(
+            manager.create(Interaction, {
+              score: rating,
+              type: InteractionType.RATING,
+              movie: { id: movieId } as any,
+              user: { id: userId } as any,
+            }),
+          );
         }
 
-        // Recalculate average and count for the movie
-        const result = await manager
-          .createQueryBuilder(Rating, 'rating')
-          .select('COUNT(rating.id)', 'count')
-          .addSelect('AVG(rating.rating)', 'average')
-          .where('rating.movie_id = :movieId', { movieId })
-          .getRawOne();
-
-        const count = parseInt(result.count || '0', 10);
-        const average = parseFloat(
-          parseFloat(result.average || '0').toFixed(2),
-        );
-
-        await manager.update(Movie, movieId, {
-          voteCount: count,
-          voteAverage: average,
-        });
-
-        return {
-          savedRating: saved,
-          voteCount: count,
-          voteAverage: average,
-        };
+        return { savedRating: saved, isNewRating, previousScore };
       });
 
-    // Chỉ broadcast/publish SAU khi transaction commit.
+    const stats = await this.statsService.recordRating(
+      movieId,
+      isNewRating ? 1 : 0,
+      Number(rating) - previousScore,
+    );
+
     this.eventsGateway.broadcastRating(movieId, {
       ...savedRating,
-      movieStats: { voteCount, voteAverage },
+      movieStats: {
+        voteCount: stats.ratingCount,
+        voteAverage: stats.ratingAvg,
+      },
     });
 
     await this.interactionProducer.publishInteractionCreated({

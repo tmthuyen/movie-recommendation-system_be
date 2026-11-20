@@ -9,7 +9,7 @@ import {
   InteractionType,
 } from '@/modules/interactions/entities/interaction.entity';
 import { Rating } from './entities/rating.entity';
-import { Movie } from '@/modules/movies/entities/movie.entity';
+import { MovieInteractionStatsService } from '@/modules/interactions/movie-interaction-stats.service';
 
 describe('RatingsService', () => {
   let service: RatingsService;
@@ -30,6 +30,7 @@ describe('RatingsService', () => {
   let dataSource: { transaction: jest.Mock };
   let gateway: Record<string, jest.Mock>;
   let producer: { publishInteractionCreated: jest.Mock };
+  let statsService: { recordRating: jest.Mock };
 
   beforeEach(() => {
     rawQueryBuilder = {
@@ -66,12 +67,24 @@ describe('RatingsService', () => {
     };
     gateway = { broadcastRating: jest.fn() };
     producer = { publishInteractionCreated: jest.fn() };
+    statsService = {
+      recordRating: jest.fn().mockResolvedValue({
+        likeCount: 0,
+        commentCount: 0,
+        viewCount: 0,
+        ratingCount: 4,
+        voteAverage: 3.76,
+        ratingTotal: 15.04,
+        ratingAvg: 3.76,
+      }),
+    };
 
     service = new RatingsService(
       repo as unknown as IRatingRepository,
       dataSource as unknown as DataSource,
       gateway as unknown as EventsGateway,
       producer as unknown as InteractionProducer,
+      statsService as unknown as MovieInteractionStatsService,
     );
   });
 
@@ -125,15 +138,14 @@ describe('RatingsService', () => {
       );
     });
 
-    it('tính lại voteCount/voteAverage (làm tròn 2 chữ số) và cập nhật movie', async () => {
+    it('rating chỉ cập nhật Redis, không update movie trong transaction', async () => {
       manager.findOne.mockResolvedValue(null);
 
       await service.create('user-1', { movieId: 3, rating: 4 });
 
-      expect(manager.update).toHaveBeenCalledWith(Movie, 3, {
-        voteCount: 4,
-        voteAverage: 3.76,
-      });
+      expect(statsService.recordRating).toHaveBeenCalledWith(3, 1, 4);
+      expect(manager.update).not.toHaveBeenCalled();
+      expect(manager.createQueryBuilder).not.toHaveBeenCalled();
     });
 
     it('broadcast rating kèm movieStats và publish event sau commit', async () => {

@@ -33,9 +33,10 @@ from services.mapping_service import mapping_service
 from services.movie_vector_service import MovieVectorService
 from services.recommend_service import RecommendService
 from services.user_vector_service import UserVectorService
+from utils.logger import setup_logger
 
 settings = get_settings()
-logger = logging.getLogger(__name__)
+logger = setup_logger(name="FastAPI-Recommendation")
 
 
 @asynccontextmanager

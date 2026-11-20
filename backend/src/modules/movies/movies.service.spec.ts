@@ -13,6 +13,7 @@ import {
 } from '@/modules/interactions/entities/interaction.entity';
 import { Movie } from './entities/movie.entity';
 import { FakeCacheService } from '@/infrastructure/cache/testing/fake-cache.service';
+import type { IRedisService } from '@/infrastructure/redis/redis.service';
 
 describe('MoviesService', () => {
   let service: MoviesService;
@@ -38,7 +39,7 @@ describe('MoviesService', () => {
   let movieProducer: Record<string, jest.Mock>;
   let eventsGateway: Record<string, jest.Mock>;
   let interactionProducer: { publishInteractionCreated: jest.Mock };
-  let statsService: { getStats: jest.Mock };
+  let statsService: { getStats: jest.Mock; recordView: jest.Mock };
 
   // `sort` là field bắt buộc trong MovieSearchRequestDto (có default ở controller),
   // nên test helper cast để chỉ truyền phần cần kiểm tra.
@@ -97,10 +98,15 @@ describe('MoviesService', () => {
     };
     interactionProducer = { publishInteractionCreated: jest.fn() };
     statsService = {
-      getStats: jest.fn().mockResolvedValue({
+      getStats: jest.fn(),
+      recordView: jest.fn().mockResolvedValue({
         likeCount: 2,
         commentCount: 1,
-        viewCount: 9,
+        viewCount: 6,
+        ratingCount: 1,
+        voteAverage: 4,
+        ratingTotal: 4,
+        ratingAvg: 4,
       }),
     };
 
@@ -114,6 +120,7 @@ describe('MoviesService', () => {
       interactionProducer as unknown as InteractionProducer,
       statsService as unknown as MovieInteractionStatsService,
       cache,
+      { mget: jest.fn().mockResolvedValue([]) } as unknown as IRedisService,
     );
 
     jest.spyOn(service['logger'], 'log').mockImplementation(() => undefined);
@@ -157,14 +164,14 @@ describe('MoviesService', () => {
     it('findAll trang > 3 thì không cache', async () => {
       repo.findAll.mockResolvedValue({
         data: [],
-        page: 4,
+        page: 6,
         limit: 10,
-        total: 40,
-        totalPages: 4,
+        total: 60,
+        totalPages: 6,
       });
 
-      await service.findAll({ page: 4, limit: 10 });
-      await service.findAll({ page: 4, limit: 10 });
+      await service.findAll({ page: 6, limit: 10 });
+      await service.findAll({ page: 6, limit: 10 });
 
       expect(repo.findAll).toHaveBeenCalledTimes(2);
       expect(cache.setCalls).toHaveLength(0);
@@ -316,7 +323,8 @@ describe('MoviesService', () => {
 
       const res = await service.incrementViewCount(1);
 
-      expect(manager.update).toHaveBeenCalledWith(Movie, 1, { viewCount: 6 });
+      expect(statsService.recordView).toHaveBeenCalledWith(1);
+      expect(manager.update).not.toHaveBeenCalled();
       expect(eventsGateway.broadcastViewCount).toHaveBeenCalledWith(1, 6);
       expect(eventsGateway.broadcastInteraction).not.toHaveBeenCalled();
       expect(

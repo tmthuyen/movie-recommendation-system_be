@@ -11,7 +11,7 @@ import { IInteractionRepository } from './interactions.repository';
 import { ISeedRatingRepository } from '../ratings/seed-ratings.repository';
 import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
 import { IRedisLockService } from '@/infrastructure/redis/redis-lock.service';
-import { RedisService } from '@/infrastructure/redis/redis.service';
+import type { IRedisService } from '@/infrastructure/redis/redis.service';
 import { IStorageService } from '@/infrastructure/storage/storage.service';
 import { InteractionType } from './entities/interaction.entity';
 
@@ -21,7 +21,7 @@ describe('InteractionCronService', () => {
   let seedRepo: Record<string, jest.Mock>;
   let producer: { publishTrainingRequest: jest.Mock };
   let lockService: { runWithLock: jest.Mock };
-  let redisService: { hgetall: jest.Mock; hset: jest.Mock };
+  let redis: { hgetall: jest.Mock; hset: jest.Mock };
   let storage: { uploadBuffer: jest.Mock };
   let loggerError: jest.SpyInstance;
 
@@ -47,7 +47,7 @@ describe('InteractionCronService', () => {
         ): Promise<void> => callback(),
       ),
     };
-    redisService = {
+    redis = {
       hgetall: jest.fn().mockResolvedValue({}),
       hset: jest.fn(),
     };
@@ -62,7 +62,7 @@ describe('InteractionCronService', () => {
       seedRepo as unknown as ISeedRatingRepository,
       producer as unknown as InteractionProducer,
       lockService as unknown as IRedisLockService,
-      redisService as unknown as RedisService,
+      redis as unknown as IRedisService,
       storage as unknown as IStorageService,
     );
 
@@ -75,7 +75,7 @@ describe('InteractionCronService', () => {
   afterEach(() => jest.restoreAllMocks());
 
   it('gửi batch mới, lưu checkpoint và publish training request', async () => {
-    redisService.hgetall.mockResolvedValue({
+    redis.hgetall.mockResolvedValue({
       lastCreatedAt: '2025-12-31T00:00:00.000Z',
       lastId: '9',
     });
@@ -113,7 +113,7 @@ describe('InteractionCronService', () => {
     expect(uploadArgs[0].toString('utf-8')).toContain('"userId":"u1"');
     expect(uploadArgs[0].toString('utf-8')).toContain('"movieId":2');
 
-    expect(redisService.hset).toHaveBeenCalledWith(
+    expect(redis.hset).toHaveBeenCalledWith(
       'interaction:training:checkpoint',
       {
         lastCreatedAt: '2026-01-01T00:00:00.000Z',
@@ -141,7 +141,7 @@ describe('InteractionCronService', () => {
       10000,
     );
     expect(storage.uploadBuffer).not.toHaveBeenCalled();
-    expect(redisService.hset).not.toHaveBeenCalled();
+    expect(redis.hset).not.toHaveBeenCalled();
     expect(producer.publishTrainingRequest).toHaveBeenCalledTimes(1);
   });
 

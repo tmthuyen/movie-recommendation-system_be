@@ -1,16 +1,22 @@
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
-import { RedisService } from '@/infrastructure/redis/redis.service';
+import { REDIS_SERVICE } from '@/infrastructure/redis/redis.service';
+import type { IRedisService } from '@/infrastructure/redis/redis.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   private readonly logger = new Logger(JwtStrategy.name);
   constructor(
     private readonly configSv: ConfigService,
-    private readonly redisService: RedisService,
+    @Inject(REDIS_SERVICE) private readonly redis: IRedisService,
   ) {
     super({
       // Lấy token từ header Authorization
@@ -24,9 +30,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: JwtPayload) {
     // check jti in redis blacklist
     // this.logger.log(`[JWT] Validating token with jti: ${payload.jti}`);
-    const isBlacklisted = await this.redisService.get(
-      `auth:blacklist:${payload.jti}`,
-    );
+    const isBlacklisted = await this.redis.get(`auth:blacklist:${payload.jti}`);
     if (isBlacklisted) {
       this.logger.warn(`[JWT] Token đã bị thu hồi, jti: ${payload.jti}`);
       throw new UnauthorizedException('Token đã bị thu hồi.');
@@ -34,7 +38,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     // check sessionId in redis
     // this.logger.log(`[JWT] Validating sessionId: ${payload.sessionId}`);
-    const sessionData = await this.redisService.get(
+    const sessionData = await this.redis.get(
       `auth:session:${payload.sessionId}`,
     );
     if (!sessionData) {

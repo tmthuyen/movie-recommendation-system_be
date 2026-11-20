@@ -20,8 +20,9 @@ from infra.messaging.event_schemas import (
 )
 from services.movie_vector_service import MovieVectorService
 from services.user_vector_service import UserVectorService
+from utils.logger import setup_logger
 
-logger = logging.getLogger(name="FastAPI-Recommendations")
+logger = setup_logger(name="FastAPI-Recommendation")
 
 settings = get_settings()
 

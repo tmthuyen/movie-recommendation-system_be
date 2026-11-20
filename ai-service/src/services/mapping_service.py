@@ -6,8 +6,9 @@ from typing import Dict, Optional
 import pandas as pd
 
 from infra.storage.storage_service import storage_service
+from utils.logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(name="FastAPI-Recommendation")
 
 
 class MappingService:

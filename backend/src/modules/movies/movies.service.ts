@@ -43,6 +43,8 @@ import {
 } from '@/infrastructure/cache/cache.schemas';
 import { idUtil } from '@/common/utils/id.util';
 import { PaginationUtils, SearchUtils } from '@/common/utils/search.util';
+import { REDIS_SERVICE } from '@/infrastructure/redis/redis.service';
+import type { IRedisService } from '@/infrastructure/redis/redis.service';
 
 @Injectable()
 export class MoviesService {
@@ -64,6 +66,7 @@ export class MoviesService {
     private readonly interactionProducer: InteractionProducer,
     private readonly statsService: MovieInteractionStatsService,
     @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
+    @Inject(REDIS_SERVICE) private readonly redis: IRedisService,
   ) {}
 
   private mapDtoToEntity(dto: any) {
@@ -299,19 +302,15 @@ export class MoviesService {
   }
 
   async incrementViewCount(id: number, userId?: string) {
-    // Đọc DB trực tiếp cho luồng tăng view.
     const movie = await this.findOneFresh(id);
+    const stats = await this.statsService.recordView(id);
+    const viewCount = stats.viewCount;
 
     const {
       score,
       interaction: interactionState,
       createdInteraction,
     } = await this.dataSource.transaction(async manager => {
-      // 1. Luôn tăng viewCount (kể cả guest)
-      movie.viewCount = Number(movie.viewCount) + 1;
-      await manager.update(Movie, movie.id, { viewCount: movie.viewCount });
-
-      // 2. User đăng nhập: tạo mới hoặc tăng độ tin cậy của click
       if (!userId) {
         return {
           score: 0,
@@ -359,12 +358,10 @@ export class MoviesService {
       };
     });
 
-    // 3. Realtime sau commit
     const numericMovieId = Number(movie.id);
-    this.eventsGateway.broadcastViewCount(numericMovieId, movie.viewCount);
+    this.eventsGateway.broadcastViewCount(numericMovieId, viewCount);
 
     if (userId && interactionState !== 'none') {
-      const stats = await this.statsService.getStats(numericMovieId);
       this.eventsGateway.broadcastInteraction({
         movieId: numericMovieId,
         type: InteractionType.CLICK,
@@ -389,7 +386,7 @@ export class MoviesService {
     }
 
     return {
-      viewCount: movie.viewCount,
+      viewCount,
       score,
       interaction: interactionState,
     };
@@ -598,5 +595,57 @@ export class MoviesService {
 
     const movies = await this.repo.findAllByIds(ids);
     return movies;
+  }
+
+  /** Hydration cache-first cho semantic/forYou. */
+  async findByIdsCached(ids: number[]): Promise<Movie[]> {
+    if (!ids || ids.length === 0) return [];
+
+    const uniqueIds = [...new Set(ids.map(Number))];
+    let rawValues: (string | null)[] = [];
+    try {
+      rawValues = await this.redis.mget(uniqueIds.map(CacheKeys.movie.detail));
+    } catch (error) {
+      this.logger.warn(
+        `MGET cache chi tiết phim thất bại, dùng DB: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+
+    const cached: Movie[] = [];
+    const missingIds: number[] = [];
+
+    uniqueIds.forEach((id, index) => {
+      const raw = rawValues[index];
+      if (!raw) {
+        missingIds.push(id);
+        return;
+      }
+
+      try {
+        const parsed = MovieDetailCacheSchema.safeParse(JSON.parse(raw));
+        if (parsed.success) {
+          cached.push(parsed.data as unknown as Movie);
+          return;
+        }
+      } catch {
+        // Bỏ qua cache không parse được.
+      }
+      missingIds.push(id);
+    });
+
+    if (missingIds.length === 0) return cached;
+
+    const fresh = await this.repo.findAllByIds(missingIds);
+    for (const movie of fresh) {
+      await this.cache.set(
+        CacheKeys.movie.detail(Number(movie.id)),
+        movie,
+        CacheTtl.movieDetail,
+      );
+    }
+
+    return [...cached, ...fresh];
   }
 }

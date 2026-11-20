@@ -1,19 +1,26 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import Redis from 'ioredis';
 import { z } from 'zod';
-import { RedisService } from '@/infrastructure/redis/redis.service';
-import { idUtil } from '@/common/utils/id.util';
+import { AppException } from '@/common/custom-exception/app-exception';
+import { REDIS_CLIENT } from '@/infrastructure/redis/redis.service';
+import { REDIS_LOCK_SERVICE } from '@/infrastructure/redis/redis-lock.service';
+import type { IRedisLockService } from '@/infrastructure/redis/redis-lock.service';
+import { cacheTypeFromKey } from './cache-metrics.service';
+import type { CacheMetrics } from './cache-metrics.service';
 
 export const CACHE_SERVICE = 'CACHE_SERVICE';
-// interface
+
 export interface CacheLoadOptions<T> {
   /** Key cache, bắt đầu bằng `cache:`. */
   key: string;
   /** Schema dùng để validate khi ghi và khi đọc. */
   schema: z.ZodType;
   ttlSeconds: number;
-  /** Hàm tải dữ liệu, chỉ chạy khi cache miss. */
+  /** Hàm tải dữ liệu, chỉ chạy khi cache miss và đã giữ lock. */
   loader: () => Promise<T>;
+  /** Giá trị trả khi loader lỗi/không giành được lock và không có stale. */
+  fallback?: () => T | Promise<T>;
 }
 
 export interface ICacheService {
@@ -27,104 +34,152 @@ export interface ICacheService {
 }
 
 const KEY_PREFIX = 'cache:';
-const LOCK_TTL_MS = 5000;
-const LOCK_WAIT_MS = 120;
+const NEGATIVE_SUFFIX = ':nil';
+const STALE_SUFFIX = ':stale';
+const NEGATIVE_TTL_SECONDS = 60;
+const CACHE_LOCK_TTL_SECONDS = 5;
+const CACHE_LOCK_WAIT_MS = 150;
+const CACHE_LOCK_RETRY_MS = 25;
+const CACHE_TTL_JITTER = 0.2;
 
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-/**
- * Implementation `ICacheService` trên Redis: JSON, validate Zod, TTL jitter,
- * single-flight và fail-open khi Redis lỗi.
- */
+/** Cache Redis JSON với Zod, TTL jitter và single-flight. */
 @Injectable()
 export class RedisCacheService implements ICacheService {
   private readonly logger = new Logger(RedisCacheService.name);
   private readonly enabled: boolean;
 
   constructor(
-    private readonly redis: RedisService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly config: ConfigService,
+    @Inject(REDIS_LOCK_SERVICE) private readonly cacheLock: IRedisLockService,
+    @Optional() private readonly metrics?: CacheMetrics,
   ) {
     this.enabled = this.config.get<string>('CACHE_ENABLED', 'true') !== 'false';
   }
 
+  /** Đọc cache theo schema; trả null khi miss, có cờ `:nil`, sai schema hoặc Redis lỗi. */
   async get<T>(key: string, schema: z.ZodType): Promise<T | null> {
     this.assertKey(key);
     if (!this.enabled) return null;
 
     try {
+      if ((await this.redis.get(key + NEGATIVE_SUFFIX)) === '1') return null;
+
       const raw = await this.redis.get(key);
-      if (raw === null) return null;
-
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        await this.safeDel(key);
-        this.logger.warn(`Cache value không phải JSON, đã xoá: ${key}`);
+      if (raw === null) {
+        this.metrics?.miss(cacheTypeFromKey(key));
         return null;
       }
 
-      const result = schema.safeParse(parsed);
-      if (!result.success) {
-        await this.safeDel(key);
-        this.logger.warn(`Cache sai schema, đã xoá: ${key}`);
-        return null;
-      }
+      const parsed = this.parse<T>(raw, schema, key);
+      if (parsed === null) return null;
 
-      return result.data as T;
+      this.metrics?.hit(cacheTypeFromKey(key));
+      return parsed;
     } catch (error) {
       this.logger.warn(
-        `Đọc cache lỗi (bỏ qua): ${key} — ${error instanceof Error ? error.message : String(error)}`,
+        `Đọc cache lỗi (bỏ qua): ${key} — ${this.errorMessage(error)}`,
       );
       return null;
     }
   }
 
+  /** Ghi JSON vào key, lưu bản `:stale` với TTL gấp 3 và xoá cờ `:nil`. */
   async set<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
     this.assertKey(key);
     if (!this.enabled) return;
 
     try {
-      await this.redis.set(
-        key,
-        JSON.stringify(value),
-        this.withJitter(ttlSeconds),
-      );
+      const raw = JSON.stringify(value);
+      await this.redis.set(key, raw, 'EX', this.withJitter(ttlSeconds));
+      await this.redis.set(key + STALE_SUFFIX, raw, 'EX', ttlSeconds * 3);
+      await this.redis.del(key + NEGATIVE_SUFFIX);
     } catch (error) {
       this.logger.warn(
-        `Ghi cache lỗi (bỏ qua): ${key} — ${error instanceof Error ? error.message : String(error)}`,
+        `Ghi cache lỗi (bỏ qua): ${key} — ${this.errorMessage(error)}`,
       );
     }
   }
 
+  /** Xoá key cache, bỏ qua lỗi Redis. */
   async del(key: string): Promise<void> {
     this.assertKey(key);
     if (!this.enabled) return;
     await this.safeDel(key);
   }
 
+  /** Đọc cache; khi miss thì load một lần dưới lock, fallback `:stale` nếu không giành được lock. */
   async getOrLoad<T>(opts: CacheLoadOptions<T>): Promise<T> {
     const cached = await this.get<T>(opts.key, opts.schema);
     if (cached !== null) return cached;
-
     if (!this.enabled) return opts.loader();
 
-    return this.loadWithLock(opts);
+    const type = cacheTypeFromKey(opts.key);
+    const startedAt = Date.now();
+
+    try {
+      return await this.cacheLock.runWithLockOrFallback<T>(
+        `lock:${opts.key}`,
+        CACHE_LOCK_TTL_SECONDS,
+        { waitMs: CACHE_LOCK_WAIT_MS, retryIntervalMs: CACHE_LOCK_RETRY_MS },
+        async () => {
+          const rechecked = await this.get<T>(opts.key, opts.schema);
+          if (rechecked !== null) return rechecked;
+
+          let value: T;
+          try {
+            this.metrics?.loaderRun(type);
+            value = await opts.loader();
+          } catch (error) {
+            this.logger.error(
+              `Loader cache thất bại: ${opts.key} — ${this.errorMessage(error)}`,
+            );
+            return this.fallbackValue(opts, type);
+          }
+
+          if (value === null || value === undefined) {
+            await this.redis
+              .set(opts.key + NEGATIVE_SUFFIX, '1', 'EX', NEGATIVE_TTL_SECONDS)
+              .catch(() => undefined);
+            return value;
+          }
+
+          const checked = opts.schema.safeParse(value);
+          if (!checked.success) {
+            this.metrics?.schemaRejected(type);
+            this.logger.error(
+              `Dữ liệu không khớp schema cache: ${opts.key} — ${checked.error.message}`,
+            );
+            return this.readStale(opts, type);
+          }
+
+          await this.set(opts.key, checked.data, opts.ttlSeconds);
+          return checked.data as T;
+        },
+        async () => {
+          this.metrics?.lockFailed(type);
+          const stale = await this.readStale(opts, type);
+          if (stale !== null) return stale;
+          return this.fallbackValue(opts, type);
+        },
+      );
+    } finally {
+      this.metrics?.observeLoader(type, Date.now() - startedAt);
+    }
   }
 
+  /** Tăng counter Redis, trả giá trị sau khi tăng hoặc 0 nếu Redis lỗi. */
   async incr(key: string): Promise<number> {
     this.assertKey(key);
     try {
-      return await this.redis.getClient().incr(key);
+      return await this.redis.incr(key);
     } catch (error) {
-      this.logger.warn(
-        `INCR cache lỗi: ${key} — ${error instanceof Error ? error.message : String(error)}`,
-      );
+      this.logger.warn(`INCR cache lỗi: ${key} — ${this.errorMessage(error)}`);
       return 0;
     }
   }
 
+  /** Đọc counter Redis về number; trả 0 nếu giá trị không hợp lệ hoặc Redis lỗi. */
   async getCounter(key: string): Promise<number> {
     this.assertKey(key);
     try {
@@ -136,77 +191,89 @@ export class RedisCacheService implements ICacheService {
     }
   }
 
-  private async loadWithLock<T>(opts: CacheLoadOptions<T>): Promise<T> {
-    const lockKey = `lock:${opts.key}`;
-    const token = idUtil.generateUUID();
-    let locked = false;
-
+  /** Parse JSON và validate schema; xoá key nếu không hợp lệ. */
+  private parse<T>(raw: string, schema: z.ZodType, key: string): T | null {
+    let parsed: unknown;
     try {
-      locked = await this.tryLock(lockKey, token);
-      if (!locked) {
-        await sleep(LOCK_WAIT_MS);
-        const retry = await this.get<T>(opts.key, opts.schema);
-        if (retry !== null) return retry;
-      }
-
-      const value = await opts.loader();
-      const checked = opts.schema.safeParse(value);
-      if (checked.success) {
-        await this.set(opts.key, checked.data, opts.ttlSeconds);
-      } else {
-        this.logger.error(
-          `Dữ liệu không khớp schema cache (không ghi): ${opts.key} — ${checked.error.message}`,
-        );
-      }
-
-      return value;
-    } finally {
-      if (locked) await this.releaseLock(lockKey, token);
-    }
-  }
-
-  private async tryLock(lockKey: string, token: string): Promise<boolean> {
-    try {
-      const result = await this.redis
-        .getClient()
-        .set(lockKey, token, 'PX', LOCK_TTL_MS, 'NX');
-      return result === 'OK';
+      parsed = JSON.parse(raw);
     } catch {
-      return false;
+      void this.safeDel(key);
+      this.logger.warn(`Cache value không phải JSON, đã xoá: ${key}`);
+      return null;
     }
+
+    const result = schema.safeParse(parsed);
+    if (!result.success) {
+      void this.safeDel(key);
+      this.metrics?.schemaRejected(cacheTypeFromKey(key));
+      this.logger.warn(`Cache sai schema, đã xoá: ${key}`);
+      return null;
+    }
+
+    return result.data as T;
   }
 
-  private async releaseLock(lockKey: string, token: string): Promise<void> {
+  /** Đọc bản `:stale` theo schema; trả fallback nếu stale không dùng được. */
+  private async readStale<T>(
+    opts: CacheLoadOptions<T>,
+    type: string,
+  ): Promise<T> {
     try {
-      await this.redis
-        .getClient()
-        .eval(
-          'if redis.call("get",KEYS[1])==ARGV[1] then return redis.call("del",KEYS[1]) else return 0 end',
-          1,
-          lockKey,
-          token,
-        );
-    } catch {
-      // lock tự hết hạn theo PX
+      const raw = await this.redis.get(opts.key + STALE_SUFFIX);
+      if (raw !== null) {
+        const parsed = this.parse<T>(raw, opts.schema, opts.key + STALE_SUFFIX);
+        if (parsed !== null) {
+          this.metrics?.staleServed(type);
+          return parsed;
+        }
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Đọc stale lỗi: ${opts.key} — ${this.errorMessage(error)}`,
+      );
     }
+    return this.fallbackValue(opts, type);
   }
 
+  /** Trả fallback của caller và ghi metric stale; trả null nếu không có fallback. */
+  private async fallbackValue<T>(
+    opts: CacheLoadOptions<T>,
+    type: string,
+  ): Promise<T> {
+    if (!opts.fallback) return null as T;
+    this.metrics?.staleServed(type);
+    return opts.fallback();
+  }
+
+  /** Xoá cache và bỏ qua lỗi Redis. */
   private async safeDel(key: string): Promise<void> {
     try {
       await this.redis.del(key);
     } catch {
-      // fail-open
+      return;
     }
   }
 
-  /** TTL kèm jitter tối đa 10%. */
+  /** Trả TTL kèm jitter 20%. */
   private withJitter(ttlSeconds: number): number {
-    return ttlSeconds + Math.floor(Math.random() * ttlSeconds * 0.1);
+    const extra = Math.floor(ttlSeconds * CACHE_TTL_JITTER * Math.random());
+    return ttlSeconds + Math.max(1, extra);
   }
 
+  /** Chuyển error về chuỗi để log. */
+  private errorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+  }
+
+  /** Kiểm tra cache key bắt đầu bằng `cache:`. */
   private assertKey(key: string): void {
     if (!key.startsWith(KEY_PREFIX)) {
-      throw new Error(`Cache key phải bắt đầu bằng "${KEY_PREFIX}": ${key}`);
+      throw new AppException(
+        500,
+        'Cache key không hợp lệ.',
+        `Cache key must start with "${KEY_PREFIX}": ${key}`,
+        'INVALID_CACHE_KEY',
+      );
     }
   }
 }
