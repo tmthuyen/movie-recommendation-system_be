@@ -1,7 +1,7 @@
 'use client';
 
 import { Heart } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import useInteraction from '@/hooks/tankstack/useInteraction';
 import { useMovieSocket } from '@/hooks/useMovieSocket';
 import { useRequireLogin } from '@/hooks/useRequireLogin';
@@ -42,6 +42,11 @@ export function MovieActions({
     key: movieKey,
     count: originalLikeCount,
   });
+
+  useEffect(() => {
+    setLive({ key: movieKey, count: originalLikeCount });
+  }, [movieKey, originalLikeCount]);
+
   const likeCount = (live.key === movieKey ? live.count : null) ?? 0;
 
   // Cập nhật realtime với socket khi có toggle like

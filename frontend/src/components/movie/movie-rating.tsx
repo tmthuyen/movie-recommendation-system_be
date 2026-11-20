@@ -9,12 +9,9 @@ import { cn } from '@/lib/utils';
 import useInteraction from '@/hooks/tankstack/useInteraction';
 
 interface MovieRatingProps {
-  /** Phim đang hiển thị. */
-  movie: {
-    id: number;
-    voteAverage?: number;
-    voteCount?: number;
-  };
+  movieId: number;
+  voteAverage: number;
+  voteCount: number;
 }
 
 /**
@@ -24,25 +21,33 @@ interface MovieRatingProps {
  * - Nút 1–5 sao (aria-label rõ ràng) → `POST /api/ratings` (JWT);
  *   chưa đăng nhập → hiện hộp thoại yêu cầu đăng nhập (`useRequireLogin`).
  */
-export function MovieRating({ movie }: MovieRatingProps) {
+export function MovieRating({ movieId, voteAverage, voteCount }: MovieRatingProps) {
   const requireLogin = useRequireLogin();
 
   const [myRating, setMyRating] = useState<number | null>(null);
 
   // Lây chỉ 1 lần khi vào trang
-  const { data: myInteractionsWithMovie } = useInteraction.useMyInteractionsWithMovie(movie.id);
+  const { data: myInteractionsWithMovie } = useInteraction.useMyInteractionsWithMovie(movieId);
 
   const [stats, setStats] = useState({
-    voteAverage: typeof movie.voteAverage === 'number' ? movie.voteAverage : 0,
-    voteCount: Number(movie.voteCount) || 0,
+    voteAverage: Number(voteAverage) || 0,
+    voteCount: Number(voteCount) || 0,
   });
+
+  useEffect(() => {
+    setStats({
+      voteAverage: Number(voteAverage) || 0,
+      voteCount: Number(voteCount) || 0,
+    });
+  }, [voteAverage, voteCount]);
+
   const [hoverStar, setHoverStar] = useState(0);
 
-  const createRating = useRating.useCreateRating(movie.id);
+  const createRating = useRating.useCreateRating(movieId);
 
   // Realtime: cập nhật voteAverage/voteCount khi user khác đánh giá (và cả chính user)
   useMovieSocket({
-    movieId: movie.id,
+    movieId,
     onRating: (payload) => {
       const next = payload?.movieStats;
       if (next) {

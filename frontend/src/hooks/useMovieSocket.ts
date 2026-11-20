@@ -1,8 +1,11 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { io, Socket } from 'socket.io-client';
 import type { Comment } from '@/shared/types/comment.types';
+import type { InteractionStats } from '@/shared/types/interaction.types';
+import { interactionStatsQueryKey } from './tankstack/useInteraction';
 
 /**
  * URL của Socket.IO — backend chạy HTTP API + WS cùng cổng (8081).
@@ -69,6 +72,7 @@ interface UseMovieSocketOptions {
  * Subscribe các event realtime theo phim trên **socket dùng chung**:
  * `movie-{id}-comment`, `movie-{id}-rating`, `movie-{id}-viewCount`,
  * `movie-{id}-typing`, `movie-{id}-interaction`. Cleanup khi unmount.
+ * Số liệu từ event được merge vào cache stats của phim.
  *
  * Handler được giữ trong ref nên callback mới không gây subscribe lại.
  */
@@ -81,6 +85,7 @@ export function useMovieSocket({
   onTyping,
   onInteraction,
 }: UseMovieSocketOptions) {
+  const queryClient = useQueryClient();
   const handlersRef = useRef({
     onComment,
     onRating,
@@ -104,6 +109,12 @@ export function useMovieSocket({
 
     const socket = getSharedSocket();
 
+    const mergeStats = (patch: Partial<InteractionStats>) => {
+      queryClient.setQueryData<InteractionStats>(interactionStatsQueryKey(movieId), (old) =>
+        old ? { ...old, ...patch } : old,
+      );
+    };
+
     const commentEvent = `movie-${movieId}-comment`;
     const ratingEvent = `movie-${movieId}-rating`;
     const viewCountEvent = `movie-${movieId}-viewCount`;
@@ -111,12 +122,31 @@ export function useMovieSocket({
     const interactionEvent = `movie-${movieId}-interaction`;
 
     const handleComment = (comment: Comment) => handlersRef.current.onComment?.(comment);
-    const handleRating = (payload: MovieRatingPayload) => handlersRef.current.onRating?.(payload);
-    const handleViewCount = (payload: MovieViewCountPayload) =>
+    const handleRating = (payload: MovieRatingPayload) => {
+      const next = payload?.movieStats;
+      if (next) {
+        mergeStats({
+          ratingCount: Number(next.voteCount) || 0,
+          voteAverage: Number(next.voteAverage) || 0,
+        });
+      }
+      handlersRef.current.onRating?.(payload);
+    };
+    const handleViewCount = (payload: MovieViewCountPayload) => {
+      if (payload?.viewCount !== undefined) {
+        mergeStats({ viewCount: Number(payload.viewCount) || 0 });
+      }
       handlersRef.current.onViewCount?.(payload);
+    };
     const handleTyping = (payload: MovieTypingPayload) => handlersRef.current.onTyping?.(payload);
-    const handleInteraction = (payload: MovieInteractionPayload) =>
+    const handleInteraction = (payload: MovieInteractionPayload) => {
+      const patch: Partial<InteractionStats> = {};
+      if (typeof payload?.likeCount === 'number') patch.likeCount = payload.likeCount;
+      if (typeof payload?.commentCount === 'number') patch.commentCount = payload.commentCount;
+      if (typeof payload?.viewCount === 'number') patch.viewCount = payload.viewCount;
+      if (Object.keys(patch).length > 0) mergeStats(patch);
       handlersRef.current.onInteraction?.(payload);
+    };
 
     socket.on(commentEvent, handleComment);
     socket.on(ratingEvent, handleRating);
@@ -131,7 +161,7 @@ export function useMovieSocket({
       socket.off(typingEvent, handleTyping);
       socket.off(interactionEvent, handleInteraction);
     };
-  }, [movieId, enabled]);
+  }, [movieId, enabled, queryClient]);
 }
 
 /**

@@ -29,7 +29,7 @@ export class RatingsService {
   async create(userId: string, createRatingDto: CreateRatingDto) {
     const { movieId, rating } = createRatingDto;
 
-    const { savedRating, isNewRating, previousScore } =
+    const { savedRating, ratingCount, ratingAvg } =
       await this.dataSource.transaction(async manager => {
         const existingRating = await manager.findOne(Rating, {
           where: {
@@ -39,18 +39,12 @@ export class RatingsService {
         });
 
         let saved: Rating;
-        let isNewRating: boolean;
-        let previousScore: number;
 
         if (existingRating) {
-          previousScore = Number(existingRating.rating) || 0;
-          isNewRating = false;
           existingRating.rating = rating;
           existingRating.timestamp = new Date();
           saved = await manager.save(existingRating);
         } else {
-          previousScore = 0;
-          isNewRating = true;
           saved = await manager.save(
             manager.create(Rating, {
               rating,
@@ -83,13 +77,24 @@ export class RatingsService {
           );
         }
 
-        return { savedRating: saved, isNewRating, previousScore };
+        const aggregate = await manager
+          .createQueryBuilder(Rating, 'rating')
+          .select('COUNT(rating.id)', 'count')
+          .addSelect('COALESCE(AVG(rating.rating), 0)', 'average')
+          .where('rating.movie_id = :movieId', { movieId })
+          .getRawOne();
+
+        return {
+          savedRating: saved,
+          ratingCount: Number(aggregate?.count) || 0,
+          ratingAvg: Math.round(Number(aggregate?.average || 0) * 100) / 100,
+        };
       });
 
-    const stats = await this.statsService.recordRating(
+    const stats = await this.statsService.setRatingStats(
       movieId,
-      isNewRating ? 1 : 0,
-      Number(rating) - previousScore,
+      ratingCount,
+      ratingAvg,
     );
 
     this.eventsGateway.broadcastRating(movieId, {

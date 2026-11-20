@@ -302,7 +302,7 @@ JWT payload: `{sub, fullName, email, scopes, sessionId, jti}`. `JwtStrategy` ki�
 
 | Method | Path | Auth | Request | Response `result` | Ghi chú |
 |---|---|---|---|---|---|
-| POST | `/api/ratings` | JWT | `CreateRatingDto` `{rating: 0–5, movieId}` | rating đã lưu | `201`; **transaction**: tạo Rating + Interaction (`type=rating`, `score=rating`) + cập nhật lại `voteAverage`/`voteCount` của movie; **sau commit**: WS `movie-{id}-rating` (payload kèm `movieStats`) + publish `interaction.created` (`score=rating`) |
+| POST | `/api/ratings` | JWT | `CreateRatingDto` `{rating: 0–5, movieId}` | rating đã lưu | `201`; **transaction**: tạo/cập nhật Rating + Interaction (`type=rating`, `score=rating`); **sau commit**: tính lại `COUNT`/`AVG` từ bảng `ratings`, ghi vào Redis stats, WS `movie-{id}-rating` (payload kèm `movieStats`) + publish `interaction.created` (`score=rating`) |
 | GET | `/api/ratings` | Public | `BaseSearchRequest` `{page=1, limit=10, keyword?, filters?, sort?}` — keyword ILIKE `content`, `user.fullName`, `user.email`, `movie.title`, `movie.titleVi` | rating[] + `pagination` | join `user`, `movie`; filter: `id,rating,content,timestamp,createdAt,updatedAt,userId,userEmail,userFullName,movieId,movieTitle`; sort: `id,rating,timestamp,createdAt,updatedAt` |
 | GET | `/api/ratings/movie/:movieId` | Public | `BaseSearchRequest` như trên | rating[] + `pagination` | join `user` (+ `movie` để filter/keyword); cùng filter/sort với `GET /api/ratings` |
 | GET | `/api/ratings/:id` | Public | — | rating (user + movie) | |
