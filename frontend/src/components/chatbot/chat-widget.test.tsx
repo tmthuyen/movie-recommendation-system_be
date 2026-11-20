@@ -145,4 +145,37 @@ describe('ChatWidget', () => {
       ).toBeInTheDocument();
     });
   });
+
+  it('cho phép nhấp vào tin nhắn để hiển thị ngay toàn bộ nội dung đang gõ (skip typing)', async () => {
+    vi.mocked(chatApi.ask).mockResolvedValueOnce({
+      success: true,
+      statusCode: 200,
+      message: 'Thành công',
+      result: {
+        answer:
+          'Bộ phim khoa học viễn tưởng Interstellar của Christopher Nolan.',
+        movies: [],
+      },
+    });
+
+    renderWithQuery(<ChatWidget />);
+    fireEvent.click(screen.getByRole('button', { name: 'Mở trợ lý phim AI' }));
+
+    const input = screen.getByPlaceholderText('Nhập câu hỏi tìm phim...');
+    fireEvent.change(input, { target: { value: 'Phim du hành vũ trụ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi tin nhắn' }));
+
+    await waitFor(() => {
+      const textElement = screen.getByText(/Bộ phim/i);
+      fireEvent.click(textElement);
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'Bộ phim khoa học viễn tưởng Interstellar của Christopher Nolan.',
+        ),
+      ).toBeInTheDocument();
+    });
+  });
 });

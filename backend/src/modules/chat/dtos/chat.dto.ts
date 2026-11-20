@@ -35,6 +35,27 @@ export class ChatRequestDto {
 }
 
 export class ChatRagResponseDto {
+  @ApiProperty({
+    description: 'Câu trả lời từ trợ lý AI',
+    example: 'Tôi gợi ý cho bạn bộ phim Người Nhện...',
+  })
   answer: string;
+
+  @ApiProperty({
+    description: 'Danh sách phim liên quan kèm theo',
+    type: () => [SimilarMovieResponseDto],
+  })
   movies: SimilarMovieResponseDto[];
+
+  @ApiPropertyOptional({
+    description: 'Ý định được phân loại (CHITCHAT | MOVIE_SEARCH_RAG | SYSTEM_STATS | OUT_OF_SCOPE)',
+    example: 'MOVIE_SEARCH_RAG',
+  })
+  intent?: string;
+
+  @ApiPropertyOptional({
+    description: 'Loại thống kê hệ thống (nếu intent là SYSTEM_STATS)',
+    example: 'most_commented',
+  })
+  statType?: string;
 }
