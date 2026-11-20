@@ -10,6 +10,8 @@ export interface ChatRequest {
 export interface ChatRagResponse {
   answer: string;
   movies: MovieWithSimilarScore[];
+  intent?: string;
+  statType?: string;
 }
 
 /** Tin nhắn trong khung hội thoại trợ lý phim AI. */
@@ -18,6 +20,9 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   movies?: MovieWithSimilarScore[];
+  intent?: string;
+  statType?: string;
   createdAt: string;
   isError?: boolean;
+  isStreaming?: boolean;
 }

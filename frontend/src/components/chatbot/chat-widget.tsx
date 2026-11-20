@@ -19,13 +19,7 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -34,26 +28,88 @@ import { parseAxiosError } from '@/lib/axiosClient';
 import { MOTION_DURATION_FAST, MOTION_EASE } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { MovieWithSimilarScore } from '@/shared/types/movie.types';
-import {
-  getMovieTitle,
-  getPosterUrl,
-  getReleaseYear,
-} from '@/shared/utils/movie';
+import { getMovieTitle, getPosterUrl, getReleaseYear } from '@/shared/utils/movie';
 import { useChatStore } from '@/stores/chat.store';
 
 const QUICK_SUGGESTIONS = [
   'Gợi ý phim hành động kịch tính',
+  'Phim nào nhiều comment nhất?',
+  'Phim nào điểm đánh giá cao nhất?',
   'Tìm phim giống Người Nhện',
-  'Phim hoạt hình gia đình ý nghĩa',
 ];
+
+/** Component hiển thị câu trả lời AI với hiệu ứng gõ chữ (Typewriter / Streaming). */
+function StreamingMarkdown({
+  content,
+  isStreaming,
+  onComplete,
+  onTypingStep,
+}: {
+  content: string;
+  isStreaming?: boolean;
+  onComplete?: () => void;
+  onTypingStep?: () => void;
+}) {
+  const reduceMotion = useReducedMotion();
+  const shouldStream = Boolean(isStreaming) && !reduceMotion;
+  const [displayedLength, setDisplayedLength] = useState(shouldStream ? 0 : content.length);
+
+  useEffect(() => {
+    if (!shouldStream) {
+      return;
+    }
+
+    if (displayedLength >= content.length) {
+      onComplete?.();
+      return;
+    }
+
+    // Tốc độ gõ chữ tự nhiên theo cụm từ (chunk 2-4 ký tự mỗi 18ms)
+    // Tạm dừng nhẹ khi gặp dấu câu hoặc xuống dòng
+    const currentChar = content[displayedLength] || '';
+    const isPause = /[.,!?\n]/.test(currentChar);
+    const delay = isPause ? 40 : 18;
+    const step = isPause ? 1 : Math.min(3, content.length - displayedLength);
+
+    const timer = setTimeout(() => {
+      setDisplayedLength((prev) => Math.min(prev + step, content.length));
+      onTypingStep?.();
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [content, displayedLength, shouldStream, onComplete, onTypingStep]);
+
+  const displayedContent = shouldStream ? content.slice(0, displayedLength) : content;
+  const isTyping = shouldStream && displayedLength < content.length;
+
+  return (
+    <div
+      onClick={() => {
+        if (isTyping) {
+          // Bấm vào tin nhắn để hiển thị ngay toàn bộ nội dung
+          setDisplayedLength(content.length);
+          onComplete?.();
+        }
+      }}
+      className="prose prose-sm dark:prose-invert max-w-none break-words [&_p]:my-1 [&_ul]:my-1 [&_ul]:pl-4"
+    >
+      <ReactMarkdown>{displayedContent}</ReactMarkdown>
+      {isTyping && (
+        <span
+          className="bg-primary ml-0.5 inline-block h-3.5 w-1.5 animate-pulse rounded-xs align-middle"
+          aria-hidden="true"
+        />
+      )}
+    </div>
+  );
+}
 
 /** Thẻ phim thu gọn hiển thị bên dưới câu trả lời của trợ lý AI. */
 function ChatMovieItem({ movie }: { movie: MovieWithSimilarScore }) {
   const title = getMovieTitle(movie);
   const year = getReleaseYear(movie.releaseDate);
   const poster = getPosterUrl(movie.posterPath || movie.backdropPath);
-  const rating =
-    typeof movie.voteAverage === 'number' ? movie.voteAverage : 0;
+  const rating = typeof movie.voteAverage === 'number' ? movie.voteAverage : 0;
 
   return (
     <Link
@@ -78,17 +134,12 @@ function ChatMovieItem({ movie }: { movie: MovieWithSimilarScore }) {
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-foreground line-clamp-1 text-xs font-semibold">
-          {title}
-        </p>
+        <p className="text-foreground line-clamp-1 text-xs font-semibold">{title}</p>
         <div className="text-muted-foreground mt-0.5 flex items-center gap-2 text-[11px]">
           {year && <span>{year}</span>}
           {rating > 0 && (
             <span className="inline-flex items-center gap-0.5 font-medium">
-              <Star
-                className="text-primary size-3 fill-current"
-                aria-hidden="true"
-              />
+              <Star className="text-primary size-3 fill-current" aria-hidden="true" />
               {rating.toFixed(1)}
             </span>
           )}
@@ -107,12 +158,11 @@ export function ChatWidget() {
   const closeChat = useChatStore((state) => state.closeChat);
   const toggleExpand = useChatStore((state) => state.toggleExpand);
   const addMessage = useChatStore((state) => state.addMessage);
+  const updateMessage = useChatStore((state) => state.updateMessage);
   const clearMessages = useChatStore((state) => state.clearMessages);
 
   const [inputValue, setInputValue] = useState('');
-  const [lastFailedQuestion, setLastFailedQuestion] = useState<string | null>(
-    null,
-  );
+  const [lastFailedQuestion, setLastFailedQuestion] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const reduceMotion = useReducedMotion();
 
@@ -153,10 +203,11 @@ export function ChatWidget() {
       const result = await askChat({ message: question, topK: 5 });
       addMessage({
         role: 'assistant',
-        content:
-          result?.answer ||
-          'Tôi đã tìm thấy một số bộ phim phù hợp với yêu cầu của bạn.',
+        content: result?.answer || 'Tôi đã tìm thấy một số bộ phim phù hợp với yêu cầu của bạn.',
         movies: result?.movies ?? [],
+        intent: result?.intent,
+        statType: result?.statType,
+        isStreaming: true,
       });
     } catch (error) {
       const { message } = parseAxiosError(error);
@@ -165,6 +216,7 @@ export function ChatWidget() {
         role: 'assistant',
         content: message || 'Không thể kết nối trợ lý AI, vui lòng thử lại sau.',
         isError: true,
+        isStreaming: false,
       });
     }
   };
@@ -187,12 +239,8 @@ export function ChatWidget() {
             <Bot className="size-5" aria-hidden="true" />
           </div>
           <div>
-            <CardTitle className="text-sm font-bold">
-              Trợ lý điện ảnh AI
-            </CardTitle>
-            <p className="text-primary-foreground/80 text-xs">
-              Gợi ý & tìm phim thông minh (RAG)
-            </p>
+            <CardTitle className="text-sm font-bold">Trợ lý điện ảnh AI</CardTitle>
+            <p className="text-primary-foreground/80 text-xs">Gợi ý & tìm phim thông minh</p>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -212,11 +260,7 @@ export function ChatWidget() {
             variant="ghost"
             size="icon"
             onClick={toggleExpand}
-            aria-label={
-              expanded
-                ? 'Thu nhỏ về góc màn hình'
-                : 'Phóng to ở giữa màn hình'
-            }
+            aria-label={expanded ? 'Thu nhỏ về góc màn hình' : 'Phóng to ở giữa màn hình'}
             className="text-primary-foreground hover:bg-primary-foreground/15 hover:text-primary-foreground size-11"
           >
             {expanded ? (
@@ -244,10 +288,7 @@ export function ChatWidget() {
           return (
             <div
               key={msg.id}
-              className={cn(
-                'flex items-start gap-2.5',
-                isUser ? 'flex-row-reverse' : 'flex-row',
-              )}
+              className={cn('flex items-start gap-2.5', isUser ? 'flex-row-reverse' : 'flex-row')}
             >
               <div
                 className={cn(
@@ -274,9 +315,31 @@ export function ChatWidget() {
                       : 'bg-muted text-foreground',
                 )}
               >
-                <div className="prose prose-sm dark:prose-invert max-w-none break-words [&_p]:my-1 [&_ul]:my-1 [&_ul]:pl-4">
-                  <ReactMarkdown>{msg.content}</ReactMarkdown>
-                </div>
+                {isUser ? (
+                  <div className="prose prose-sm dark:prose-invert max-w-none break-words [&_p]:my-1 [&_ul]:my-1 [&_ul]:pl-4">
+                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <StreamingMarkdown
+                    content={msg.content}
+                    isStreaming={msg.isStreaming}
+                    onComplete={() => {
+                      if (msg.isStreaming) {
+                        updateMessage(msg.id, { isStreaming: false });
+                      }
+                    }}
+                    onTypingStep={() => {
+                      if (
+                        messagesEndRef.current &&
+                        typeof messagesEndRef.current.scrollIntoView === 'function'
+                      ) {
+                        messagesEndRef.current.scrollIntoView({
+                          behavior: 'smooth',
+                        });
+                      }
+                    }}
+                  />
+                )}
 
                 {msg.isError && lastFailedQuestion && (
                   <div className="pt-1">
@@ -293,7 +356,7 @@ export function ChatWidget() {
                   </div>
                 )}
 
-                {msg.movies && msg.movies.length > 0 && (
+                {msg.movies && msg.movies.length > 0 && !msg.isStreaming && (
                   <div className="border-border/60 space-y-1.5 border-t pt-2">
                     <p className="text-muted-foreground text-xs font-medium">
                       Phim liên quan từ hệ thống:
@@ -301,9 +364,7 @@ export function ChatWidget() {
                     <div
                       className={cn(
                         'gap-2',
-                        expanded
-                          ? 'grid grid-cols-1 sm:grid-cols-2'
-                          : 'space-y-1.5',
+                        expanded ? 'grid grid-cols-1 sm:grid-cols-2' : 'space-y-1.5',
                       )}
                     >
                       {msg.movies.slice(0, 4).map((movie) => (
@@ -318,10 +379,7 @@ export function ChatWidget() {
         })}
 
         {isPending && (
-          <div
-            className="flex items-start gap-2.5"
-            aria-label="Đang tạo câu trả lời"
-          >
+          <div className="flex items-start gap-2.5" aria-label="Đang tạo câu trả lời">
             <div className="bg-muted text-muted-foreground border-border flex size-8 shrink-0 items-center justify-center rounded-full border">
               <Sparkles className="size-4" aria-hidden="true" />
             </div>
@@ -334,9 +392,7 @@ export function ChatWidget() {
 
         {messages.length <= 1 && !isPending && (
           <div className="pt-2">
-            <p className="text-muted-foreground mb-2 text-xs font-medium">
-              Gợi ý câu hỏi nhanh:
-            </p>
+            <p className="text-muted-foreground mb-2 text-xs font-medium">Gợi ý câu hỏi nhanh:</p>
             <div className="flex flex-wrap gap-1.5">
               {QUICK_SUGGESTIONS.map((suggestion) => (
                 <Badge
@@ -362,10 +418,7 @@ export function ChatWidget() {
       </CardContent>
 
       <CardFooter className="border-border bg-background shrink-0 border-t p-3">
-        <form
-          onSubmit={handleFormSubmit}
-          className="flex w-full items-center gap-2"
-        >
+        <form onSubmit={handleFormSubmit} className="flex w-full items-center gap-2">
           <Input
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
@@ -398,7 +451,7 @@ export function ChatWidget() {
             role="dialog"
             aria-modal="true"
             aria-label="Khung chat trợ lý phim AI phóng to"
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-6"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 backdrop-blur-xs sm:p-6"
             onClick={(e) => {
               if (e.target === e.currentTarget) {
                 toggleExpand();
@@ -407,19 +460,9 @@ export function ChatWidget() {
           >
             <motion.div
               key="chat-modal-expanded"
-              initial={
-                reduceMotion
-                  ? { opacity: 0 }
-                  : { opacity: 0, scale: 0.95, y: 16 }
-              }
-              animate={
-                reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }
-              }
-              exit={
-                reduceMotion
-                  ? { opacity: 0 }
-                  : { opacity: 0, scale: 0.95, y: 16 }
-              }
+              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95, y: 16 }}
+              animate={reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95, y: 16 }}
               transition={{
                 duration: MOTION_DURATION_FAST,
                 ease: MOTION_EASE,
@@ -438,19 +481,9 @@ export function ChatWidget() {
           {isOpen && !isExpanded && (
             <motion.div
               key="chat-popup"
-              initial={
-                reduceMotion
-                  ? { opacity: 0 }
-                  : { opacity: 0, y: 16, scale: 0.96 }
-              }
-              animate={
-                reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }
-              }
-              exit={
-                reduceMotion
-                  ? { opacity: 0 }
-                  : { opacity: 0, y: 12, scale: 0.96 }
-              }
+              initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.96 }}
+              animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+              exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 12, scale: 0.96 }}
               transition={{
                 duration: MOTION_DURATION_FAST,
                 ease: MOTION_EASE,
