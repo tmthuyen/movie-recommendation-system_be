@@ -1,7 +1,7 @@
-import { Global, Module } from '@nestjs/common';
+import { Global, Inject, Module, OnModuleDestroy } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
-import { REDIS_CLIENT, RedisService } from './redis.service';
+import { REDIS_CLIENT, REDIS_SERVICE, RedisService } from './redis.service';
 import {
   REDIS_LOCK_SERVICE,
   RedisLockService,
@@ -20,12 +20,21 @@ import {
       },
       inject: [ConfigService],
     },
-    RedisService,
+    {
+      provide: REDIS_SERVICE,
+      useClass: RedisService,
+    },
     {
       provide: REDIS_LOCK_SERVICE,
       useClass: RedisLockService,
     },
   ],
-  exports: [REDIS_CLIENT, RedisService, REDIS_LOCK_SERVICE],
+  exports: [REDIS_CLIENT, REDIS_SERVICE, REDIS_LOCK_SERVICE],
 })
-export class RedisModule {}
+export class RedisModule implements OnModuleDestroy {
+  constructor(@Inject(REDIS_CLIENT) private readonly redis: Redis) {}
+
+  onModuleDestroy() {
+    this.redis.disconnect();
+  }
+}

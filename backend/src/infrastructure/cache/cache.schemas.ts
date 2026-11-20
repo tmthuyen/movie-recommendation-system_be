@@ -59,9 +59,16 @@ export const InteractionStatsCacheSchema = z.strictObject({
   viewCount: z.number().int().nonnegative(),
   ratingCount: z.number().int().nonnegative(),
   voteAverage: z.number().min(0).max(10),
+  ratingTotal: z.number().nonnegative(),
+  ratingAvg: z.number().min(0).max(10),
 });
 
-/** Một phần tử trong snapshot gợi ý phim. */
+/** Một item trong bảng xếp hạng phim hot (ZSET). */
+export const HotMovieSchema = z.object({
+  movieId: z.number().int().positive(),
+  score: z.number(),
+});
+
 export const RecommendationItemSchema = z.strictObject({
   id: z.number().int().positive(),
   score: z.number().min(0).max(1),

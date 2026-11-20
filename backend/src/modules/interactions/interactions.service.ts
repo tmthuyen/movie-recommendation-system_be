@@ -9,8 +9,11 @@ import { Movie } from '@/modules/movies/entities/movie.entity';
 import { User } from '@/modules/users/entities/user.entity';
 import { EventsGateway } from '@/modules/events/events.gateway';
 import {
+  HotMovie,
   MovieInteractionStats,
   MovieInteractionStatsService,
+  StatsMetric,
+  StatsPeriod,
 } from './movie-interaction-stats.service';
 import { MoviesService } from '@/modules/movies/movies.service';
 import { ResultWithPagination } from '@/common/dtos/paginated-result.interface';
@@ -52,21 +55,14 @@ export class InteractionsService {
       `Xử lý tương tác userId=${userId}, movieId=${movieId}, type=${type}`,
     );
 
-    const { action, likeCount, data } = await this.dataSource.transaction(
+    const { action, data } = await this.dataSource.transaction(
       async manager => {
-        // check if the movie exists
         const movie = await manager.findOne(Movie, { where: { id: movieId } });
         if (!movie) {
           this.logger.error(`Không tìm thấy phim với ID ${movieId}`);
           throw new NotFoundException(`Không tìm thấy phim với ID ${movieId}`);
         }
-        const oldLikeCount = movie.likeCount || 0;
 
-        this.logger.log(
-          `Xử lý tương tác userId=${userId}, movieId=${movieId}, type=${type}, oldLikeCount=${oldLikeCount}`,
-        );
-
-        // Check existing interaction for toggle
         const existing = await manager.findOne(Interaction, {
           where: {
             user: { id: userId },
@@ -75,70 +71,40 @@ export class InteractionsService {
           },
         });
 
-        // Nếu đã tồn tại, xóa interaction và trả về action = 'removed'
         if (existing) {
           await manager.remove(existing);
           this.logger.log(
             `Xóa tương tác userId=${userId}, movieId=${movieId}, type=${type}`,
           );
-
-          // Cập nhật lại likeCount trong bảng movies
-          if (type === InteractionType.LIKE) {
-            // Atomic Update
-            await manager.decrement(Movie, { id: movieId }, 'likeCount', 1);
-            this.logger.log(
-              `Cập nhật likeCount trong bảng movies: movieId=${movieId}, oldLikeCount=${oldLikeCount}`,
-            );
-          }
-
-          const stats = await this.statsService.getStats(movieId, manager);
-
-          this.publishAndBroadcast(userId, movieId, type, 'removed', stats);
-
-          return {
-            action: 'removed',
-            likeCount: stats.likeCount,
-            data: null,
-          };
+          return { action: 'removed' as const, data: null };
         }
 
-        // Nếu chưa tồn tại, tạo interaction và trả về action = 'added'
         const newInteraction = manager.create(Interaction, {
           type,
           movie: { id: movieId } as Movie,
           user: { id: userId } as User,
         });
         await manager.save(newInteraction);
-
-        // Cập nhật lại likeCount trong bảng movies
-        if (type === InteractionType.LIKE) {
-          // Atomic Update
-          await manager.increment(Movie, { id: movieId }, 'likeCount', 1);
-
-          this.logger.log(
-            `Cập nhật likeCount trong bảng movies: movieId=${movieId}, oldLikeCount=${oldLikeCount}`,
-          );
-        }
-
         this.logger.log(
           `Tạo tương tác mới userId=${userId}, movieId=${movieId}, type=${type}`,
         );
-
-        const stats = await this.statsService.getStats(movieId, manager);
-
-        this.publishAndBroadcast(userId, movieId, type, 'added', stats);
-
-        return {
-          action: 'added',
-          likeCount: stats.likeCount,
-          data: newInteraction,
-        };
+        return { action: 'added' as const, data: newInteraction };
       },
     );
+
+    const stats =
+      type === InteractionType.LIKE
+        ? await this.statsService.recordLike(
+            movieId,
+            action === 'added' ? 1 : -1,
+          )
+        : await this.statsService.getStats(movieId);
+    await this.publishAndBroadcast(userId, movieId, type, action, stats);
+
     return {
       action,
       type,
-      likeCount: likeCount,
+      likeCount: stats.likeCount,
       data: data || undefined,
     };
   }
@@ -146,6 +112,16 @@ export class InteractionsService {
   /** Số liệu tương tác realtime của phim (like/comment/view/rating). */
   async getMovieStats(movieId: number): Promise<MovieInteractionStats> {
     return this.statsService.getStats(movieId);
+  }
+
+  /** Trả danh sách xếp hạng phim từ Redis. */
+  async getMovieRanking(
+    type: 'popular' | 'hot' | 'top',
+    metricOrPeriod: StatsMetric | StatsPeriod,
+    period: StatsPeriod,
+    limit: number,
+  ): Promise<HotMovie[]> {
+    return this.statsService.getRanking(type, metricOrPeriod, period, limit);
   }
 
   async findAll(

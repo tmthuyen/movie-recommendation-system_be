@@ -1,4 +1,3 @@
-import logging
 import os
 from pathlib import Path
 from typing import Optional
@@ -7,8 +6,9 @@ import boto3
 from botocore.exceptions import ClientError
 
 from core.config import get_settings
+from utils.logger import setup_logger
 
-logger = logging.getLogger(name="FastAPI-Recommendations")
+logger = setup_logger(name="FastAPI-Recommendation")
 
 
 class StorageService:

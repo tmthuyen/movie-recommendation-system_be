@@ -7,7 +7,6 @@ import { MovieInteractionStatsService } from './movie-interaction-stats.service'
 import { RatingsService } from '@/modules/ratings/ratings.service';
 import { InteractionsService } from './interactions.service';
 import { Interaction, InteractionType } from './entities/interaction.entity';
-import { Movie } from '@/modules/movies/entities/movie.entity';
 
 describe('InteractionsService', () => {
   let service: InteractionsService;
@@ -27,7 +26,11 @@ describe('InteractionsService', () => {
     decrement: jest.Mock;
   };
   let dataSource: { transaction: jest.Mock };
-  let statsService: { getStats: jest.Mock };
+  let statsService: {
+    getStats: jest.Mock;
+    recordLike: jest.Mock;
+    getRanking: jest.Mock;
+  };
   let producer: { publishInteractionCreated: jest.Mock };
   let gateway: { broadcastInteraction: jest.Mock };
   let ratingService: { findByUserAndMovie: jest.Mock };
@@ -65,7 +68,11 @@ describe('InteractionsService', () => {
       findAllByUserAndMovie: jest.fn(),
     };
 
-    statsService = { getStats: jest.fn().mockResolvedValue(stats) };
+    statsService = {
+      getStats: jest.fn().mockResolvedValue(stats),
+      recordLike: jest.fn().mockResolvedValue(stats),
+      getRanking: jest.fn().mockResolvedValue([]),
+    };
     producer = { publishInteractionCreated: jest.fn() };
     gateway = { broadcastInteraction: jest.fn() };
     ratingService = { findByUserAndMovie: jest.fn().mockResolvedValue(null) };
@@ -96,12 +103,8 @@ describe('InteractionsService', () => {
       });
 
       expect(manager.save).toHaveBeenCalledTimes(1);
-      expect(manager.increment).toHaveBeenCalledWith(
-        Movie,
-        { id: 1 },
-        'likeCount',
-        1,
-      );
+      expect(statsService.recordLike).toHaveBeenCalledWith(1, 1);
+      expect(manager.increment).not.toHaveBeenCalled();
       expect(manager.create).toHaveBeenCalledWith(
         Interaction,
         expect.objectContaining({
@@ -147,12 +150,8 @@ describe('InteractionsService', () => {
       expect(manager.remove).toHaveBeenCalledWith(
         expect.objectContaining({ id: 99 }),
       );
-      expect(manager.decrement).toHaveBeenCalledWith(
-        Movie,
-        { id: 1 },
-        'likeCount',
-        1,
-      );
+      expect(statsService.recordLike).toHaveBeenCalledWith(1, -1);
+      expect(manager.decrement).not.toHaveBeenCalled();
       expect(manager.increment).not.toHaveBeenCalled();
       expect(gateway.broadcastInteraction).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'removed', movieId: 1 }),

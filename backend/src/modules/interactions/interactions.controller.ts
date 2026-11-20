@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
@@ -16,6 +17,11 @@ import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
 import { type Request } from 'express';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
+import type {
+  HotMovie,
+  StatsMetric,
+  StatsPeriod,
+} from './movie-interaction-stats.service';
 
 @ApiTags('Interactions')
 @Controller('interactions')
@@ -43,6 +49,67 @@ export class InteractionsController {
         result.action === 'added' ? 'Đã thêm vào yêu thích' : 'Đã bỏ yêu thích',
       result,
     };
+  }
+
+  @Get('stats/popular')
+  @ApiOperation({ summary: 'Phim popular mọi thời đại (Redis ZSET)' })
+  async getPopular(@Query('limit') limit?: string) {
+    const size = this.parseLimit(limit);
+    const result = await this.interactionsService.getMovieRanking(
+      'popular',
+      'all',
+      'all',
+      size,
+    );
+    return this.rankingResponse(
+      result,
+      size,
+      'Lấy danh sách phim popular thành công',
+    );
+  }
+
+  @Get('stats/hot')
+  @ApiOperation({ summary: 'Phim hot theo ngày/tuần/tháng (Redis ZSET)' })
+  async getHot(
+    @Query('period') period?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const size = this.parseLimit(limit);
+    const parsedPeriod = this.parsePeriod(period, false);
+    const result = await this.interactionsService.getMovieRanking(
+      'hot',
+      parsedPeriod,
+      parsedPeriod,
+      size,
+    );
+    return this.rankingResponse(
+      result,
+      size,
+      'Lấy danh sách phim hot thành công',
+    );
+  }
+
+  @Get('stats/top')
+  @ApiOperation({ summary: 'Top phim theo metric và khung thời gian' })
+  async getTop(
+    @Query('metric') metric?: string,
+    @Query('period') period?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const size = this.parseLimit(limit);
+    const parsedMetric = this.parseMetric(metric);
+    const parsedPeriod = this.parsePeriod(period, true);
+    const result = await this.interactionsService.getMovieRanking(
+      'top',
+      parsedMetric,
+      parsedPeriod,
+      size,
+    );
+    return this.rankingResponse(
+      result,
+      size,
+      'Lấy bảng xếp hạng phim thành công',
+    );
   }
 
   @Get('stats/:movieId')
@@ -171,6 +238,56 @@ export class InteractionsController {
       statusCode: 200,
       message: 'Lấy danh sách tương tác với movie thành công',
       result: data,
+    };
+  }
+
+  private parseLimit(value?: string): number {
+    const limit = Number(value ?? 10);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      throw new BadRequestException('Giới hạn phải là số nguyên từ 1 đến 100.');
+    }
+    return limit;
+  }
+
+  private parseMetric(value?: string): StatsMetric {
+    const metrics: StatsMetric[] = ['view', 'like', 'comment', 'rating'];
+    if (!value || !metrics.includes(value as StatsMetric)) {
+      throw new BadRequestException(
+        'Metric phải là view, like, comment hoặc rating.',
+      );
+    }
+    return value as StatsMetric;
+  }
+
+  private parsePeriod(
+    value: string | undefined,
+    allowAll: boolean,
+  ): StatsPeriod {
+    const periods: StatsPeriod[] = allowAll
+      ? ['all', 'day', 'week', 'month']
+      : ['day', 'week', 'month'];
+    if (!value || !periods.includes(value as StatsPeriod)) {
+      throw new BadRequestException(
+        allowAll
+          ? 'Period phải là all, day, week hoặc month.'
+          : 'Period phải là day, week hoặc month.',
+      );
+    }
+    return value as StatsPeriod;
+  }
+
+  private rankingResponse(result: HotMovie[], limit: number, message: string) {
+    return {
+      success: true,
+      statusCode: 200,
+      message,
+      result,
+      pagination: {
+        total: result.length,
+        page: 1,
+        limit,
+        totalPages: 1,
+      },
     };
   }
 }

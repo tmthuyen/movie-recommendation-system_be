@@ -1,4 +1,4 @@
-import { RedisService } from '@/infrastructure/redis/redis.service';
+import type { IRedisService } from '@/infrastructure/redis/redis.service';
 import { SessionData, SessionService } from './session.service';
 
 const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
@@ -40,7 +40,7 @@ describe('SessionService', () => {
       smembers: jest.fn().mockResolvedValue([]),
     };
 
-    service = new SessionService(redis as unknown as RedisService);
+    service = new SessionService(redis as unknown as IRedisService);
 
     loggerLog = jest
       .spyOn(service['logger'], 'log')

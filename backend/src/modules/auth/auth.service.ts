@@ -12,7 +12,8 @@ import { RegisterDto } from '@/modules/auth/dto/register.dto';
 import { User, UserStatus } from '@/modules/users/entities/user.entity';
 import { IMailService } from '@/infrastructure/mail/mail.service';
 import { SessionData, SessionService } from './session.service';
-import { RedisService } from '@/infrastructure/redis/redis.service';
+import { REDIS_SERVICE } from '@/infrastructure/redis/redis.service';
+import type { IRedisService } from '@/infrastructure/redis/redis.service';
 import { RolesService } from '@/modules/roles/roles.service';
 import { UserProducer } from '@/infrastructure/messaging/producers/user.producer';
 import {
@@ -37,7 +38,7 @@ export class AuthService {
     private rolesService: RolesService,
     private jwtService: JwtService,
     private sessionService: SessionService,
-    private redisService: RedisService,
+    @Inject(REDIS_SERVICE) private readonly redis: IRedisService,
     private userProducer: UserProducer,
     private configService: ConfigService,
     @Inject(IMailService) private readonly mailService: IMailService,
@@ -235,7 +236,7 @@ export class AuthService {
     }
 
     const verifyToken = this.sessionService.generateOpaqueToken();
-    await this.redisService.set(
+    await this.redis.set(
       `auth:verify_email:${verifyToken}`,
       userId,
       24 * 60 * 60,
@@ -318,7 +319,7 @@ export class AuthService {
 
   // 5. Xác thực email
   async verifyEmail(token: string) {
-    const userIdStr = await this.redisService.get(`auth:verify_email:${token}`);
+    const userIdStr = await this.redis.get(`auth:verify_email:${token}`);
     if (!userIdStr) {
       throw new BadRequestException('Mã xác thực không hợp lệ hoặc đã hết hạn');
     }
@@ -326,7 +327,7 @@ export class AuthService {
     const userId = userIdStr;
     const user = await this.usersService.findByIdWithRoles(userId);
     await this.usersService.updateStatus(userId, UserStatus.ACTIVE, true);
-    await this.redisService.del(`auth:verify_email:${token}`);
+    await this.redis.del(`auth:verify_email:${token}`);
     await this.userProducer.publishEmailVerified({
       userId: user.id,
       email: user.email,
@@ -341,7 +342,7 @@ export class AuthService {
     }
 
     const resetToken = this.sessionService.generateOpaqueToken();
-    await this.redisService.set(
+    await this.redis.set(
       `auth:reset_password:${resetToken}`,
       String(user.id),
       15 * 60,
@@ -359,7 +360,7 @@ export class AuthService {
       throw new BadRequestException('Password not matched');
     }
 
-    const userIdStr = await this.redisService.get(
+    const userIdStr = await this.redis.get(
       `auth:reset_password:${resetDto.token}`,
     );
     if (!userIdStr) {
@@ -371,7 +372,7 @@ export class AuthService {
     await this.usersService.updatePassword(userId, hashedPassword);
 
     await this.sessionService.removeAllSessions(userId);
-    await this.redisService.del(`auth:reset_password:${resetDto.token}`);
+    await this.redis.del(`auth:reset_password:${resetDto.token}`);
   }
 
   // get me

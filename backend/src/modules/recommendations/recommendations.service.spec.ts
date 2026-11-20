@@ -7,86 +7,73 @@ import {
   encodeCursor,
   fingerprintIds,
 } from '@/common/utils/cursor-pagination.util';
-import { RedisService } from '@/infrastructure/redis/redis.service';
+import type { IRedisService } from '@/infrastructure/redis/redis.service';
 
-/** Redis sorted set tối giản cho test (score = rank). */
-/** Minimal mock of RedisService satisfying the full interface for unit tests. */
-function createFakeRedis(): RedisService {
+/** Redis service tối giản cho các thao tác ZSET trong test. */
+function createFakeRedis(): IRedisService {
   const store = new Map<string, Array<{ score: number; member: string }>>();
 
   const mock: any = {
-    // Core sorted‑set operations used by RecommendationsService
     zadd: jest.fn(
       (
         key: string,
         entries: Array<{ score: number; member: string }>,
-        ttlSeconds?: number,
+        ttlSeconds: number,
       ) => {
-        const cur = store.get(key) ?? [];
-        for (const e of entries) {
-          const idx = cur.findIndex(i => i.member === e.member);
-          if (idx >= 0) cur[idx] = e;
-          else cur.push(e);
+        void ttlSeconds;
+        const current = store.get(key) ?? [];
+        for (const entry of entries) {
+          const index = current.findIndex(item => item.member === entry.member);
+          if (index >= 0) current[index] = entry;
+          else current.push(entry);
         }
-        store.set(key, cur);
+        store.set(key, current);
         return Promise.resolve();
       },
     ),
-    zrangeByScore: jest.fn((key, min, max, limit) => {
-      const exclusive = typeof min === 'string' && min.startsWith('(');
-      const minVal = Number(
-        typeof min === 'string' ? min.replace('(', '') : min,
-      );
-      const maxVal =
-        max === '+inf'
-          ? Number.POSITIVE_INFINITY
-          : Number(typeof max === 'string' ? max.replace('(', '') : max);
-      return Promise.resolve(
-        [...(store.get(key) ?? [])]
-          .sort((a, b) => a.score - b.score)
-          .filter(i => (exclusive ? i.score > minVal : i.score >= minVal))
-          .filter(i => i.score <= maxVal)
-          .slice(0, limit)
-          .map(i => i.member),
-      );
-    }),
+    zrangeByScore: jest.fn(
+      (
+        key: string,
+        min: string | number,
+        max: string | number,
+        limit: number,
+      ) => {
+        const exclusive = typeof min === 'string' && min.startsWith('(');
+        const minVal = Number(
+          typeof min === 'string' ? min.replace('(', '') : min,
+        );
+        const maxVal =
+          max === '+inf'
+            ? Number.POSITIVE_INFINITY
+            : Number(typeof max === 'string' ? max.replace('(', '') : max);
+        return Promise.resolve(
+          [...(store.get(key) ?? [])]
+            .sort((a, b) => a.score - b.score)
+            .filter(item =>
+              exclusive ? item.score > minVal : item.score >= minVal,
+            )
+            .filter(item => item.score <= maxVal)
+            .slice(0, limit)
+            .map(item => item.member),
+        );
+      },
+    ),
     zcard: jest.fn((key: string) =>
       Promise.resolve(store.get(key)?.length ?? 0),
     ),
-    // Stubbed members required by the full interface but not used in these tests
-    redisClient: {} as any,
-    getClient: jest.fn(() => ({}) as any),
-    acquireLock: jest.fn(() => Promise.resolve(null as any)),
-    eval: jest.fn(() => Promise.resolve()),
-    // other methods stubs
-    set: jest.fn(() => Promise.resolve()),
-    get: jest.fn(() => Promise.resolve(null)),
-    del: jest.fn(() => Promise.resolve()),
-    delByPattern: jest.fn(() => Promise.resolve()),
-    getKeys: jest.fn(() => Promise.resolve([])),
-    sadd: jest.fn(() => Promise.resolve()),
-    smembers: jest.fn(() => Promise.resolve([])),
-    srem: jest.fn(() => Promise.resolve()),
-    hset: jest.fn(() => Promise.resolve()),
-    hget: jest.fn(() => Promise.resolve(null)),
-    hdel: jest.fn(() => Promise.resolve()),
-    hgetall: jest.fn(() => Promise.resolve({})),
-    lpush: jest.fn(() => Promise.resolve()),
-    rpush: jest.fn(() => Promise.resolve()),
-    lrange: jest.fn(() => Promise.resolve([])),
-    lrem: jest.fn(() => Promise.resolve()),
-    lpop: jest.fn(() => Promise.resolve(null)),
-    // onModuleDestroy is not used in tests
-    onModuleDestroy: jest.fn(),
   };
-  return mock as RedisService;
+  return mock as IRedisService;
 }
 
 describe('RecommendationsService', () => {
   let service: RecommendationsService;
   let cache: FakeCacheService;
-  let redis: RedisService;
-  let movieService: { findOne: jest.Mock; findByIds: jest.Mock };
+  let redis: IRedisService;
+  let movieService: {
+    findOne: jest.Mock;
+    findByIds: jest.Mock;
+    findByIdsCached: jest.Mock;
+  };
 
   const buildAiResponse = (overrides: Record<string, unknown> = {}) => ({
     success: true,
@@ -140,6 +127,9 @@ describe('RecommendationsService', () => {
       findByIds: jest.fn((ids: number[]) =>
         Promise.resolve(ids.map(id => movies[id]).filter(Boolean)),
       ),
+      findByIdsCached: jest.fn((ids: number[]) =>
+        Promise.resolve(ids.map(id => movies[id]).filter(Boolean)),
+      ),
     };
 
     cache = new FakeCacheService();
@@ -150,6 +140,14 @@ describe('RecommendationsService', () => {
       movieService as unknown as MoviesService,
       cache,
       redis,
+      {
+        runWithLockOrFallback: (
+          _key: string,
+          _ttl: number,
+          _options: unknown,
+          callback: () => Promise<unknown>,
+        ) => callback(),
+      } as never,
     );
   });
 

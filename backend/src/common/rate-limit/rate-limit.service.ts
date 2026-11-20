@@ -1,14 +1,10 @@
-import { Injectable } from '@nestjs/common';
-import { RedisService } from '@/infrastructure/redis/redis.service';
+import { Inject, Injectable } from '@nestjs/common';
+import { REDIS_CLIENT } from '@/infrastructure/redis/redis.service';
 import Redis from 'ioredis';
 
 @Injectable()
 export class RateLimitService {
-  private redis: Redis;
-
-  constructor(private readonly redisService: RedisService) {
-    this.redis = this.redisService.getClient();
-  }
+  constructor(@Inject(REDIS_CLIENT) private readonly redis: Redis) {}
 
   async checkFixedWindow(
     key: string,

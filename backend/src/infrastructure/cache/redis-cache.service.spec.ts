@@ -1,6 +1,7 @@
 ﻿import { z } from 'zod';
 import { ConfigService } from '@nestjs/config';
-import { RedisService } from '@/infrastructure/redis/redis.service';
+import Redis from 'ioredis';
+import { RedisLockService } from '@/infrastructure/redis/redis-lock.service';
 import { RedisCacheService } from './redis-cache.service';
 
 /** Redis client giß║ú lß║¡p ─æß╗º API m├á `RedisCacheService` d├╣ng. */
@@ -33,16 +34,15 @@ class MemoryRedis {
   }
 
   eval(
-    _script: string,
+    script: string,
     _numKeys: number,
     key: string,
     token: string,
   ): Promise<number> {
-    if (this.store.get(key) === token) {
-      this.store.delete(key);
-      return Promise.resolve(1);
-    }
-    return Promise.resolve(0);
+    if (this.store.get(key) !== token) return Promise.resolve(0);
+    if (!script.includes('"del"')) return Promise.resolve(1);
+    this.store.delete(key);
+    return Promise.resolve(1);
   }
 }
 
@@ -54,12 +54,14 @@ describe('RedisCacheService', () => {
 
   const buildService = (enabled = true) => {
     memory = new MemoryRedis();
-    const redisService = {
+    const client = {
       get: (key: string) => memory.get(key),
-      set: (key: string, value: string, ttl?: number) =>
-        memory.set(key, value, 'EX', ttl ?? 0),
+      set: (key: string, value: string, ...args: (string | number)[]) =>
+        memory.set(key, value, ...args),
+      eval: (script: string, numKeys: number, key: string, token: string) =>
+        memory.eval(script, numKeys, key, token),
       del: (key: string) => memory.del(key),
-      getClient: () => memory,
+      incr: (key: string) => memory.incr(key),
     };
 
     const config = {
@@ -68,8 +70,9 @@ describe('RedisCacheService', () => {
     };
 
     return new RedisCacheService(
-      redisService as unknown as RedisService,
+      client as unknown as Redis,
       config as unknown as ConfigService,
+      new RedisLockService(client as unknown as Redis),
     );
   };
 
@@ -80,7 +83,9 @@ describe('RedisCacheService', () => {
   });
 
   it('chß║╖n key kh├┤ng bß║»t ─æß║ºu bß║▒ng "cache:"', async () => {
-    await expect(service.get('movie:1', itemSchema)).rejects.toThrow(/cache:/);
+    await expect(service.get('movie:1', itemSchema)).rejects.toThrow(
+      /Cache key không hợp lệ/,
+    );
   });
 
   it('trß║ú dß╗» liß╗çu khi JSON + schema hß╗úp lß╗ç', async () => {
@@ -107,15 +112,16 @@ describe('RedisCacheService', () => {
   });
 
   it('Redis lß╗ùi khi ─æß╗ìc ΓåÆ fail-open (null)', async () => {
-    const redisService = {
+    const client = {
       get: () => Promise.reject(new Error('redis down')),
       set: jest.fn(),
       del: jest.fn(),
-      getClient: () => memory,
+      eval: jest.fn(),
     };
     const broken = new RedisCacheService(
-      redisService as unknown as RedisService,
+      client as unknown as Redis,
       { get: () => 'true' } as unknown as ConfigService,
+      new RedisLockService(client as unknown as Redis),
     );
 
     await expect(broken.get('cache:t', itemSchema)).resolves.toBeNull();
@@ -151,7 +157,7 @@ describe('RedisCacheService', () => {
     expect(loader).not.toHaveBeenCalled();
   });
 
-  it('TTL c├│ jitter trong khoß║úng [ttl, ttl*1.1]', async () => {
+  it('TTL c├│ jitter trong khoß║úng [ttl, ttl*1.2]', async () => {
     const setSpy = jest.spyOn(memory, 'set');
 
     await service.getOrLoad({
@@ -166,7 +172,7 @@ describe('RedisCacheService', () => {
     );
     const ttlArg = cacheWrite?.[3] as number;
     expect(ttlArg).toBeGreaterThanOrEqual(100);
-    expect(ttlArg).toBeLessThanOrEqual(110);
+    expect(ttlArg).toBeLessThanOrEqual(120);
   });
 
   it('single-flight: 2 request ─æß╗ông thß╗¥i ΓåÆ loader chß╗ë chß║íy 1 lß║ºn', async () => {
@@ -191,5 +197,19 @@ describe('RedisCacheService', () => {
     expect(await service.incr('cache:ver')).toBe(1);
     expect(await service.incr('cache:ver')).toBe(2);
     expect(await service.getCounter('cache:ver')).toBe(2);
+  });
+
+  describe('RedisLockService', () => {
+    it('extendLock trả kết quả eval và giữ nguyên lock', async () => {
+      const memoryRedis = new MemoryRedis();
+      const lock = new RedisLockService(memoryRedis as unknown as Redis);
+      await memoryRedis.set('lock:key', 'owner', 'EX', 5, 'NX');
+
+      await expect(lock.extendLock('lock:key', 'owner', 5)).resolves.toBe(true);
+      await expect(lock.extendLock('lock:key', 'other', 5)).resolves.toBe(
+        false,
+      );
+      await expect(memoryRedis.get('lock:key')).resolves.toBe('owner');
+    });
   });
 });

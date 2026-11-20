@@ -1,11 +1,11 @@
 import asyncio
-import logging
 
 from sentence_transformers import SentenceTransformer
 
 from core.config import get_settings
+from utils.logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(name="FastAPI-Recommendation")
 settings = get_settings()
 
 

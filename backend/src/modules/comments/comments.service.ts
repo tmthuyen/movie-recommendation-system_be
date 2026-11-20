@@ -69,8 +69,7 @@ export class CommentsService {
       return comment;
     });
 
-    // Chỉ broadcast/publish SAU khi transaction commit.
-    const stats = await this.statsService.getStats(movieId);
+    const stats = await this.statsService.recordComment(movieId, 1);
 
     this.eventsGateway.broadcastComment(movieId, savedComment);
     this.eventsGateway.broadcastInteraction({
@@ -161,6 +160,7 @@ export class CommentsService {
   async remove(id: number) {
     const comment = await this.findOne(id);
     await this.repo.remove(comment.id);
+    await this.statsService.recordComment(Number(comment.movie.id), -1);
     return { success: true };
   }
 }

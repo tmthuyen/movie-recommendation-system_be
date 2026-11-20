@@ -10,11 +10,13 @@ import {
   ISeedRatingRepository,
 } from './seed-ratings.repository';
 import { EventsModule } from '../events/events.module';
+import { InteractionStatsModule } from '../interactions/interaction-stats.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Rating, SeedRating]),
     forwardRef(() => EventsModule),
+    InteractionStatsModule,
   ],
   controllers: [RatingsController],
   providers: [

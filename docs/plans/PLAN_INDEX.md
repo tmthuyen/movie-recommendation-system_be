@@ -53,6 +53,9 @@ Bảng theo dõi danh sách plan trong `docs/plans/`. Dùng để xác định `
 | 33 | V33_backend-auth-user-consumers.md | backend | auth-user-consumers | Tách queue user/auth và xử lý email qua event | 🟡 Đang triển khai |
 | 34 | V34_frontend_admin-table-upgrade.md | frontend | admin-table-upgrade | Nâng cấp UI danh sách admin bằng TanStack Table v9 → rollout toàn bộ trang (users/genres/countries/peoples/movies/interactions) + lọc null/rỗng, lọc quan hệ, cột ID, cột count, xem chi tiết phim | ✅ Hoàn thành (QA thủ công chưa chạy) |
 | 35 | V35_frontend_search-for-you-infinite.md | frontend | search-for-you-infinite | Trang tìm kiếm semantic/rerank/lexical + "Dành cho bạn" (tab chi tiết + `/for-you`) + grid phim infinite scroll dùng chung; sửa vỡ layout grid; chuẩn hoá comment; review UI bình luận (review-only) | 🟡 Task 1–2 code + gate tự động xong; Task 3 review xong, không sửa code; QA thủ công chưa chạy; chờ endpoint `lexical-search/cursor` |
+| 36 | V36_testing_performance-k6.md | testing | performance-k6 | Performance/load test k6 (public + AI service) | 🟡 Plan cũ chưa có mapping; bổ sung để giữ index liên tục |
+| 37 | V37_backend_cache-lock-stats-ttl.md | backend | cache-lock-stats-ttl | Cache dùng RedisLockService, stats cache-first + cron sync, TTL, semantic/forYou per-ID cache | 🟡 Đang triển khai |
+| 38 | V38_ai_search-history-user-vectors.md | ai | search-history-user-vectors | Search history + collection user vector | ⚪ Chưa duyệt / chưa triển khai |
 
 ## Ghi chú legacy
 
@@ -63,11 +66,11 @@ Bảng theo dõi danh sách plan trong `docs/plans/`. Dùng để xác định `
 
 ## Cách tính next_index
 
-`max(index) = 35` → `next_index = 36`
+`max(index) = 38` → `next_index = 39`
 
 ## next_index
 
-`36`
+`39`
 
 ## Cách xác định index khi tạo plan mới
 

@@ -44,7 +44,10 @@ import {
   RecommendationSnapshotSchema,
 } from '@/infrastructure/cache/cache.schemas';
 import { createHash } from 'crypto';
-import { RedisService } from '@/infrastructure/redis/redis.service';
+import { REDIS_SERVICE } from '@/infrastructure/redis/redis.service';
+import type { IRedisService } from '@/infrastructure/redis/redis.service';
+import { REDIS_LOCK_SERVICE } from '@/infrastructure/redis/redis-lock.service';
+import type { IRedisLockService } from '@/infrastructure/redis/redis-lock.service';
 import { z } from 'zod';
 
 const AI_SERVICE_URL =
@@ -112,7 +115,8 @@ export class RecommendationsService implements IRecommendationsService {
   constructor(
     private readonly movieService: MoviesService,
     @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
-    private readonly redis: RedisService,
+    @Inject(REDIS_SERVICE) private readonly redis: IRedisService,
+    @Inject(REDIS_LOCK_SERVICE) private readonly cacheLock: IRedisLockService,
   ) {
     this.window = RECOMMENDATION_WINDOW;
   }
@@ -221,7 +225,14 @@ export class RecommendationsService implements IRecommendationsService {
       Math.max(Number(topK) || DEFAULT_TOP_K, 1),
       this.window,
     );
-    const key = `cache:recommendation:semantic:${encodeURIComponent(keyword)}:k${this.window}`;
+    const version = await this.cache.getCounter(
+      CacheKeys.recommendation.globalVersion(),
+    );
+    const key = CacheKeys.recommendation.semantic(
+      keyword,
+      this.window,
+      version,
+    );
     const { items, total } = await this.readWindow(
       key,
       () => this.loadSemanticFromAi(keyword),
@@ -230,7 +241,7 @@ export class RecommendationsService implements IRecommendationsService {
     );
 
     return {
-      result: await this.hydrate(items, SimilarMovieResponseDto),
+      result: await this.hydrateWithCacheFirst(items, SimilarMovieResponseDto),
       pagination: { page: 1, limit: requested, total, totalPages: 1 },
     };
   }
@@ -259,7 +270,14 @@ export class RecommendationsService implements IRecommendationsService {
       MAX_CURSOR_LIMIT,
     );
     const afterRank = Math.max(0, Number(cursor) || 0);
-    const key = `cache:recommendation:semantic:${encodeURIComponent(keyword)}:k${this.window}`;
+    const version = await this.cache.getCounter(
+      CacheKeys.recommendation.globalVersion(),
+    );
+    const key = CacheKeys.recommendation.semantic(
+      keyword,
+      this.window,
+      version,
+    );
     const { items, total } = await this.readWindow(
       key,
       () => this.loadSemanticFromAi(keyword),
@@ -272,7 +290,7 @@ export class RecommendationsService implements IRecommendationsService {
     const hasMore = lastRank < total;
 
     return {
-      result: await this.hydrate(items, SimilarMovieResponseDto),
+      result: await this.hydrateWithCacheFirst(items, SimilarMovieResponseDto),
       pagination: {
         limit,
         total,
@@ -296,7 +314,10 @@ export class RecommendationsService implements IRecommendationsService {
       Math.max(Number(topK) || DEFAULT_TOP_K, 1),
       this.window,
     );
-    const key = `cache:recommendation:for-you:${userId}:k${this.window}`;
+    const version = await this.cache.getCounter(
+      CacheKeys.recommendation.globalVersion(),
+    );
+    const key = CacheKeys.recommendation.forYou(userId, this.window, version);
     const { items, total } = await this.readWindow(
       key,
       () => this.loadForYouFromAi(accessToken),
@@ -305,7 +326,7 @@ export class RecommendationsService implements IRecommendationsService {
     );
 
     return {
-      result: await this.hydrate(items, HybridMovieResponseDto),
+      result: await this.hydrateWithCacheFirst(items, HybridMovieResponseDto),
       pagination: { page: 1, limit: requested, total, totalPages: 1 },
     };
   }
@@ -326,7 +347,10 @@ export class RecommendationsService implements IRecommendationsService {
       MAX_CURSOR_LIMIT,
     );
     const afterRank = Math.max(0, Number(cursor) || 0);
-    const key = `cache:recommendation:for-you:${userId}:k${this.window}`;
+    const version = await this.cache.getCounter(
+      CacheKeys.recommendation.globalVersion(),
+    );
+    const key = CacheKeys.recommendation.forYou(userId, this.window, version);
     const { items, total } = await this.readWindow(
       key,
       () => this.loadForYouFromAi(accessToken),
@@ -339,7 +363,7 @@ export class RecommendationsService implements IRecommendationsService {
     const hasMore = lastRank < total;
 
     return {
-      result: await this.hydrate(items, HybridMovieResponseDto),
+      result: await this.hydrateWithCacheFirst(items, HybridMovieResponseDto),
       pagination: {
         limit: clampedLimit,
         total,
@@ -458,32 +482,50 @@ export class RecommendationsService implements IRecommendationsService {
     afterRank: number,
     limit: number,
   ): Promise<{ items: RecommendationItem[]; total: number }> {
-    let raw = await this.redis.zrangeByScore(
-      key,
-      `(${afterRank}`,
-      '+inf',
-      limit,
-    );
-
-    if (raw.length === 0 && (await this.redis.zcard(key)) === 0) {
-      const items = await loader();
-      await this.redis.zadd(
+    const read = async () => {
+      const raw = await this.redis.zrangeByScore(
         key,
-        items.map(item => ({
-          score: item.rank,
-          member: JSON.stringify(item),
-        })),
-        CacheTtl.recommendation,
+        `(${afterRank}`,
+        '+inf',
+        limit,
       );
-      raw = await this.redis.zrangeByScore(key, `(${afterRank}`, '+inf', limit);
-    }
-
-    return {
-      items: raw.map(member =>
-        RecommendationItemSchema.parse(JSON.parse(member)),
-      ),
-      total: await this.redis.zcard(key),
+      return {
+        items: raw.map(member =>
+          RecommendationItemSchema.parse(JSON.parse(member)),
+        ),
+        total: await this.redis.zcard(key),
+      };
     };
+
+    const current = await read();
+    if (current.items.length > 0 || current.total > 0) return current;
+
+    return this.cacheLock.runWithLockOrFallback(
+      `lock:${key}`,
+      5,
+      { waitMs: 150, retryIntervalMs: 25 },
+      async () => {
+        const rechecked = await read();
+        if (rechecked.total > 0) return rechecked;
+
+        const items = await loader();
+        const ttl =
+          CacheTtl.recommendation +
+          Math.floor(CacheTtl.recommendation * 0.2 * Math.random());
+        if (items.length > 0) {
+          await this.redis.zadd(
+            key,
+            items.map(item => ({
+              score: item.rank,
+              member: JSON.stringify(item),
+            })),
+            ttl,
+          );
+        }
+        return read();
+      },
+      async () => read(),
+    );
   }
 
   private async callAiService<T>(
@@ -721,6 +763,34 @@ export class RecommendationsService implements IRecommendationsService {
           score: item.score,
           rank: item.rank,
         };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+
+    return plainToInstance(dtoClass, mappedData, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  /** Hydration cache-first cho semantic/forYou. */
+  private async hydrateWithCacheFirst<T>(
+    items: RecommendationItem[],
+    dtoClass: new () => T,
+  ): Promise<T[]> {
+    if (items.length === 0) return [];
+
+    const movies = await this.movieService.findByIdsCached(
+      items.map(item => item.id),
+    );
+    const movieById = new Map<number, Movie>();
+    for (const movie of movies) {
+      movieById.set(Number(movie.id), movie);
+    }
+
+    const mappedData = items
+      .map(item => {
+        const movie = movieById.get(Number(item.id));
+        if (!movie) return null;
+        return { ...movie, score: item.score, rank: item.rank };
       })
       .filter((item): item is NonNullable<typeof item> => item !== null);
 

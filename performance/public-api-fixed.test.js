@@ -133,7 +133,7 @@ const SCENARIOS = {
       // { target: 1000, duration: '1m' },
     ],
     preAllocatedVUs: 100,
-    maxVUs: 500,
+    maxVUs: 1000,
     startTime: '35s',
     gracefulStop: '5s',
   },
@@ -149,10 +149,12 @@ const SCENARIOS = {
       { target: 500, duration: '2m' }, // stable
       { target: 1000, duration: '30s' }, // ramp up
       { target: 1000, duration: '2m' }, // stable
+      { target: 2000, duration: '30s' }, // ramp up
+      { target: 2000, duration: '2m' }, // stable
       { target: 0, duration: '2m' }, // ramp down
     ],
-    preAllocatedVUs: 500,
-    maxVUs: 500,
+    preAllocatedVUs: 200,
+    maxVUs: 750,
     startTime: '90s',
     gracefulStop: '5s',
   },
@@ -162,7 +164,7 @@ const SCENARIOS = {
     startRate: 100,
     timeUnit: '1s',
     stages: [
-      { target: 100, duration: '30s' },
+      { target: 200, duration: '30s' },
       { target: 2000, duration: '3m' },
       { target: 0, duration: '30s' },
     ],
