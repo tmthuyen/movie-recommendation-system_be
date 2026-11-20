@@ -26,6 +26,7 @@ interface ChatState {
   toggleExpand: () => void;
   setExpanded: (expanded: boolean) => void;
   addMessage: (message: NewChatMessageInput) => void;
+  updateMessage: (id: string, updates: Partial<ChatMessage>) => void;
   clearMessages: () => void;
 }
 
@@ -53,5 +54,11 @@ export const useChatStore = create<ChatState>((set) => ({
       };
       return { messages: [...state.messages, nextMessage] };
     }),
+  updateMessage: (id, updates) =>
+    set((state) => ({
+      messages: state.messages.map((msg) =>
+        msg.id === id ? { ...msg, ...updates } : msg,
+      ),
+    })),
   clearMessages: () => set({ messages: [INITIAL_WELCOME_MESSAGE] }),
 }));
