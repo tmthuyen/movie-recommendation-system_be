@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { interactionApi } from '@/apis/interaction.api';
 import { useAuthStore } from '@/stores/auth.store';
 import {
+  interactionStatsQueryKey,
   interactionWithMovieQueryKey,
+  useInteractionStats,
   useMyInteractionsWithMovie,
   useToggleInteraction,
 } from './useInteraction';
@@ -179,6 +181,28 @@ describe('useToggleInteraction', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['my-history'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['my-favorites-page'] });
   });
+
+  it('cập nhật likeCount vào cache stats sau toggle', async () => {
+    queryClient.setQueryData(interactionStatsQueryKey(1), {
+      movieId: 1,
+      likeCount: 4,
+      commentCount: 0,
+      viewCount: 100,
+      ratingCount: 2,
+      voteAverage: 4,
+    });
+    vi.mocked(interactionApi.toggleLike).mockResolvedValue(toggleResponse('added') as any);
+
+    const { result } = renderHook(() => useToggleInteraction(), {
+      wrapper: createWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ movieId: 1, type: 'like' });
+    });
+
+    expect(queryClient.getQueryData(interactionStatsQueryKey(1))).toMatchObject({ likeCount: 5 });
+  });
 });
 
 describe('useMyInteractionsWithMovie', () => {
@@ -237,5 +261,79 @@ describe('useMyInteractionsWithMovie', () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error).toBeInstanceOf(Error);
+  });
+});
+
+describe('useInteractionStats', () => {
+  beforeEach(() => {
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.mocked(interactionApi.getStats).mockReset();
+  });
+
+  afterEach(() => {
+    queryClient.clear();
+  });
+
+  it('dùng cache còn fresh, không gọi API khi mount', async () => {
+    queryClient.setQueryData(interactionStatsQueryKey(1), {
+      movieId: 1,
+      likeCount: 1,
+      commentCount: 0,
+      viewCount: 10,
+      ratingCount: 1,
+      voteAverage: 3,
+    });
+    vi.mocked(interactionApi.getStats).mockResolvedValue({
+      success: true,
+      statusCode: 200,
+      message: 'OK',
+      result: {
+        movieId: 1,
+        likeCount: 9,
+        commentCount: 2,
+        viewCount: 30,
+        ratingCount: 4,
+        voteAverage: 4.5,
+      },
+    } as any);
+
+    const { result } = renderHook(() => useInteractionStats(1), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.data?.likeCount).toBe(1));
+    expect(interactionApi.getStats).not.toHaveBeenCalled();
+  });
+
+  it('fetch lại khi cache đã stale', async () => {
+    queryClient.setQueryData(interactionStatsQueryKey(1), {
+      movieId: 1,
+      likeCount: 1,
+      commentCount: 0,
+      viewCount: 10,
+      ratingCount: 1,
+      voteAverage: 3,
+    });
+    await queryClient.invalidateQueries({ queryKey: interactionStatsQueryKey(1) });
+    vi.mocked(interactionApi.getStats).mockResolvedValue({
+      success: true,
+      statusCode: 200,
+      message: 'OK',
+      result: {
+        movieId: 1,
+        likeCount: 9,
+        commentCount: 2,
+        viewCount: 30,
+        ratingCount: 4,
+        voteAverage: 4.5,
+      },
+    } as any);
+
+    const { result } = renderHook(() => useInteractionStats(1), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.data?.likeCount).toBe(9));
+    expect(interactionApi.getStats).toHaveBeenCalledWith(1);
   });
 });

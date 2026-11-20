@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { movieApi } from '@/apis/movie.api';
+import { interactionStatsQueryKey } from './useInteraction';
 import {
   useGetMovieDetail,
   useGetMovies,
@@ -118,10 +119,9 @@ describe('useSearchMovies / useLatestMovies', () => {
       paginated(movies, { total: 1, page: 1, limit: 10, totalPages: 1 }) as any,
     );
 
-    const { result } = renderHook(
-      () => useSearchMovies({ page: 1, limit: 10, keyword: 'dune' }),
-      { wrapper: createWrapper() },
-    );
+    const { result } = renderHook(() => useSearchMovies({ page: 1, limit: 10, keyword: 'dune' }), {
+      wrapper: createWrapper(),
+    });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(movieApi.search).toHaveBeenCalledWith({ page: 1, limit: 10, keyword: 'dune' });
@@ -167,8 +167,16 @@ describe('useGetMovieDetail', () => {
 });
 
 describe('useIncrementView', () => {
-  it('cập nhật viewCount vào cache chi tiết phim (không refetch)', async () => {
+  it('cập nhật viewCount vào cache chi tiết phim và cache stats (không refetch)', async () => {
     queryClient.setQueryData(['movie', 1], { id: 1, title: 'Dune', viewCount: 100 });
+    queryClient.setQueryData(interactionStatsQueryKey(1), {
+      movieId: 1,
+      likeCount: 3,
+      commentCount: 0,
+      viewCount: 100,
+      ratingCount: 2,
+      voteAverage: 4,
+    });
     vi.mocked(movieApi.incrementView).mockResolvedValue({
       success: true,
       statusCode: 200,
@@ -183,6 +191,7 @@ describe('useIncrementView', () => {
     });
 
     expect(queryClient.getQueryData(['movie', 1])).toMatchObject({ viewCount: 101 });
+    expect(queryClient.getQueryData(interactionStatsQueryKey(1))).toMatchObject({ viewCount: 101 });
     expect(movieApi.incrementView).toHaveBeenCalledWith(1);
   });
 

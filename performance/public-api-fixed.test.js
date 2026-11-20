@@ -169,7 +169,7 @@ const SCENARIOS = {
       { target: 0, duration: '30s' },
     ],
     preAllocatedVUs: 200,
-    maxVUs: 500,
+    maxVUs: 750,
     startTime: '135s',
     gracefulStop: '5s',
   },

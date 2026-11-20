@@ -10,20 +10,31 @@ import { Badge } from '@/components/ui/badge';
 import { MovieDetail as MovieDetailType } from '@/shared/types/movie.types';
 import { getMovieTitle, getPosterUrl, getReleaseYear } from '@/shared/utils/movie';
 
+interface MovieDetailProps {
+  movie: MovieDetailType;
+  viewCount: number;
+  likeCount: number;
+  voteAverage: number;
+  voteCount: number;
+}
+
 /**
  * Thông tin chính của phim trên trang `/movies/[id]`:
  * poster, tiêu đề (EN + VI), metadata, mô tả (markdown), thể loại, quốc gia.
  */
-export function MovieDetail({ movie }: { movie: MovieDetailType }) {
+export function MovieDetail({
+  movie,
+  viewCount,
+  likeCount,
+  voteAverage,
+  voteCount,
+}: MovieDetailProps) {
   const poster = getPosterUrl(movie.posterPath);
   const backdrop = getPosterUrl(movie.backdropPath);
   const title = getMovieTitle(movie);
   const overview = movie.overviewVi || movie.overview || '';
   const genres = movie.genres ?? [];
   const year = getReleaseYear(movie.releaseDate);
-  const rating = typeof movie.voteAverage === 'number' ? movie.voteAverage : 0;
-  const voteCount = Number(movie.voteCount) || 0;
-  const likeCount = Number(movie.likeCount) || 0;
 
   return (
     <section className="bg-card overflow-hidden rounded-2xl border shadow-sm">
@@ -87,10 +98,10 @@ export function MovieDetail({ movie }: { movie: MovieDetailType }) {
             )}
             <span className="text-foreground inline-flex items-center gap-1.5 font-medium">
               <Clapperboard className="size-4 text-yellow-500" aria-hidden="true" />
-              {rating.toFixed(1)}{' '}
+              {voteAverage.toFixed(1)}{' '}
               <span className="text-muted-foreground">/ {voteCount} đánh giá</span>
             </span>
-            <MovieViewCount movieId={movie.id} viewCount={movie.viewCount} />
+            <MovieViewCount movieId={movie.id} viewCount={viewCount} />
           </div>
 
           {genres.length > 0 && (

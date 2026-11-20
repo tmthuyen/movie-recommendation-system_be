@@ -147,6 +147,17 @@ describe('MovieInteractionStatsService', () => {
     expect(redis.zsets.get('cache:stats:top:rating:all')?.get('7')).toBe(50);
   });
 
+  it('setRatingStats ghi số liệu từ DB và cập nhật ranking', async () => {
+    await expect(service.setRatingStats(7, 3, 4.5)).resolves.toMatchObject({
+      ratingCount: 3,
+      ratingTotal: 13.5,
+      ratingAvg: 4.5,
+      voteAverage: 4.5,
+    });
+    expect(redis.zsets.get('cache:stats:top:rating:all')?.get('7')).toBe(45);
+    expect(await service.listDirtyMovieIds()).toEqual([7]);
+  });
+
   it('getRanking hot trả đúng thứ tự score giảm dần', async () => {
     await service.recordView(1);
     await service.recordView(2);

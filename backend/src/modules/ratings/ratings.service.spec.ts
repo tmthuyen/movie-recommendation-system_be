@@ -30,7 +30,7 @@ describe('RatingsService', () => {
   let dataSource: { transaction: jest.Mock };
   let gateway: Record<string, jest.Mock>;
   let producer: { publishInteractionCreated: jest.Mock };
-  let statsService: { recordRating: jest.Mock };
+  let statsService: { setRatingStats: jest.Mock };
 
   beforeEach(() => {
     rawQueryBuilder = {
@@ -68,7 +68,7 @@ describe('RatingsService', () => {
     gateway = { broadcastRating: jest.fn() };
     producer = { publishInteractionCreated: jest.fn() };
     statsService = {
-      recordRating: jest.fn().mockResolvedValue({
+      setRatingStats: jest.fn().mockResolvedValue({
         likeCount: 0,
         commentCount: 0,
         viewCount: 0,
@@ -138,14 +138,14 @@ describe('RatingsService', () => {
       );
     });
 
-    it('rating chỉ cập nhật Redis, không update movie trong transaction', async () => {
+    it('rating tính lại count/average từ DB và ghi vào Redis, không update movie', async () => {
       manager.findOne.mockResolvedValue(null);
 
       await service.create('user-1', { movieId: 3, rating: 4 });
 
-      expect(statsService.recordRating).toHaveBeenCalledWith(3, 1, 4);
+      expect(manager.createQueryBuilder).toHaveBeenCalledWith(Rating, 'rating');
+      expect(statsService.setRatingStats).toHaveBeenCalledWith(3, 4, 3.76);
       expect(manager.update).not.toHaveBeenCalled();
-      expect(manager.createQueryBuilder).not.toHaveBeenCalled();
     });
 
     it('broadcast rating kèm movieStats và publish event sau commit', async () => {

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useEffect, useRef } from 'react';
 import { ErrorState } from '@/components/common/ErrorState';
 import { Skeleton } from '@/components/ui/skeleton';
+import useInteraction from '@/hooks/tankstack/useInteraction';
 import useMovie from '@/hooks/tankstack/useMovie';
 import { MovieComments } from './movie-comments';
 import { MovieDetail } from './movie-detail';
@@ -41,13 +42,13 @@ function DetailSkeleton() {
 }
 
 /**
- * Container trang chi tiết phim (client): fetch `GET /api/movies/:id`,
- * tăng view 1 lần khi mount (`POST /api/movies/:id/view` — đồng bộ `viewCount`
- * vào cache ngay khi server trả về), render các khối thông tin / đánh giá /
- * bình luận / phim tương tự.
+ * Container trang chi tiết phim (client): fetch `GET /api/movies/:id` để lấy nội dung
+ * và `GET /api/interactions/stats/:movieId` để lấy số liệu realtime, tăng view 1 lần
+ * khi mount, render các khối thông tin / đánh giá / bình luận / phim tương tự.
  */
 export function MovieDetailView({ id }: { id: number }) {
   const { data: movie, isLoading, isError, refetch } = useMovie.useGetMovieDetail(id);
+  const { data: stats } = useInteraction.useInteractionStats(id);
   const incrementView = useMovie.useIncrementView();
 
   // Chỉ tăng view đúng 1 lần cho mỗi id (StrictMode dev mount 2 lần → ref guard)
@@ -89,6 +90,11 @@ export function MovieDetailView({ id }: { id: number }) {
     );
   }
 
+  const viewCount = stats ? Number(stats.viewCount) : Number(movie.viewCount) || 0;
+  const likeCount = stats ? Number(stats.likeCount) : Number(movie.likeCount) || 0;
+  const voteAverage = stats ? Number(stats.voteAverage) : Number(movie.voteAverage) || 0;
+  const voteCount = stats ? Number(stats.ratingCount) : Number(movie.voteCount) || 0;
+
   return (
     <div className="animate-fade-in w-full space-y-8 pb-10">
       <nav aria-label="Điều hướng" className="flex items-center gap-2 text-sm">
@@ -108,7 +114,13 @@ export function MovieDetailView({ id }: { id: number }) {
         </span>
       </nav>
 
-      <MovieDetail movie={movie} />
+      <MovieDetail
+        movie={movie}
+        viewCount={viewCount}
+        likeCount={likeCount}
+        voteAverage={voteAverage}
+        voteCount={voteCount}
+      />
 
       <p className="text-muted-foreground text-sm">
         Nhấn <span className="text-foreground font-medium">Yêu thích</span> để thêm phim vào danh
@@ -117,7 +129,7 @@ export function MovieDetailView({ id }: { id: number }) {
 
       <div className="flex flex-col gap-2 sm:flex-row">
         <div className="flex w-full flex-col gap-6 sm:w-2/3">
-          <MovieRating movie={movie} />
+          <MovieRating movieId={movie.id} voteAverage={voteAverage} voteCount={voteCount} />
 
           <MovieComments movieId={movie.id} />
         </div>

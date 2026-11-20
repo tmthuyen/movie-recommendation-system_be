@@ -138,6 +138,40 @@ export class MovieInteractionStatsService {
     return this.getStats(movieId);
   }
 
+  /** Ghi số liệu rating đã tính từ DB vào Redis. */
+  async setRatingStats(
+    movieId: number,
+    ratingCount: number,
+    ratingAvg: number,
+  ): Promise<MovieInteractionStats> {
+    const previous = await this.getStats(movieId);
+    const count = Math.max(0, Math.trunc(ratingCount) || 0);
+    const average = Math.min(10, Math.max(0, Number(ratingAvg) || 0));
+    const ratingTotal = count > 0 ? Number((average * count).toFixed(2)) : 0;
+    const normalizedAvg =
+      count > 0 ? Number((ratingTotal / count).toFixed(2)) : 0;
+
+    await this.redis.hset(
+      CacheKeys.stats.detail(movieId),
+      {
+        ratingCount: String(count),
+        ratingTotal: String(ratingTotal),
+        ratingAvg: String(normalizedAvg),
+        voteAverage: String(normalizedAvg),
+      },
+      CacheTtl.statsDetail,
+    );
+
+    await this.bumpAllRankings(
+      movieId,
+      'rating',
+      count - previous.ratingCount,
+      normalizedAvg,
+    );
+    await this.markDirty(movieId);
+    return this.getStats(movieId);
+  }
+
   async getRanking(
     type: 'popular' | 'hot' | 'top',
     metricOrPeriod: StatsMetric | StatsPeriod,

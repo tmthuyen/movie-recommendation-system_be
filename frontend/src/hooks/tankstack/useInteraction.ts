@@ -141,7 +141,7 @@ export function useMyFavoriteKeys(limit: number = 100) {
 
 /**
  * Thống kê tương tác realtime của phim — `GET /api/interactions/stats/:movieId`.
- * Dùng ở trang chi tiết để hiển thị số like ban đầu (sau đó cập nhật qua WS).
+ * Dùng ở trang chi tiết để lấy snapshot ban đầu, sau đó cập nhật qua WS.
  */
 export function useInteractionStats(movieId: number | string, enabled: boolean = true) {
   return useQuery({
@@ -151,7 +151,10 @@ export function useInteractionStats(movieId: number | string, enabled: boolean =
       return response.result;
     },
     enabled: enabled && Boolean(movieId),
-    staleTime: 1000 * 30,
+    staleTime: 1000 * 60,
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 }
 
@@ -220,7 +223,11 @@ export function useToggleInteraction() {
       const parsedError = parseAxiosError(error);
       toast.error(parsedError.message || 'Không thể cập nhật tương tác.');
     },
-    onSuccess: (result) => {
+    onSuccess: (result, variables) => {
+      queryClient.setQueryData<InteractionStats>(
+        interactionStatsQueryKey(variables.movieId),
+        (old) => (old ? { ...old, likeCount: result.likeCount } : old),
+      );
       toast.success(result.action === 'added' ? 'Đã thêm vào yêu thích.' : 'Đã bỏ yêu thích.');
     },
     onSettled: (_data, _error, variables) => {

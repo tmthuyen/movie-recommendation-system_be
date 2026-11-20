@@ -1,8 +1,10 @@
 import { movieApi } from '@/apis/movie.api';
 import { parseAxiosError } from '@/lib/axiosClient';
+import type { InteractionStats } from '@/shared/types/interaction.types';
 import { MovieListResult, MovieQuery } from '@/shared/types/movie.types';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { interactionStatsQueryKey } from './useInteraction';
 
 // get list (public)
 export function useGetMovies(
@@ -55,9 +57,12 @@ export function useIncrementView() {
       return response.result;
     },
     onSuccess: (result, id) => {
-      // Đồng bộ viewCount vào cache chi tiết phim (không refetch).
+      // Đồng bộ viewCount vào cache chi tiết phim và cache stats (không refetch).
       queryClient.setQueryData(['movie', id], (old: any) =>
         old ? { ...old, viewCount: result.viewCount } : old,
+      );
+      queryClient.setQueryData<InteractionStats>(interactionStatsQueryKey(id), (old) =>
+        old ? { ...old, viewCount: Number(result.viewCount) } : old,
       );
     },
     onError: (error: any) => {
