@@ -108,8 +108,14 @@ class InteractionEventHandler:
             logger.warning(f"Failed to delete temp batch file {local_path}: {e}")
 
     async def _handle_interaction_created(self, payload: dict[str, Any]) -> None:
-        """
-        Process a new interaction (click, like, rating, etc.) and update user vectors.
+        """Xử lý tương tác mới và cập nhật các vector người dùng.
+
+        Validate payload, tính score theo action/rating rồi cập nhật vector
+        long-term và short-term. Genre được xử lý ở event `user.genre.update`
+        riêng; không ghi `user_profile_vectors`.
+
+        Returns:
+            None; lỗi payload hoặc vector lỗi được phép lan ra để queue retry.
         """
         # user_id = payload.get("userId")
         # movie_id = payload.get("movieId")
@@ -133,7 +139,7 @@ class InteractionEventHandler:
 
         movie_id = int(movie_id)
 
-        # Tính score dựa trên action và rating (nếu có): Confidence score
+        # Interaction score phục vụ vector user/movie giữ nguyên cách tính cũ.
         score = self._get_action_score(action=action, rating=score)
 
         logger.info(
@@ -141,8 +147,8 @@ class InteractionEventHandler:
             f"(Action: {action}, Score: {score}, Removed: {removed})"
         )
 
-        # 2. Update Semantic Profile Vector
-        await self._update_semantic_profile(
+        # Chỉ cập nhật long-term/short-term; không còn ghi profile vector.
+        await self._update_named_vectors(
             user_id=user_id, movie_id=movie_id, score=score
         )
         logger.info(
@@ -167,42 +173,36 @@ class InteractionEventHandler:
         """Chuẩn hoá score band 5 về khoảng [-1, 1] cho EMA."""
         return max(-1.0, min(1.0, float(score) / 5.0))
 
-    async def _update_semantic_profile(
+    async def _update_named_vectors(
         self, user_id: str, movie_id: int, score: float
     ) -> None:
-        """Update user_profile_vectors using Exponential Moving Average."""
-        # Get movie semantic vector
-
+        """Cập nhật vector dài hạn và ngắn hạn từ một tương tác."""
         movie_data = await self.movie_vector_service.find_movie_vector(movie_id)
+        movie_vec = np.array(movie_data["vector"], dtype=float)
+        normalized = self._normalize_score(score)
 
-        movie_vec = np.array(movie_data["vector"])
+        collections = []
+        if normalized > 0:
+            collections.append(settings.vector_user_long_term_collection)
+        collections.append(settings.vector_user_short_term_collection)
 
-        try:
-            user_data = await self.user_vector_service.find_user_profile_vector(user_id)
-        except CustomException as e:
-            logger.info(
-                f"[InteractionEventHandler] Không tìm thấy user vector với id={user_id}. Tạo mới."
+        alpha = 0.2
+        for collection_name in collections:
+            data = await self.user_vector_service.find_named_user_vector(
+                user_id, collection_name
             )
-            user_data = None
+            if data and data.get("vector"):
+                current = np.array(data["vector"], dtype=float)
+                new_vec = (1 - alpha) * current + alpha * normalized * movie_vec
+            else:
+                new_vec = normalized * movie_vec
 
-        alpha = 0.2  # Time decay factor for newer interactions
-
-        if user_data and user_data.get("vector"):
-            current_user_vec = np.array(user_data["vector"])
-            new_vec = (1 - alpha) * current_user_vec + alpha * (
-                self._normalize_score(score)
-            ) * movie_vec
-        else:
-            new_vec = self._normalize_score(score) * movie_vec
-
-        # Normalize to prevent explosion
-        norm = np.linalg.norm(new_vec)
-        if norm > 0:
-            new_vec = new_vec / norm
-
-        await self.user_vector_service.upsert_user_profile_vector(
-            user_id=user_id, vector=new_vec.tolist()
-        )
-        logger.info(
-            f"[InteractionEventHandler] Cập nhật user profile vector cho user_id={user_id} dựa trên interaction với movie_id={movie_id} (score={score})"
-        )
+            norm = float(np.linalg.norm(new_vec))
+            if norm > 0:
+                new_vec = new_vec / norm
+            await self.user_vector_service.upsert_named_user_vector(
+                user_id=user_id,
+                vector=new_vec.tolist(),
+                collection_name=collection_name,
+                updated_from="interaction",
+            )

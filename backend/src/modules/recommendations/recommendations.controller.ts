@@ -18,7 +18,11 @@ import {
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
 import { type Request } from 'express';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '@/modules/auth/guards/optional-jwt-auth.guard';
 import { AppException } from '@/common/custom-exception/app-exception';
+import { type SearchEventContext } from '@/infrastructure/messaging/search-event.service';
+
+type SearchRequest = Request & { correlationId?: string };
 
 @ApiTags('recommendations')
 @Controller('recommendations')
@@ -28,6 +32,14 @@ export class RecommendationsController {
     @Inject(IRecommendationsService)
     private readonly recommendationsService: IRecommendationsService,
   ) {}
+
+  private toSearchContext(req?: SearchRequest): SearchEventContext {
+    const user = req?.user as JwtPayload | undefined;
+    return {
+      userId: user?.sub,
+      correlationId: req?.correlationId,
+    };
+  }
 
   // /api/recommendations/similar/:id?topK
   @Get('/similar/:id')
@@ -97,12 +109,14 @@ export class RecommendationsController {
 
   // /api/recommendations/semantic-search?keyword=...&topK=10 (hoặc query=...)
   @Get('/semantic-search')
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Tìm phim theo ngữ nghĩa (topK)' })
   @ApiQuery({ name: 'keyword', required: false, type: String })
   @ApiQuery({ name: 'topK', required: false, type: Number, example: 10 })
   async semanticSearch(
     @Query('keyword') keyword: string,
     @Query('topK') topK?: number,
+    @Req() req?: SearchRequest,
   ) {
     this.logger.log(
       `Received request for semantic search keyword="${keyword}", topK=${topK}`,
@@ -119,6 +133,7 @@ export class RecommendationsController {
     const res = await this.recommendationsService.semanticSearch(
       keyword,
       Number(topK),
+      this.toSearchContext(req),
     );
 
     return {
@@ -132,12 +147,14 @@ export class RecommendationsController {
 
   // /api/recommendations/search-rerank?keyword=...&topK=10
   @Get('/search-rerank')
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({
     summary: 'Tìm kiếm kết hợp Lexical (PostgreSQL) + Semantic Rerank (AI)',
   })
   async searchLexicalSemanticRerank(
     @Query('keyword') keyword: string,
     @Query('topK') topK?: number,
+    @Req() req?: SearchRequest,
   ) {
     this.logger.log(
       `Received request for lexical+semantic rerank keyword="${keyword}", topK=${topK}`,
@@ -146,6 +163,7 @@ export class RecommendationsController {
     const res = await this.recommendationsService.searchLexicalSemanticRerank(
       keyword,
       Number(topK),
+      this.toSearchContext(req),
     );
 
     return {
@@ -159,11 +177,13 @@ export class RecommendationsController {
 
   // /api/recommendations/search-rerank/cursor?keyword=...&limit=12&cursor=...
   @Get('/search-rerank/cursor')
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({
     summary: 'Load-more tìm kiếm kết hợp Lexical + Semantic Rerank bằng cursor',
   })
   async searchLexicalSemanticRerankByCursor(
     @Query() cursorQuery: SearchCursorQueryDto,
+    @Req() req?: SearchRequest,
   ) {
     this.logger.log(
       `Received request for lexical+semantic rerank cursor keyword="${cursorQuery.keyword}", limit=${cursorQuery.limit}`,
@@ -172,6 +192,10 @@ export class RecommendationsController {
     const res =
       await this.recommendationsService.searchLexicalSemanticRerankByCursor(
         cursorQuery,
+        {
+          ...this.toSearchContext(req),
+          isFirstPage: !cursorQuery.cursor,
+        },
       );
 
     return {
@@ -185,12 +209,16 @@ export class RecommendationsController {
 
   // /api/recommendations/semantic-search/cursor?keyword=...&limit=12&cursor=12
   @Get('/semantic-search/cursor')
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({
     summary: 'Load-more tìm kiếm ngữ nghĩa bằng cursor',
     description:
       'Cursor là rank cuối cùng của trang trước. Trang đầu bỏ trống cursor.',
   })
-  async semanticSearchByCursor(@Query() cursorQuery: SearchCursorQueryDto) {
+  async semanticSearchByCursor(
+    @Query() cursorQuery: SearchCursorQueryDto,
+    @Req() req?: SearchRequest,
+  ) {
     const { keyword, cursor, limit } = cursorQuery;
     if (!keyword) {
       throw new AppException(
@@ -201,11 +229,17 @@ export class RecommendationsController {
       );
     }
 
-    const res = await this.recommendationsService.semanticSearchByCursor({
-      cursor,
-      keyword,
-      limit: limit === undefined ? undefined : Number(limit),
-    });
+    const res = await this.recommendationsService.semanticSearchByCursor(
+      {
+        cursor,
+        keyword,
+        limit: limit === undefined ? undefined : Number(limit),
+      },
+      {
+        ...this.toSearchContext(req),
+        isFirstPage: !cursor,
+      },
+    );
 
     return {
       success: true,

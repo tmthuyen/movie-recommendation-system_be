@@ -18,6 +18,7 @@ import { FailedEventsModule } from '@/modules/failed-events/failed-events.module
 import { MailModule } from '@/infrastructure/mail/mail.module';
 import { AuthConsumer, AuthHandler } from './consumers/auth.consumer';
 import { UserConsumer, UserHandler } from './consumers/user.consumer';
+import { SearchEventService } from './search-event.service';
 
 @Global()
 @Module({
@@ -77,8 +78,15 @@ import { UserConsumer, UserHandler } from './consumers/user.consumer';
     UserProducer,
     MovieProducer,
     InteractionProducer,
+    SearchEventService,
   ],
-  exports: [EventPublisherService, MESSAGE_BUS_CLIENT, InteractionProducer],
+  exports: [
+    EventPublisherService,
+    MESSAGE_BUS_CLIENT,
+    InteractionProducer,
+    UserProducer,
+    SearchEventService,
+  ],
 })
 export class MessagingModule implements OnModuleDestroy {
   constructor() {}

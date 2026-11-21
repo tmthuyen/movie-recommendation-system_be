@@ -27,6 +27,7 @@ from src.services.recommend_service import (
     _build_search_text,
     _format_item,
 )
+from src.services.user_vector_aggregator_service import UserVectorAggregatorService
 from src.services.user_vector_service import UserVectorService
 
 
@@ -119,12 +120,14 @@ def service(fake_chroma, fake_model, settings):
     embedding._model = fake_model
     movie_service = MovieVectorService(fake_chroma, embedding)
     user_service = UserVectorService(fake_chroma, embedding)
+    aggregator = UserVectorAggregatorService(user_service, movie_service)
     return RecommendService(
         fake_chroma,
         embedding,
         movie_service,
         user_service,
         FakeALSModelService(),
+        user_vector_aggregator=aggregator,
     )
 
 
@@ -387,12 +390,12 @@ class TestSimilarMoviesRerank:
 
 
 class TestHybridRecommendation:
-    def seed_profile(self, fake_chroma, settings, user_id: str, vector) -> None:
+    def seed_user_vector(self, fake_chroma, settings, user_id: str, vector) -> None:
         fake_chroma.seed(
             user_id,
             vector,
             {"user_id": user_id},
-            settings.vector_user_profile_collection,
+            settings.vector_user_long_term_collection,
         )
 
     def seed_movie(self, fake_chroma, settings, movie_id: int, vector, title=None):
@@ -403,7 +406,7 @@ class TestHybridRecommendation:
             settings.vector_collection,
         )
 
-    def test_combines_cf_and_cbf_with_rrf_details(
+    def test_combines_cf_and_long_term_with_rrf_details(
         self, service, fake_chroma, settings, monkeypatch
     ):
         monkeypatch.setattr(
@@ -411,7 +414,7 @@ class TestHybridRecommendation:
             "mapping_service",
             FakeMapping({"u-1": 7}, {0: 101, 1: 102}),
         )
-        self.seed_profile(fake_chroma, settings, "u-1", [1.0, 0.0, 0.0])
+        self.seed_user_vector(fake_chroma, settings, "u-1", [1.0, 0.0, 0.0])
         self.seed_movie(fake_chroma, settings, 101, [1.0, 0.0, 0.0], "Dune")
         self.seed_movie(fake_chroma, settings, 102, [0.0, 1.0, 0.0], "Alien")
         service._als_model_service = FakeALSModelService(
@@ -422,14 +425,14 @@ class TestHybridRecommendation:
 
         assert [item["movie_id"] for item in results] == [101, 102]
         assert results[0]["fused_rank"] == 1
-        assert results[0]["model_ranks"] == {"CF": 1, "CBF": 1}
+        assert results[0]["model_ranks"] == {"CF": 1, "LONG_TERM": 1}
         assert results[0]["raw_scores"]["CF"] == pytest.approx(0.9)
-        assert results[0]["raw_scores"]["CBF"] == pytest.approx(1.0)
-        assert results[0]["contributing_models"] == ["CF", "CBF"]
+        assert results[0]["raw_scores"]["LONG_TERM"] == pytest.approx(1.0)
+        assert results[0]["contributing_models"] == ["CF", "LONG_TERM"]
         assert results[0]["agreement_count"] == 2
         assert results[1]["agreement_count"] == 2
 
-    def test_cf_only_when_user_profile_is_missing(
+    def test_cf_only_when_user_vector_is_missing(
         self, service, fake_chroma, settings, monkeypatch
     ):
         monkeypatch.setattr(
@@ -448,18 +451,18 @@ class TestHybridRecommendation:
         assert results[0]["model_ranks"] == {"CF": 1}
         assert results[0]["raw_scores"]["CF"] == pytest.approx(0.7)
 
-    def test_cbf_only_for_cold_start_user_with_profile(
+    def test_long_term_only_for_cold_start_user(
         self, service, fake_chroma, settings, monkeypatch
     ):
         monkeypatch.setattr(recommend_module, "mapping_service", FakeMapping())
-        self.seed_profile(fake_chroma, settings, "cold-user", [1.0, 0.0, 0.0])
+        self.seed_user_vector(fake_chroma, settings, "cold-user", [1.0, 0.0, 0.0])
         self.seed_movie(fake_chroma, settings, 301, [1.0, 0.0, 0.0])
 
         results = run(service.hybrid_recommendation("cold-user", top_k=5))
 
         assert [item["movie_id"] for item in results] == [301]
-        assert results[0]["contributing_models"] == ["CBF"]
-        assert results[0]["model_ranks"] == {"CBF": 1}
+        assert results[0]["contributing_models"] == ["LONG_TERM"]
+        assert results[0]["model_ranks"] == {"LONG_TERM": 1}
 
     def test_unknown_user_without_profile_returns_empty(
         self, service, fake_chroma, monkeypatch

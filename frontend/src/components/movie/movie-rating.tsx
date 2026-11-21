@@ -7,11 +7,14 @@ import { useRequireLogin } from '@/hooks/useRequireLogin';
 import { useMovieSocket } from '@/hooks/useMovieSocket';
 import { cn } from '@/lib/utils';
 import useInteraction from '@/hooks/tankstack/useInteraction';
+import { Genre } from '@/shared/types/api.types';
+import { toInteractionGenres } from '@/shared/utils/movie';
 
 interface MovieRatingProps {
   movieId: number;
   voteAverage: number;
   voteCount: number;
+  genres?: Genre[];
 }
 
 /**
@@ -21,7 +24,7 @@ interface MovieRatingProps {
  * - Nút 1–5 sao (aria-label rõ ràng) → `POST /api/ratings` (JWT);
  *   chưa đăng nhập → hiện hộp thoại yêu cầu đăng nhập (`useRequireLogin`).
  */
-export function MovieRating({ movieId, voteAverage, voteCount }: MovieRatingProps) {
+export function MovieRating({ movieId, voteAverage, voteCount, genres }: MovieRatingProps) {
   const requireLogin = useRequireLogin();
 
   const [myRating, setMyRating] = useState<number | null>(null);
@@ -72,13 +75,16 @@ export function MovieRating({ movieId, voteAverage, voteCount }: MovieRatingProp
 
   const handleRate = (value: number) => {
     if (!requireLogin()) return;
-    createRating.mutate(value, {
-      onSuccess: (data) => {
-        console.log('Rating created successfully:', data);
+    createRating.mutate(
+      { rating: value, genres: toInteractionGenres(genres) },
+      {
+        onSuccess: (data) => {
+          console.log('Rating created successfully:', data);
 
-        setMyRating(data.rating);
+          setMyRating(data.rating);
+        },
       },
-    });
+    );
   };
 
   const displayStar = hoverStar || myRating || myInteractionsWithMovie?.rating?.rating || 0;

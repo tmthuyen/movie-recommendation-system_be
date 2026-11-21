@@ -186,13 +186,14 @@ describe('useIncrementView', () => {
 
     const { result } = renderHook(() => useIncrementView(), { wrapper: createWrapper() });
 
+    const genres = [{ id: 1, name: 'Action' }];
     await act(async () => {
-      await result.current.mutateAsync(1);
+      await result.current.mutateAsync({ id: 1, genres });
     });
 
     expect(queryClient.getQueryData(['movie', 1])).toMatchObject({ viewCount: 101 });
     expect(queryClient.getQueryData(interactionStatsQueryKey(1))).toMatchObject({ viewCount: 101 });
-    expect(movieApi.incrementView).toHaveBeenCalledWith(1);
+    expect(movieApi.incrementView).toHaveBeenCalledWith(1, genres);
   });
 
   it('toast lỗi khi tăng lượt xem thất bại', async () => {
@@ -201,7 +202,7 @@ describe('useIncrementView', () => {
     const { result } = renderHook(() => useIncrementView(), { wrapper: createWrapper() });
 
     await act(async () => {
-      await expect(result.current.mutateAsync(1)).rejects.toThrow('fail');
+      await expect(result.current.mutateAsync({ id: 1 })).rejects.toThrow('fail');
     });
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Không thể cập nhật lượt xem.'));

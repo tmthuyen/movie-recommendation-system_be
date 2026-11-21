@@ -123,6 +123,7 @@ export function MovieDetail({
           <MovieActions
             originalLikeCount={likeCount}
             movieId={movie.id}
+            genres={genres}
             variant="detail"
             className="mt-1"
           />

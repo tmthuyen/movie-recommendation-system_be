@@ -4,6 +4,7 @@ import { CommentsService } from './comments.service';
 import { ICommentRepository } from './comments.repository';
 import { EventsGateway } from '@/modules/events/events.gateway';
 import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
+import { UserProducer } from '@/infrastructure/messaging/producers/user.producer';
 import { MovieInteractionStatsService } from '@/modules/interactions/movie-interaction-stats.service';
 import {
   Interaction,
@@ -21,6 +22,7 @@ describe('CommentsService', () => {
   let dataSource: { transaction: jest.Mock };
   let gateway: Record<string, jest.Mock>;
   let producer: { publishInteractionCreated: jest.Mock };
+  let userProducer: { publishUserGenreUpdate: jest.Mock };
   let statsService: { getStats: jest.Mock; recordComment: jest.Mock };
 
   const stats = { likeCount: 1, commentCount: 4, viewCount: 7 };
@@ -51,6 +53,7 @@ describe('CommentsService', () => {
       broadcastInteraction: jest.fn(),
     };
     producer = { publishInteractionCreated: jest.fn() };
+    userProducer = { publishUserGenreUpdate: jest.fn() };
     statsService = {
       getStats: jest.fn().mockResolvedValue(stats),
       recordComment: jest.fn().mockResolvedValue(stats),
@@ -61,6 +64,7 @@ describe('CommentsService', () => {
       dataSource as unknown as DataSource,
       gateway as unknown as EventsGateway,
       producer as unknown as InteractionProducer,
+      userProducer as unknown as UserProducer,
       statsService as unknown as MovieInteractionStatsService,
     );
     jest.spyOn(service['logger'], 'log').mockImplementation(() => undefined);
@@ -127,6 +131,24 @@ describe('CommentsService', () => {
       expect(
         gateway.broadcastComment.mock.invocationCallOrder[0],
       ).toBeGreaterThan(transactionOrder);
+    });
+
+    it('comment kèm genres → publish user.genre.update score 0.8', async () => {
+      await service.create('user-1', {
+        movieId: 3,
+        content: 'Phim hay',
+        genres: [{ id: 2, name: 'Drama' }],
+      });
+
+      expect(userProducer.publishUserGenreUpdate).toHaveBeenCalledWith(
+        {
+          type: InteractionType.COMMENT,
+          genres: [{ id: 2, name: 'Drama' }],
+          score: 4,
+        },
+        undefined,
+        'user-1',
+      );
     });
 
     it('giữ parentId khi trả lời bình luận', async () => {

@@ -6,6 +6,7 @@ import { IMovieRepository } from './movies.repository';
 import { MovieProducer } from '@/infrastructure/messaging/producers/movie.producer';
 import { EventsGateway } from '@/modules/events/events.gateway';
 import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
+import { UserProducer } from '@/infrastructure/messaging/producers/user.producer';
 import { MovieInteractionStatsService } from '@/modules/interactions/movie-interaction-stats.service';
 import {
   Interaction,
@@ -14,6 +15,7 @@ import {
 import { Movie } from './entities/movie.entity';
 import { FakeCacheService } from '@/infrastructure/cache/testing/fake-cache.service';
 import type { IRedisService } from '@/infrastructure/redis/redis.service';
+import type { SearchEventService } from '@/infrastructure/messaging/search-event.service';
 
 describe('MoviesService', () => {
   let service: MoviesService;
@@ -39,7 +41,9 @@ describe('MoviesService', () => {
   let movieProducer: Record<string, jest.Mock>;
   let eventsGateway: Record<string, jest.Mock>;
   let interactionProducer: { publishInteractionCreated: jest.Mock };
+  let userProducer: { publishUserGenreUpdate: jest.Mock };
   let statsService: { getStats: jest.Mock; recordView: jest.Mock };
+  let searchEventService: { publishIfEligible: jest.Mock };
 
   // `sort` là field bắt buộc trong MovieSearchRequestDto (có default ở controller),
   // nên test helper cast để chỉ truyền phần cần kiểm tra.
@@ -97,6 +101,7 @@ describe('MoviesService', () => {
       broadcastInteraction: jest.fn(),
     };
     interactionProducer = { publishInteractionCreated: jest.fn() };
+    userProducer = { publishUserGenreUpdate: jest.fn() };
     statsService = {
       getStats: jest.fn(),
       recordView: jest.fn().mockResolvedValue({
@@ -111,6 +116,9 @@ describe('MoviesService', () => {
     };
 
     cache = new FakeCacheService();
+    searchEventService = {
+      publishIfEligible: jest.fn().mockResolvedValue(undefined),
+    };
 
     service = new MoviesService(
       repo as unknown as IMovieRepository,
@@ -118,9 +126,11 @@ describe('MoviesService', () => {
       movieProducer as unknown as MovieProducer,
       eventsGateway as unknown as EventsGateway,
       interactionProducer as unknown as InteractionProducer,
+      userProducer as unknown as UserProducer,
       statsService as unknown as MovieInteractionStatsService,
       cache,
       { mget: jest.fn().mockResolvedValue([]) } as unknown as IRedisService,
+      searchEventService as unknown as SearchEventService,
     );
 
     jest.spyOn(service['logger'], 'log').mockImplementation(() => undefined);
@@ -363,6 +373,25 @@ describe('MoviesService', () => {
         }),
       );
       expect(res).toMatchObject({ score: 1, interaction: 'created' });
+    });
+
+    it('click kèm genres → publish user.genre.update score 0.2', async () => {
+      repo.findById.mockResolvedValue({ id: 1, viewCount: 0 });
+      manager.findOne.mockResolvedValue(null);
+
+      await service.incrementViewCount(1, 'user-1', [
+        { id: 8, name: 'Sci-Fi' },
+      ]);
+
+      expect(userProducer.publishUserGenreUpdate).toHaveBeenCalledWith(
+        {
+          type: InteractionType.CLICK,
+          genres: [{ id: 8, name: 'Sci-Fi' }],
+          score: 1,
+        },
+        undefined,
+        'user-1',
+      );
     });
 
     it('user xem lại: score tăng 1, broadcast updated, vẫn publish event score=null', async () => {

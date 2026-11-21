@@ -150,22 +150,34 @@ Base URL: `http://localhost:8082/api/recommendations`. Swagger: `/docs`.
 
 - Backend publish `eventType=interaction.created` (routing key `interaction.event`) cho like/unlike, comment, rating, click; cron 24h publish `training.batch`.
 - `score` do backend tính theo band 5 (`like=5`, `comment=4`, `click=1` tăng dần tối đa 5, `rating=1..5`; unlike `score=-5`, `removed=true`). Client không gửi score.
-- `InteractionEventHandler` ưu tiên `payload.score`, fallback map band 5, chuẩn hoá `score/5.0`, clamp `[-1,1]` cho EMA vector semantic + CF.
+- `InteractionEventHandler` ưu tiên `payload.score`, fallback map band 5, chuẩn hoá `score/5.0`, clamp `[-1,1]` cho EMA vector semantic + CF. Score dùng cho vector user/movie giữ nguyên mapping cũ; rating dùng score gốc.
 - `training.batch`: ALS dùng cột `rating` nếu có, nếu không dùng `score` (clip `0.1..5.0`).
+
+### 6.4 Search event & ForYou vectors (V38)
+
+- Backend phát `user.exchange / user.search` với payload `{userId, mode, keywordRaw, keywordNormalized}`; envelope chỉ có `occurredAt`/`correlationId`. ai-service consume chung `user.queue` (`user.#`). Guest và load-more/phân trang không phát; **không** lưu search history vào DB/Redis.
+- `SearchEventConsumer` đọc `userId` từ payload, `occurredAt`/`correlationId` từ envelope, chuẩn hoá lại keyword (`utils/search_keyword_utils.py`, idempotent), embed rồi upsert `user_search_vectors`; đồng thời cập nhật `user_long_term_vectors` theo EMA (`alpha = 0.2`).
+- `InteractionEventHandler` chỉ cập nhật `user_long_term_vectors` (tương tác score > 0) và `user_short_term_vectors` (mọi tương tác) theo EMA; **không còn ghi `user_profile_vectors`**. Event `interaction.created` giữ nguyên payload; ai-service không đọc `genres` từ event này. Score cho vector user/movie giữ mapping interaction handler cũ (click `1`, comment `2`, like `5`, rating lấy score gốc); không áp dụng quy tắc âm của genre.
+- Backend phát event độc lập `user.genre.update` với envelope top-level `userId` và payload `{type, genres: [{id, name}], score}`; `score` là score gốc theo band tương tác. `GenreEventHandler` gọi `GenreVectorService.update_from_event()` để cập nhật **payload metadata** `genre_scores` của record `userId` trong collection `user_genre_vectors` dạng JSON `{genreId: score}`; service tự chuẩn hoá theo `type`: rating `(rating-3)/2`, các loại khác `score/5`, clamp `[-1,1]`, rồi `w[g] = clamp(w[g] + 0.05 * score_norm / max(1, |genres|), -1, 1)`. Vector của record chỉ giữ nguyên/placeholder, không dùng để tính điểm nên không còn lỗi dimension.
+- Redis dùng **2 key matrix genre**: `cache:stats:genre:ids` (SET) và `cache:stats:genre:{genreId}:movies` (ZSET, `score = 1`). Không dùng reverse key `cache:stats:genre:movie:{movieId}` và **không lưu score genre của user trong Redis**.
+- Khi gợi ý, `GenreVectorService` đọc payload user, lấy `matrix.genre_ids` thực tế rồi dựng vector user cùng dimension với ma trận trước khi tính cosine.
+- `GenreVectorService` đọc 2 key Redis, gán **mọi ô movie↔genre = 1** (không min-max theo viewCount), chuẩn hoá L2 rồi cache ma trận trong **RAM và file** (`data/cache/genre_matrix.joblib`). Tự reload từ Redis khi quá TTL 12h (`GENRE_MATRIX_TTL_SECONDS`) hoặc qua `reload_matrix()`/`invalidate_cache()`; không gọi HTTP backend lúc inference.
+- `UserVectorAggregatorService` fusion ForYou **không còn CBF/profile**: CF `0.375`, LONG_TERM `0.1875`, SHORT_TERM `0.1875`, SEARCH `0.125`, GENRE `0.125` (nguồn GENRE đọc payload collection `user_genre_vectors` qua `GenreVectorService`). Cold-start (không có CF): LONG_TERM `2/15`, SHORT_TERM `5/15`, SEARCH `2/15`, GENRE `6/15`. Nguồn thiếu → bỏ và normalize lại; có CF nhưng không có vector → CF `0.70` + popular `0.30`; không CF → `popular:all`. Envelope/cursor của `/hybrid` và logic `/search-rerank` không đổi.
+- `user.deleted` xoá **5 collection** vector người dùng: profile legacy, long_term, short_term, search và genre payload.
 
 ## 7. Tích hợp hạ tầng & trạng thái
 
 | Thành phần | Trạng thái |
 |---|---|
-| RabbitMQ | ✅ `aio-pika`; consumer `recommendation.queue` (`movie.#`) và `interaction.queue` (`interaction.event` + `training.batch`); có DLX/DLQ + retry (`core/config.py:20-46`). |
-| Redis | ✅ `RedisStore` (`REDIS_ENABLED=true`, mặc định `redis://localhost:6379/0`) (`config.py:48-50`). |
-| Vector DB | ✅ Mặc định **ChromaDB** persist `./data/chroma_db`; hỗ trợ `qdrant`, `redis`, `memory` (`config.py:52-70`). |
+| RabbitMQ | ✅ `aio-pika`; consumer `recommendation.queue` (`movie.#`), `interaction.queue` (`interaction.event` + `training.batch`) và `user.queue` (`user.#`, gồm `user.search`, `user.genre.update`); có DLX/DLQ + retry. |
+| Redis | ✅ `RedisStore` (`REDIS_ENABLED=true`, mặc định `redis://localhost:6379/0`); chỉ đọc 2 key genre `cache:stats:genre:ids` và `cache:stats:genre:{genreId}:movies` (ZSET score = 1) + `cache:stats:popular:all`. |
+| Vector DB | ✅ Mặc định **ChromaDB** persist `./data/chroma_db`; 5 collection user (profile legacy, long_term, short_term, search, genre payload) + movie/CF; genre lưu payload `genre_scores`, vector chỉ placeholder; hỗ trợ `qdrant`, `redis`, `memory`. |
 | Embedding | ✅ Sentence-Transformers, model `paraphrase-multilingual-MiniLM-L12-v2`, 384 chiều (`config.py:63-73`). |
-| ALS / Hybrid | ✅ `implicit` + vector CF/user-profile (`config.py:58-65`; `services/recommend_service.py:133-242`). |
+| ALS / Hybrid | ✅ `implicit` + `UserVectorAggregatorService` (CF, 4 collection semantic/search + GENRE từ payload `user_genre_vectors`, popular fallback); `/hybrid` giữ envelope/cursor, `/search-rerank` không đổi. |
 | OpenTelemetry | ✅ `configure_tracing` (`OTEL_ENABLED=true`, endpoint `:4318`) (`config.py:16-18`; `server.py:108`). |
 | Prometheus | ✅ `/api/metrics` + system metrics thread (`server.py:31-40,147-149`). |
 | Cron | ✅ `TrainingScheduler`; cron mặc định `0 3 * * 0`, `MODEL_TRAIN_ENABLED=false` (`config.py:75-76`). |
-| Test | ✅ `tests/` có **28 file** (24 unit theo module + 4 scripts), **659 passed / 4 skipped**, coverage **94%** (V21, 2026-11-04). Chạy trong venv project: `.\.venv\Scripts\python -m pytest tests -q --cov=src`. |
+| Test | ✅ `tests/` có **44 file Python**, **579 passed**, coverage **73%** (V38, 2026-11-21). Chỉ cập nhật spec hiện hữu; không tạo file test mới cho file nguồn mới. Chạy trong venv project: `.\.venv\Scripts\python -m pytest tests -q --cov=src`. |
 | Dockerfile | ⚠ **Toàn bộ 13 dòng đang comment** (`ai-service/Dockerfile:1-13`) — chưa build image được; chạy local bằng uvicorn. |
 
 ### Cấu hình CORS
@@ -205,4 +217,4 @@ Tham chiếu: `ai-service/docs/KHOI_DONG_FASTAPI.md`, `ai-service/README.md`, `a
 4. **Dockerfile chưa dùng được** (comment toàn bộ); cần viết lại nếu muốn container hoá.
 5. **`/hybrid-search` yêu cầu JWT + `userId` khớp `sub`**; `/hybrid/no-auth` là debug, không dùng production.
 6. **Mapping/model storage** phụ thuộc R2 (`S3_*`); nếu thiếu cấu hình, startup có thể bỏ qua mapping (xem log) — cần xác minh.
-7. Chưa có consumer cho preference data từ backend.
+7. Consumer `user.queue` đã xử lý `user.created/updated/deleted/search/genre.update`; `preferenceData` của `user.created/updated.profile` được embed và trộn EMA vào `user_long_term_vectors` + `user_short_term_vectors`, không còn ghi `user_profile_vectors`.

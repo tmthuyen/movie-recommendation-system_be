@@ -1,6 +1,7 @@
 import { ratingApi } from '@/apis/rating.api';
 import { parseAxiosError } from '@/lib/axiosClient';
 import { Rating } from '@/shared/types/rating.types';
+import type { InteractionGenrePayload } from '@/shared/utils/movie';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
@@ -29,9 +30,12 @@ export function useCreateRating(movieId: number) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (rating: number): Promise<Rating> => {
+    mutationFn: async (input: {
+      rating: number;
+      genres?: InteractionGenrePayload[];
+    }): Promise<Rating> => {
       const id = Number(movieId); // Ensure movieId is a number
-      const response = await ratingApi.create({ rating, movieId: id });
+      const response = await ratingApi.create({ ...input, movieId: id });
       return response.result;
     },
     onSuccess: () => {

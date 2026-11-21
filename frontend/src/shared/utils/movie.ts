@@ -9,10 +9,7 @@ const TMDB_IMAGE_BASE_URL =
 
 export type TmdbImageSize = 'w200' | 'w342' | 'w500' | 'w780' | 'original';
 
-export function getTmdbImageUrl(
-  path?: string | null,
-  size: TmdbImageSize = 'w500',
-): string | null {
+export function getTmdbImageUrl(path?: string | null, size: TmdbImageSize = 'w500'): string | null {
   if (!path) return null;
   return `${TMDB_IMAGE_BASE_URL}/${size}${path}`;
 }
@@ -36,10 +33,33 @@ export function getReleaseYear(releaseDate?: string | null): string {
   return releaseDate.slice(0, 4);
 }
 
+/** Payload genre tối giản đúng contract DTO backend (`id`, `name`). */
+export interface InteractionGenrePayload {
+  id: number;
+  name: string;
+}
+
+/**
+ * Chỉ giữ `id`/`name` khi gửi genre lên API tương tác.
+ * Tránh `enName` hoặc field thừa làm ValidationPipe `forbidNonWhitelisted` trả lỗi.
+ *
+ * @returns Mảng genre sạch, hoặc `undefined` khi không có genre.
+ */
+export function toInteractionGenres(
+  genres?: Array<{ id: number | string; name: string }>,
+): InteractionGenrePayload[] | undefined {
+  if (!genres || genres.length === 0) return undefined;
+  return genres.map((genre) => ({
+    id: Number(genre.id),
+    name: genre.name,
+  }));
+}
+
 export const movieUtil = {
   getTmdbImageUrl,
   getPosterUrl,
   getBackdropUrl,
   getMovieTitle,
   getReleaseYear,
+  toInteractionGenres,
 };

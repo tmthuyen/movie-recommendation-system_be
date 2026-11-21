@@ -13,6 +13,7 @@ import {
 import { Rating } from './entities/rating.entity';
 import { EventsGateway } from '@/modules/events/events.gateway';
 import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
+import { UserProducer } from '@/infrastructure/messaging/producers/user.producer';
 import { MovieInteractionStatsService } from '@/modules/interactions/movie-interaction-stats.service';
 
 @Injectable()
@@ -23,11 +24,12 @@ export class RatingsService {
     private readonly dataSource: DataSource,
     private readonly eventsGateway: EventsGateway,
     private readonly interactionProducer: InteractionProducer,
+    private readonly userProducer: UserProducer,
     private readonly statsService: MovieInteractionStatsService,
   ) {}
 
   async create(userId: string, createRatingDto: CreateRatingDto) {
-    const { movieId, rating } = createRatingDto;
+    const { movieId, rating, genres } = createRatingDto;
 
     const { savedRating, ratingCount, ratingAvg } =
       await this.dataSource.transaction(async manager => {
@@ -113,6 +115,18 @@ export class RatingsService {
       removed: false,
       createdAt: savedRating.createdAt ?? new Date(),
     });
+
+    if (genres && genres.length > 0) {
+      await this.userProducer.publishUserGenreUpdate(
+        {
+          type: InteractionType.RATING,
+          genres: genres.map(genre => ({ id: genre.id, name: genre.name })),
+          score: rating,
+        },
+        undefined,
+        userId,
+      );
+    }
 
     return savedRating;
   }

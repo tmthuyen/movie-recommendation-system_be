@@ -8,6 +8,8 @@ import {
   EmailVerificationRequestedPayloadType,
   UserCreatedPayloadType,
   UserEmailVerifiedPayloadType,
+  UserGenreUpdatePayloadType,
+  UserSearchPayloadType,
   UserUpdatedPayloadType,
 } from '@/infrastructure/messaging/event.types';
 
@@ -50,6 +52,44 @@ export class UserProducer {
       { userId },
       correlationId,
       MESSAGE_EVENTS.USER_DELETED,
+    );
+  }
+
+  /**
+   * Phát event search của user; userId nằm trong payload, không đưa lên envelope.
+   * Payload gồm userId/mode/keywordRaw/keywordNormalized; correlationId và routingKey được giữ nguyên event type.
+   * @returns Promise<void>; phát qua exchange user, không ghi DB/Redis.
+   */
+  publishUserSearch(
+    payload: UserSearchPayloadType,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.eventPublisher.publish(
+      MESSAGE_BUS_CONFIG.USER_EXCHANGE,
+      MESSAGE_EVENTS.USER_SEARCH,
+      payload,
+      correlationId,
+      MESSAGE_EVENTS.USER_SEARCH,
+    );
+  }
+
+  /**
+   * Phát event cập nhật vector genre của user.
+   * Event độc lập, không gộp vào `interaction.created`; userId được đưa lên envelope.
+   * @returns Promise<void>; phát qua exchange user, không ghi DB/Redis.
+   */
+  publishUserGenreUpdate(
+    payload: UserGenreUpdatePayloadType,
+    correlationId?: string,
+    userId?: string,
+  ): Promise<void> {
+    return this.eventPublisher.publish(
+      MESSAGE_BUS_CONFIG.USER_EXCHANGE,
+      MESSAGE_EVENTS.USER_GENRE_UPDATE,
+      payload,
+      correlationId,
+      MESSAGE_EVENTS.USER_GENRE_UPDATE,
+      userId,
     );
   }
 

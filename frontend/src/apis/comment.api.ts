@@ -1,16 +1,23 @@
 import { ApiPaginatedResponse, ApiResponse } from '@/shared/types/api.types';
 import { Comment } from '@/shared/types/comment.types';
 import { withListParams, type SearchListParams } from '@/shared/utils/list-params';
+import { toInteractionGenres, type InteractionGenrePayload } from '@/shared/utils/movie';
 import axiosClient from '../lib/axiosClient';
 
 export const commentApi = {
-  /** Thêm bình luận (JWT) — body `{ content, movieId, parentId? }`. */
+  /** Thêm bình luận (JWT) — body `{ content, movieId, parentId?, genres? }`. */
   create: async (input: {
     content: string;
     movieId: number | string;
     parentId?: number | string;
+    genres?: InteractionGenrePayload[];
   }): Promise<ApiResponse<Comment>> => {
-    const { data } = await axiosClient.post('/comments', input);
+    const { genres, ...rest } = input;
+    const normalizedGenres = toInteractionGenres(genres);
+    const { data } = await axiosClient.post('/comments', {
+      ...rest,
+      ...(normalizedGenres ? { genres: normalizedGenres } : {}),
+    });
     return data;
   },
   /**

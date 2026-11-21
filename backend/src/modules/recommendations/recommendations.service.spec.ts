@@ -8,6 +8,7 @@ import {
   fingerprintIds,
 } from '@/common/utils/cursor-pagination.util';
 import type { IRedisService } from '@/infrastructure/redis/redis.service';
+import type { SearchEventService } from '@/infrastructure/messaging/search-event.service';
 
 /** Redis service tối giản cho các thao tác ZSET trong test. */
 function createFakeRedis(): IRedisService {
@@ -74,6 +75,7 @@ describe('RecommendationsService', () => {
     findByIds: jest.Mock;
     findByIdsCached: jest.Mock;
   };
+  let searchEventService: { publishIfEligible: jest.Mock };
 
   const buildAiResponse = (overrides: Record<string, unknown> = {}) => ({
     success: true,
@@ -135,6 +137,9 @@ describe('RecommendationsService', () => {
     cache = new FakeCacheService();
 
     redis = createFakeRedis();
+    searchEventService = {
+      publishIfEligible: jest.fn().mockResolvedValue(undefined),
+    };
 
     service = new RecommendationsService(
       movieService as unknown as MoviesService,
@@ -148,6 +153,7 @@ describe('RecommendationsService', () => {
           callback: () => Promise<unknown>,
         ) => callback(),
       } as never,
+      searchEventService as unknown as SearchEventService,
     );
   });
 

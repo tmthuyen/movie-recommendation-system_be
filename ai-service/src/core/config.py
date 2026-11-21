@@ -56,10 +56,17 @@ class Settings(BaseSettings):
     vector_db_provider: str = "chroma"
     vector_collection: str = "movies"
 
-    # AI Collaborative & Hybrid Collections
+    # CF latent factor (iALS): ĐÃ BỎ VECTOR NÀY
+    # KHÔNG SỬ DỤNG 2 vector này
     vector_user_cf_collection: str = "user_cf_vectors"
     vector_movie_cf_collection: str = "movie_cf_vectors"
+
+    # semantic profile: content-based filtering
     vector_user_profile_collection: str = "user_profile_vectors"
+    vector_user_long_term_collection: str = "user_long_term_vectors"
+    vector_user_short_term_collection: str = "user_short_term_vectors"
+    vector_user_search_collection: str = "user_search_vectors"
+    vector_user_genre_collection: str = "user_genre_vectors"
 
     # Dimension of paraphrase-multilingual-MiniLM-L12-v2 (multilingual, 384-dim)
     vector_size: int = 384

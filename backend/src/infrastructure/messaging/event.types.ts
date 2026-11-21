@@ -7,6 +7,8 @@ export interface EventEnvelope<T = unknown> {
   source: string;
   occurredAt: string;
   correlationId?: string;
+  /** Chủ sở hữu của event; nằm ở envelope để payload giữ thuần domain data. */
+  userId?: string;
   payload: T;
 }
 
@@ -17,6 +19,7 @@ export const EventEnvelopeSchema = z.object({
   source: z.string().min(1),
   occurredAt: z.string().datetime(),
   correlationId: z.string().optional(),
+  userId: z.string().optional(),
   payload: z.unknown(),
 });
 
@@ -64,6 +67,35 @@ export const userDeletedPayloadSchema = z.object({
 });
 
 export type UserDeletedPayloadType = z.infer<typeof userDeletedPayloadSchema>;
+
+/** Payload event `user.search` — userId nằm trong payload cùng keyword. */
+export const userSearchPayloadSchema = z.object({
+  userId: z.string(),
+  mode: z.enum(['semantic', 'hybrid', 'db']),
+  keywordRaw: z.string(),
+  keywordNormalized: z.string(),
+});
+
+export type UserSearchPayloadType = z.infer<typeof userSearchPayloadSchema>;
+
+/**
+ * Payload event `user.genre.update` — genre lấy từ payload tương tác.
+ * `score` là score gốc theo band tương tác; ai-service tự chuẩn hoá theo `type`.
+ */
+export const userGenreUpdatePayloadSchema = z.object({
+  type: z.enum(['click', 'like', 'rating', 'comment']),
+  genres: z.array(
+    z.object({
+      id: z.number().int().positive(),
+      name: z.string(),
+    }),
+  ),
+  score: z.number(),
+});
+
+export type UserGenreUpdatePayloadType = z.infer<
+  typeof userGenreUpdatePayloadSchema
+>;
 
 export const emailVerificationRequestedPayloadSchema = z.object({
   userId: z.string(),

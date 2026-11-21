@@ -1,6 +1,15 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsNotEmpty, IsNumber, IsString, IsOptional } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsNotEmpty,
+  IsNumber,
+  IsString,
+  IsOptional,
+  ValidateNested,
+} from 'class-validator';
+import { InteractionGenreDto } from '@/modules/interactions/dto/create-interaction.dto';
 
 export class CreateCommentDto {
   @ApiProperty({
@@ -26,4 +35,16 @@ export class CreateCommentDto {
   @IsOptional()
   @IsNumber({}, { message: 'ID bình luận cha phải là số' })
   parentId?: number;
+
+  @ApiProperty({
+    type: [InteractionGenreDto],
+    required: false,
+    description: 'Genre của phim để cập nhật user genre vector',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => InteractionGenreDto)
+  genres?: InteractionGenreDto[];
 }

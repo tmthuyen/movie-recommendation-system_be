@@ -6,15 +6,26 @@ import {
   ToggleInteractionResult,
 } from '@/shared/types/interaction.types';
 import { withListParams, type SearchListParams } from '@/shared/utils/list-params';
+import { toInteractionGenres, type InteractionGenrePayload } from '@/shared/utils/movie';
 import axiosClient from '../lib/axiosClient';
 
 export const interactionApi = {
-  /** TOGGLE yêu thích (JWT) — body `{ type: 'like', movieId }`, gọi lại để bỏ. */
+  /**
+   * TOGGLE yêu thích (JWT) — body `{ type: 'like', movieId, genres? }`.
+   * Genre của phim được gửi kèm để backend phát event cập nhật user genre vector.
+   * @returns Envelope kết quả toggle; backend tự quyết added/removed.
+   */
   toggleLike: async (input: {
     type: 'like';
     movieId: number;
+    genres?: InteractionGenrePayload[];
   }): Promise<ApiResponse<ToggleInteractionResult>> => {
-    const { data } = await axiosClient.post('/interactions', input);
+    const genres = toInteractionGenres(input.genres);
+    const { data } = await axiosClient.post('/interactions', {
+      type: input.type,
+      movieId: input.movieId,
+      ...(genres ? { genres } : {}),
+    });
     return data;
   },
   /** Thống kê tương tác realtime của phim (public). */

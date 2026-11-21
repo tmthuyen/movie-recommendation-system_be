@@ -23,6 +23,10 @@ import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
 import { MovieSearchRequestDto } from '@/modules/movies/dto/movie-search-request.dto';
 import { plainToInstance } from 'class-transformer';
 import { MovieResponseDto } from '@/modules/movies/dto/movie-response.dto';
+import { RecordViewDto } from '@/modules/movies/dto/record-view.dto';
+import { type SearchEventContext } from '@/infrastructure/messaging/search-event.service';
+
+type SearchRequest = Request & { correlationId?: string };
 
 @ApiTags('Movies')
 @Controller('movies')
@@ -96,9 +100,23 @@ export class MoviesController {
 
   // search nâng cao: genres, sortBy, keyword
   @Get('/search')
+  @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Tìm kiếm phim (Public)' })
-  async search(@Query() query: MovieSearchRequestDto) {
-    const { result, pagination } = await this.moviesService.search(query);
+  async search(
+    @Query() query: MovieSearchRequestDto,
+    @Req() req?: SearchRequest,
+  ) {
+    const user = req?.user as JwtPayload | undefined;
+    const context: SearchEventContext = {
+      userId: user?.sub,
+      correlationId: req?.correlationId,
+      isFirstPage: query.page === undefined || Number(query.page) === 1,
+    };
+    const { result, pagination } = await this.moviesService.search(
+      query,
+      context,
+    );
+
     return {
       success: true,
       statusCode: 200,
@@ -128,9 +146,17 @@ export class MoviesController {
   @UseGuards(OptionalJwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Tăng lượt xem cho phim và ghi log' })
-  async incrementView(@Param('id') id: string, @Req() req: Request) {
+  async incrementView(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Body() body?: RecordViewDto,
+  ) {
     const user = req.user as JwtPayload | undefined;
-    const result = await this.moviesService.incrementViewCount(+id, user?.sub);
+    const result = await this.moviesService.incrementViewCount(
+      +id,
+      user?.sub,
+      body?.genres,
+    );
     return {
       success: true,
       statusCode: 200,

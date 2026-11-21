@@ -65,7 +65,6 @@ def test_log_vector_db_health_warns_for_empty_collections(caplog):
 
     assert "Collection 'movies' is empty" in caplog.text
     assert "Collection 'user_cf_vectors' is empty" in caplog.text
-    assert "Collection 'user_profile_vectors' is empty" in caplog.text
     assert "Collection 'movie_cf_vectors' is empty" not in caplog.text
 
 

@@ -58,6 +58,18 @@ describe('movieApi', () => {
     expect(result.result.viewCount).toBe(11);
   });
 
+  it('incrementView chỉ gửi genre id/name, bỏ field thừa', async () => {
+    mocks.client.post.mockResolvedValue(
+      envelope({ viewCount: 11, score: 1, interaction: 'created' }),
+    );
+
+    await movieApi.incrementView(5, [{ id: 1, name: 'Action', enName: 'Action' }] as never);
+
+    expect(mocks.client.post).toHaveBeenCalledWith('/movies/5/view', {
+      genres: [{ id: 1, name: 'Action' }],
+    });
+  });
+
   it('create gọi POST /movies với payload', async () => {
     mocks.client.post.mockResolvedValue(envelope({ id: 9 }));
 

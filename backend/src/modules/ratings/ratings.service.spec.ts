@@ -4,6 +4,7 @@ import { RatingsService } from './ratings.service';
 import { IRatingRepository } from './ratings.repository';
 import { EventsGateway } from '@/modules/events/events.gateway';
 import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
+import { UserProducer } from '@/infrastructure/messaging/producers/user.producer';
 import {
   Interaction,
   InteractionType,
@@ -30,6 +31,7 @@ describe('RatingsService', () => {
   let dataSource: { transaction: jest.Mock };
   let gateway: Record<string, jest.Mock>;
   let producer: { publishInteractionCreated: jest.Mock };
+  let userProducer: { publishUserGenreUpdate: jest.Mock };
   let statsService: { setRatingStats: jest.Mock };
 
   beforeEach(() => {
@@ -67,6 +69,7 @@ describe('RatingsService', () => {
     };
     gateway = { broadcastRating: jest.fn() };
     producer = { publishInteractionCreated: jest.fn() };
+    userProducer = { publishUserGenreUpdate: jest.fn() };
     statsService = {
       setRatingStats: jest.fn().mockResolvedValue({
         likeCount: 0,
@@ -84,6 +87,7 @@ describe('RatingsService', () => {
       dataSource as unknown as DataSource,
       gateway as unknown as EventsGateway,
       producer as unknown as InteractionProducer,
+      userProducer as unknown as UserProducer,
       statsService as unknown as MovieInteractionStatsService,
     );
   });
@@ -135,6 +139,40 @@ describe('RatingsService', () => {
       expect(manager.create).not.toHaveBeenCalledWith(
         Rating,
         expect.anything(),
+      );
+    });
+
+    it('rating kèm genres → publish user.genre.update với score âm/dương theo 3 sao', async () => {
+      manager.findOne.mockResolvedValue(null);
+
+      await service.create('user-1', {
+        movieId: 3,
+        rating: 2,
+        genres: [{ id: 4, name: 'Horror' }],
+      });
+      await service.create('user-1', {
+        movieId: 4,
+        rating: 4,
+        genres: [{ id: 5, name: 'Comedy' }],
+      });
+
+      expect(userProducer.publishUserGenreUpdate).toHaveBeenCalledWith(
+        {
+          type: InteractionType.RATING,
+          genres: [{ id: 4, name: 'Horror' }],
+          score: 2,
+        },
+        undefined,
+        'user-1',
+      );
+      expect(userProducer.publishUserGenreUpdate).toHaveBeenCalledWith(
+        {
+          type: InteractionType.RATING,
+          genres: [{ id: 5, name: 'Comedy' }],
+          score: 4,
+        },
+        undefined,
+        'user-1',
       );
     });
 

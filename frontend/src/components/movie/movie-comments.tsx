@@ -15,6 +15,8 @@ import { useRequireLogin } from '@/hooks/useRequireLogin';
 import { emitTypingComment, useMovieSocket } from '@/hooks/useMovieSocket';
 import { cn } from '@/lib/utils';
 import { Comment } from '@/shared/types/comment.types';
+import { Genre } from '@/shared/types/api.types';
+import { toInteractionGenres } from '@/shared/utils/movie';
 import { useAuthStore } from '@/stores/auth.store';
 
 const PAGE_LIMIT = 5;
@@ -41,10 +43,12 @@ function CommentItem({
   comment,
   movieId,
   level,
+  genres,
 }: {
   comment: Comment;
   movieId: number | string;
   level: number;
+  genres?: Genre[];
 }) {
   const name = comment.user?.fullName || comment.user?.email || 'Người dùng';
   const isTemporary = comment.id < 0;
@@ -65,7 +69,7 @@ function CommentItem({
     const value = replyContent.trim();
     if (!value || createComment.isPending) return;
     createComment.mutate(
-      { content: value, parentId: replyTo },
+      { content: value, parentId: replyTo, genres: toInteractionGenres(genres) },
       {
         onSuccess: () => {
           setReplyContent('');
@@ -178,7 +182,9 @@ function CommentItem({
           </form>
         </div>
       )}
-      {isExpanded && <CommentReplies level={level} movieId={movieId} parentId={comment.id} />}
+      {isExpanded && (
+        <CommentReplies level={level} movieId={movieId} parentId={comment.id} genres={genres} />
+      )}
     </div>
   );
 }
@@ -188,10 +194,12 @@ function CommentReplies({
   level,
   movieId,
   parentId,
+  genres,
 }: {
   level: number;
   movieId: number | string;
   parentId: number | string;
+  genres?: Genre[];
 }) {
   const { data, isLoading } = useComment.useGetComments(movieId, {
     parentId,
@@ -217,7 +225,13 @@ function CommentReplies({
     <ul className={`${paddingLeft} mt-2 space-y-2`} aria-label="Trả lời">
       {replies.map((reply) => (
         <li key={reply.id}>
-          <CommentItem level={level + 1} key={reply.id} comment={reply} movieId={movieId} />
+          <CommentItem
+            level={level + 1}
+            key={reply.id}
+            comment={reply}
+            movieId={movieId}
+            genres={genres}
+          />
         </li>
       ))}
     </ul>
@@ -226,6 +240,7 @@ function CommentReplies({
 
 interface MovieCommentsProps {
   movieId: number | string;
+  genres?: Genre[];
 }
 
 /**
@@ -234,7 +249,7 @@ interface MovieCommentsProps {
  * (`movie-{id}-comment` thêm bình luận mới, `movie-{id}-typing` hiển thị
  * "đang gõ…").
  */
-export function MovieComments({ movieId }: MovieCommentsProps) {
+export function MovieComments({ movieId, genres }: MovieCommentsProps) {
   const requireLogin = useRequireLogin();
   const { isAuthenticated, user } = useAuthStore();
 
@@ -312,7 +327,7 @@ export function MovieComments({ movieId }: MovieCommentsProps) {
     const value = content.trim();
     if (!value || createComment.isPending) return;
     createComment.mutate(
-      { content: value },
+      { content: value, genres: toInteractionGenres(genres) },
       {
         onSuccess: () => {
           setContent('');
@@ -331,7 +346,7 @@ export function MovieComments({ movieId }: MovieCommentsProps) {
     const value = replyContent.trim();
     if (!value || createComment.isPending) return;
     createComment.mutate(
-      { content: value, parentId: replyTo },
+      { content: value, parentId: replyTo, genres: toInteractionGenres(genres) },
       {
         onSuccess: () => {
           setReplyContent('');
@@ -410,7 +425,7 @@ export function MovieComments({ movieId }: MovieCommentsProps) {
             {comments.map((comment) => {
               return (
                 <li key={comment.id} className="space-y-1">
-                  <CommentItem level={1} comment={comment} movieId={movieId} />
+                  <CommentItem level={1} comment={comment} movieId={movieId} genres={genres} />
                 </li>
               );
             })}

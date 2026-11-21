@@ -4,6 +4,8 @@ export const MESSAGE_EVENTS = {
   USER_CREATED: 'user.created',
   USER_UPDATED_PROFILE: 'user.updated.profile',
   USER_DELETED: 'user.deleted',
+  USER_SEARCH: 'user.search',
+  USER_GENRE_UPDATE: 'user.genre.update',
   AUTH_EMAIL_VERIFICATION_REQUESTED: 'auth.email_verification.requested',
   AUTH_EMAIL_VERIFIED: 'auth.email_verified',
   MOVIE_CREATED: 'movie.created',

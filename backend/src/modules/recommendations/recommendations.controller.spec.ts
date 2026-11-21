@@ -139,6 +139,7 @@ describe('RecommendationsController', () => {
     expect(recommendationsService.semanticSearch).toHaveBeenCalledWith(
       'hành động',
       10,
+      { userId: undefined, correlationId: undefined },
     );
     expect(res).toEqual({
       success: true,
@@ -166,11 +167,18 @@ describe('RecommendationsController', () => {
       limit: 12,
     });
 
-    expect(recommendationsService.semanticSearchByCursor).toHaveBeenCalledWith({
-      keyword: 'hành động',
-      cursor: undefined,
-      limit: 12,
-    });
+    expect(recommendationsService.semanticSearchByCursor).toHaveBeenCalledWith(
+      {
+        keyword: 'hành động',
+        cursor: undefined,
+        limit: 12,
+      },
+      {
+        userId: undefined,
+        correlationId: undefined,
+        isFirstPage: true,
+      },
+    );
     expect(res).toEqual({
       success: true,
       statusCode: 200,
@@ -195,7 +203,10 @@ describe('RecommendationsController', () => {
 
     expect(
       recommendationsService.searchLexicalSemanticRerank,
-    ).toHaveBeenCalledWith('vũ trụ', 10);
+    ).toHaveBeenCalledWith('vũ trụ', 10, {
+      userId: undefined,
+      correlationId: undefined,
+    });
     expect(res).toEqual({
       success: true,
       statusCode: 200,

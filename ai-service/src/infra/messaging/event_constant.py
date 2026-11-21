@@ -4,7 +4,7 @@ Các event handler: MovieEventHandler, InteractionEventHandler, UserEventHandler
 Các exchange: recommendation.exchange, interaction.exchange, user.exchange, training.exchange. Hiện tại recommendation là sự kiện của movie
 Các routing key tương ứng với event_type, format <scope | domain>.<action>:
  - movie.created, movie.updated, movie.deleted
- - user.updated.profile, user.deleted
+ - user.created, user.updated.profile, user.deleted, user.search, user.genre.update
  - interaction.created
  - training.request
 Các DLX: recommendation.dlx, interaction.dlx, user.dlx, training.dlx
@@ -26,6 +26,8 @@ class MessageEventType:
     USER_CREATED = "user.created"
     USER_UPDATED_PROFILE = "user.updated.profile"
     USER_DELETED = "user.deleted"
+    USER_SEARCH = "user.search"
+    USER_GENRE_UPDATE = "user.genre.update"
 
     # interaction events
     INTERACTION_CREATED = "interaction.created"

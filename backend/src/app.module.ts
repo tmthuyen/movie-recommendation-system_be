@@ -41,6 +41,12 @@ import { FailedEvent } from './modules/failed-events/entities/failed-event.entit
 import { FailedEventsModule } from './modules/failed-events/failed-events.module';
 import { InteractionsModule } from './modules/interactions/interactions.module';
 import { RecommendationsModule } from './modules/recommendations/recommendations.module';
+import {
+  GenreMovieRepository,
+  IGENRE_MOVIE_REPOSITORY,
+} from './infrastructure/cache/genre-movie.repository';
+import { GenreStatsCacheService } from './infrastructure/cache/genre-stats-cache.service';
+import { GenreMatrixRefreshCron } from './infrastructure/cache/genre-matrix.cron';
 @Module({
   imports: [
     // Configuration
@@ -120,6 +126,14 @@ import { RecommendationsModule } from './modules/recommendations/recommendations
     RecommendationsModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: IGENRE_MOVIE_REPOSITORY,
+      useClass: GenreMovieRepository,
+    },
+    GenreStatsCacheService,
+    GenreMatrixRefreshCron,
+  ],
 })
 export class AppModule {}
