@@ -17,21 +17,26 @@ from core.custom_exception import CustomException
 from core.handle_model_updated import handle_model_updated
 from core.integrations import TrainingScheduler, VectorStore
 from core.vector_health import log_vector_db_health
+from infra.messaging.consumers.genre_event_handler import GenreEventHandler
 from infra.messaging.consumers.interaction_event_handler import InteractionEventHandler
 from infra.messaging.consumers.movie_event_handler import MovieEventHandler
+from infra.messaging.consumers.search_event_consumer import SearchEventConsumer
 from infra.messaging.consumers.user_event_handler import UserEventHandler
 from infra.messaging.interaction_queue import InteractionQueue
 from infra.messaging.message_queue import MessageQueue
 from infra.messaging.user_queue import UserQueue
 from infra.monitoring.prometheus import configure_monitoring, update_metrics
+from infra.redis.genre_repository import RedisGenreRepository
 from infra.redis.redis_service import RedisStore
 from infra.tracing.telemetry import configure_tracing
 from services.bm25_index_service import Bm25IndexService
 from services.embedding_service import embedding_service
+from services.genre_vector_service import GenreVectorService
 from services.IALSRecommendationService import ALS_Implicit, ALSModelService
 from services.mapping_service import mapping_service
 from services.movie_vector_service import MovieVectorService
 from services.recommend_service import RecommendService
+from services.user_vector_aggregator_service import UserVectorAggregatorService
 from services.user_vector_service import UserVectorService
 from utils.logger import setup_logger
 
@@ -41,6 +46,14 @@ logger = setup_logger(name="FastAPI-Recommendation")
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
+    """Khởi tạo và dọn dẹp tài nguyên của ứng dụng FastAPI.
+
+    Khởi động metrics, vector store, Redis, mapping, các service và queue handler
+    (gồm genre event handler), lưu vào app.state rồi đóng ngược lại khi shutdown.
+
+    Returns:
+        None.
+    """
     # Metrics
     stop_event = threading.Event()
 
@@ -110,6 +123,21 @@ async def lifespan(application: FastAPI):
         vector_store=vector_store,
         embedding_service=embedding_service,
     )
+    genre_repository = RedisGenreRepository(redis_store)
+    genre_vector_service = GenreVectorService(
+        repository=genre_repository,
+        user_vector_service=user_vector_service,
+    )
+    user_vector_aggregator = UserVectorAggregatorService(
+        user_vector_service=user_vector_service,
+        movie_vector_service=movie_vector_service,
+        genre_vector_service=genre_vector_service,
+        popular_repository=genre_repository,
+    )
+    search_event_consumer = SearchEventConsumer(
+        user_vector_service=user_vector_service,
+        embedding_service=embedding_service,
+    )
 
     # CF model: ALS
     als_model = ALS_Implicit.load(path="data/training/models/als_model.npz")
@@ -123,6 +151,7 @@ async def lifespan(application: FastAPI):
         movie_vector_service=movie_vector_service,
         user_vector_service=user_vector_service,
         als_model_service=als_model_service,
+        user_vector_aggregator=user_vector_aggregator,
     )
 
     # =======================
@@ -140,7 +169,13 @@ async def lifespan(application: FastAPI):
         user_vector_service=user_vector_service,
         movie_vector_service=movie_vector_service,
     )
-    user_event_handler = UserEventHandler(user_vector_service=user_vector_service)
+    genre_event_handler = GenreEventHandler(genre_vector_service=genre_vector_service)
+    user_event_handler = UserEventHandler(
+        user_vector_service=user_vector_service,
+        search_event_consumer=search_event_consumer,
+        genre_event_handler=genre_event_handler,
+        genre_vector_service=genre_vector_service,
+    )
 
     # Khởi tạo recommend queue
     mq = MessageQueue(settings)

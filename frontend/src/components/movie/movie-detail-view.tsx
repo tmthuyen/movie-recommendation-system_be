@@ -11,6 +11,7 @@ import { MovieComments } from './movie-comments';
 import { MovieDetail } from './movie-detail';
 import { MovieRating } from './movie-rating';
 import { MovieDetailTabs } from '@/components/movie/movie-detail-tabs';
+import { toInteractionGenres } from '@/shared/utils/movie';
 
 function DetailSkeleton() {
   return (
@@ -55,11 +56,14 @@ export function MovieDetailView({ id }: { id: number }) {
   const viewedIdRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!id || viewedIdRef.current === id) return;
+    if (!id || !movie || viewedIdRef.current === id) return;
     viewedIdRef.current = id;
-    incrementView.mutate(id);
+    incrementView.mutate({
+      id,
+      genres: toInteractionGenres(movie.genres),
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, movie?.id]);
 
   if (isLoading) {
     return (
@@ -129,9 +133,14 @@ export function MovieDetailView({ id }: { id: number }) {
 
       <div className="flex flex-col gap-2 sm:flex-row">
         <div className="flex w-full flex-col gap-6 sm:w-2/3">
-          <MovieRating movieId={movie.id} voteAverage={voteAverage} voteCount={voteCount} />
+          <MovieRating
+            movieId={movie.id}
+            voteAverage={voteAverage}
+            voteCount={voteCount}
+            genres={movie.genres}
+          />
 
-          <MovieComments movieId={movie.id} />
+          <MovieComments movieId={movie.id} genres={movie.genres} />
         </div>
 
         <div className="flex w-full flex-col gap-6 sm:w-1/3">

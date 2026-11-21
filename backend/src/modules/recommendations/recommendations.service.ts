@@ -49,6 +49,11 @@ import type { IRedisService } from '@/infrastructure/redis/redis.service';
 import { REDIS_LOCK_SERVICE } from '@/infrastructure/redis/redis-lock.service';
 import type { IRedisLockService } from '@/infrastructure/redis/redis-lock.service';
 import { z } from 'zod';
+import {
+  type SearchEventContext,
+  type SearchEventMode,
+  SearchEventService,
+} from '@/infrastructure/messaging/search-event.service';
 
 const AI_SERVICE_URL =
   process.env.AI_SERVICE_URL || 'http://localhost:8082/api/recommendations';
@@ -82,16 +87,20 @@ export interface IRecommendationsService {
   semanticSearch(
     keyword: string,
     topK?: number,
+    context?: SearchEventContext,
   ): Promise<ResultWithPagination<SimilarMovieResponseDto>>;
   semanticSearchByCursor(
     query: SearchCursorQueryDto,
+    context?: SearchEventContext,
   ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>>;
   searchLexicalSemanticRerank(
     keyword: string,
     topK?: number,
+    context?: SearchEventContext,
   ): Promise<ResultWithPagination<SimilarMovieResponseDto>>;
   searchLexicalSemanticRerankByCursor(
     query: SearchCursorQueryDto,
+    context?: SearchEventContext,
   ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>>;
 
   forYou(
@@ -117,8 +126,37 @@ export class RecommendationsService implements IRecommendationsService {
     @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     @Inject(REDIS_SERVICE) private readonly redis: IRedisService,
     @Inject(REDIS_LOCK_SERVICE) private readonly cacheLock: IRedisLockService,
+    private readonly searchEventService: SearchEventService,
   ) {
     this.window = RECOMMENDATION_WINDOW;
+  }
+
+  /**
+   * Phát event search ngay trong service sau khi đã hydrate kết quả.
+   * Chỉ xử lý user JWT, trang đầu và có ít nhất một phim; controller không điều phối bước này.
+   * @returns Promise<void>; không ghi DB/Redis, guest hoặc cursor/page sau bị bỏ qua.
+   */
+  private async publishSearchIfEligible(
+    context: SearchEventContext | undefined,
+    keywordRaw: string,
+    mode: SearchEventMode,
+    resultCount: number,
+  ): Promise<void> {
+    if (
+      context?.isFirstPage === false ||
+      !context?.userId ||
+      resultCount <= 0
+    ) {
+      return;
+    }
+
+    await this.searchEventService.publishIfEligible({
+      userId: context.userId,
+      keywordRaw,
+      mode,
+      resultCount,
+      correlationId: context.correlationId,
+    });
   }
 
   // =============
@@ -218,6 +256,7 @@ export class RecommendationsService implements IRecommendationsService {
   async semanticSearch(
     keyword: string,
     topK?: number,
+    context?: SearchEventContext,
   ): Promise<ResultWithPagination<SimilarMovieResponseDto>> {
     this.logger.log(`Semantic search: keyword="${keyword}", topK=${topK}`);
 
@@ -240,14 +279,26 @@ export class RecommendationsService implements IRecommendationsService {
       requested,
     );
 
+    const result = await this.hydrateWithCacheFirst(
+      items,
+      SimilarMovieResponseDto,
+    );
+    await this.publishSearchIfEligible(
+      context,
+      keyword,
+      'semantic',
+      result.length,
+    );
+
     return {
-      result: await this.hydrateWithCacheFirst(items, SimilarMovieResponseDto),
+      result,
       pagination: { page: 1, limit: requested, total, totalPages: 1 },
     };
   }
 
   async semanticSearchByCursor(
     query: SearchCursorQueryDto,
+    context?: SearchEventContext,
   ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>> {
     this.logger.log(
       `Semantic search (cursor): keyword="${query.keyword}", limit=${query.limit}, cursor=${query.cursor ?? 0}`,
@@ -289,8 +340,21 @@ export class RecommendationsService implements IRecommendationsService {
       items.length > 0 ? items[items.length - 1].rank : afterRank;
     const hasMore = lastRank < total;
 
+    const result = await this.hydrateWithCacheFirst(
+      items,
+      SimilarMovieResponseDto,
+    );
+    if (!query.cursor) {
+      await this.publishSearchIfEligible(
+        context,
+        query.keyword,
+        'semantic',
+        result.length,
+      );
+    }
+
     return {
-      result: await this.hydrateWithCacheFirst(items, SimilarMovieResponseDto),
+      result,
       pagination: {
         limit,
         total,
@@ -380,6 +444,7 @@ export class RecommendationsService implements IRecommendationsService {
   async searchLexicalSemanticRerank(
     keyword: string,
     topK?: number,
+    context?: SearchEventContext,
   ): Promise<ResultWithPagination<SimilarMovieResponseDto>> {
     const cleanKeyword = (keyword ?? '').trim();
     if (!cleanKeyword) {
@@ -412,6 +477,13 @@ export class RecommendationsService implements IRecommendationsService {
       );
     }
 
+    await this.publishSearchIfEligible(
+      context,
+      cleanKeyword,
+      'hybrid',
+      result.length,
+    );
+
     return {
       result: result,
       pagination: {
@@ -425,6 +497,7 @@ export class RecommendationsService implements IRecommendationsService {
 
   async searchLexicalSemanticRerankByCursor(
     query: SearchCursorQueryDto,
+    context?: SearchEventContext,
   ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>> {
     const cleanKeyword = (query.keyword ?? '').trim();
     if (!cleanKeyword) {
@@ -458,6 +531,15 @@ export class RecommendationsService implements IRecommendationsService {
       hydrate: async chunk =>
         await this.hydrate(chunk, SimilarMovieResponseDto),
     });
+
+    if (!query.cursor) {
+      await this.publishSearchIfEligible(
+        context,
+        cleanKeyword,
+        'hybrid',
+        page.result.length,
+      );
+    }
 
     return {
       result: page.result,

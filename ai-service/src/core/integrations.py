@@ -330,6 +330,14 @@ class ChromaVectorBackend(VectorBackend):
         return str(path)
 
     def _sync_start(self) -> None:
+        """Khởi tạo client Chroma và các collection mặc định/hybrid.
+
+        Tạo PersistentClient từ thư mục cấu hình, sau đó get-or-create collection
+        movies, CF, profile và user_genre_vectors.
+
+        Returns:
+            None.
+        """
         import chromadb  # lazy so app starts even if chromadb is not installed
 
         self._client = chromadb.PersistentClient(path=self._persist_dir())
@@ -340,6 +348,9 @@ class ChromaVectorBackend(VectorBackend):
         self._get_collection(self.settings.vector_user_cf_collection)
         self._get_collection(self.settings.vector_movie_cf_collection)
         self._get_collection(self.settings.vector_user_profile_collection)
+        self._get_collection(
+            getattr(self.settings, "vector_user_genre_collection", "user_genre_vectors")
+        )
 
         logger.info("ChromaDB ready  persist_dir=%s", self._persist_dir())
 
@@ -367,23 +378,37 @@ class ChromaVectorBackend(VectorBackend):
     def _sync_upsert(
         self,
         id: int,
-        vector: list[float],
+        vector: list[float] | None,
         payload: dict[str, Any],
         collection_name: str | None = None,
     ) -> None:
         collection = self._get_collection(
             collection_name or self.settings.vector_collection
         )
+        embeddings: list[float] | None = vector
+        if embeddings is None:
+            # Chroma bắt buộc có embedding; giữ đúng dimension hiện có của
+            # collection và dùng placeholder 0, không dùng để tính điểm.
+            probe = collection.get(limit=1, include=["embeddings"])
+            existing = probe.get("embeddings") if probe else None
+            if existing is not None and len(existing) > 0:
+                first = existing[0]
+                dimension = (
+                    len(first.tolist()) if hasattr(first, "tolist") else len(first)
+                )
+            else:
+                dimension = 1
+            embeddings = [0.0] * dimension
         collection.upsert(
             ids=[str(id)],
-            embeddings=[vector],
+            embeddings=[embeddings],
             metadatas=[self._sanitise_meta(payload)],
         )
 
     async def upsert(
         self,
         id: int,
-        vector: list[float],
+        vector: list[float] | None,
         payload: dict[str, Any],
         collection_name: str | None = None,
     ) -> None:
@@ -531,7 +556,7 @@ class VectorStore:
         self,
         movie_id: int | None,
         id: str | int | None,
-        vector: list[float],
+        vector: list[float] | None,
         payload: dict[str, Any],
         collection_name: str | None = None,
     ) -> None:
@@ -627,7 +652,11 @@ class VectorStore:
         return self.backend.location
 
     async def collection_counts(self) -> dict[str, int | None]:
-        """Count the movie and hybrid collections configured for this store."""
+        """Đếm số vector của các collection movie và hybrid đã cấu hình.
+
+        Returns:
+            Dict {tên collection: số vector}; None nếu count collection lỗi.
+        """
         if not self.settings.vector_db_enabled:
             return {}
 
@@ -636,6 +665,7 @@ class VectorStore:
             getattr(self.settings, "vector_user_cf_collection", None),
             getattr(self.settings, "vector_movie_cf_collection", None),
             getattr(self.settings, "vector_user_profile_collection", None),
+            getattr(self.settings, "vector_user_genre_collection", None),
         ]
         counts: dict[str, int | None] = {}
         for name in dict.fromkeys(n for n in names if n):

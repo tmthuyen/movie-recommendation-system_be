@@ -37,6 +37,22 @@ describe('interactionApi', () => {
     expect(result.result.action).toBe('added');
   });
 
+  it('toggleLike chỉ gửi genre id/name, bỏ field thừa', async () => {
+    mocks.client.post.mockResolvedValue(envelope({ action: 'added', type: 'like', likeCount: 3 }));
+
+    await interactionApi.toggleLike({
+      movieId: 7,
+      type: 'like',
+      genres: [{ id: 1, name: 'Action', enName: 'Action' } as never],
+    });
+
+    expect(mocks.client.post).toHaveBeenCalledWith('/interactions', {
+      movieId: 7,
+      type: 'like',
+      genres: [{ id: 1, name: 'Action' }],
+    });
+  });
+
   it('getStats gọi GET /interactions/stats/:movieId', async () => {
     mocks.client.get.mockResolvedValue(envelope({ likeCount: 1 }));
 

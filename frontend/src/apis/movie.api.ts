@@ -1,6 +1,7 @@
 import { ApiPaginatedResponse, ApiResponse } from '@/shared/types/api.types';
 import { Movie, MovieDetail, MovieQuery } from '@/shared/types/movie.types';
 import { withListParams, type SearchListParams } from '@/shared/utils/list-params';
+import { toInteractionGenres, type InteractionGenrePayload } from '@/shared/utils/movie';
 import axiosClient from '../lib/axiosClient';
 
 import qs from 'qs';
@@ -39,9 +40,10 @@ export const movieApi = {
     const { data } = await axiosClient.get(`/movies/${id}`);
     return data;
   },
-  /** Tăng lượt xem cho phim (public, optional auth). */
+  /** Tăng lượt xem/click cho phim (public, optional auth) kèm genre để cập nhật user vector. */
   incrementView: async (
     id: number,
+    genres?: InteractionGenrePayload[],
   ): Promise<
     ApiResponse<{
       viewCount: number;
@@ -49,7 +51,10 @@ export const movieApi = {
       interaction: 'created' | 'updated' | 'none';
     }>
   > => {
-    const { data } = await axiosClient.post(`/movies/${id}/view`);
+    const normalizedGenres = toInteractionGenres(genres);
+    const { data } = normalizedGenres
+      ? await axiosClient.post(`/movies/${id}/view`, { genres: normalizedGenres })
+      : await axiosClient.post(`/movies/${id}/view`);
     return data;
   },
   /** Tạo phim (ADMIN). */

@@ -6,13 +6,12 @@ import {
   getReleaseYear,
   getTmdbImageUrl,
   movieUtil,
+  toInteractionGenres,
 } from './movie';
 
 describe('getTmdbImageUrl', () => {
   it('dựng URL TMDB mặc định với size w500', () => {
-    expect(getTmdbImageUrl('/poster.jpg')).toBe(
-      'https://image.tmdb.org/t/p/w500/poster.jpg',
-    );
+    expect(getTmdbImageUrl('/poster.jpg')).toBe('https://image.tmdb.org/t/p/w500/poster.jpg');
   });
 
   it('cho phép chọn size khác (w780, original)', () => {
@@ -72,10 +71,25 @@ describe('getReleaseYear', () => {
   });
 });
 
+describe('toInteractionGenres', () => {
+  it('chỉ giữ id/name, bỏ field thừa như enName', () => {
+    expect(toInteractionGenres([{ id: 1, name: 'Action', enName: 'Action' } as never])).toEqual([
+      { id: 1, name: 'Action' },
+    ]);
+  });
+
+  it('ép id string về number và trả undefined khi rỗng', () => {
+    expect(toInteractionGenres([{ id: '2', name: 'Drama' }])).toEqual([{ id: 2, name: 'Drama' }]);
+    expect(toInteractionGenres([])).toBeUndefined();
+    expect(toInteractionGenres()).toBeUndefined();
+  });
+});
+
 describe('movieUtil', () => {
   it('export đầy đủ các helper', () => {
     expect(movieUtil.getMovieTitle).toBe(getMovieTitle);
     expect(movieUtil.getPosterUrl).toBe(getPosterUrl);
     expect(movieUtil.getReleaseYear).toBe(getReleaseYear);
+    expect(movieUtil.toInteractionGenres).toBe(toInteractionGenres);
   });
 });

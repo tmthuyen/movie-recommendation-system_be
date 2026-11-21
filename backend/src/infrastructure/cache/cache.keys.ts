@@ -162,6 +162,11 @@ export const CacheKeys = {
   stats: {
     detail: (movieId: number) => buildKey('stats', 'movie', movieId),
     popular: () => buildKey('stats', 'popular', 'all'),
+    genreIds: () => buildKey('stats', 'genre', 'ids'),
+    genreMovies: (genreId: number | string) =>
+      buildKey('stats', 'genre', genreId, 'movies'),
+    genreMovie: (movieId: number | string) =>
+      buildKey('stats', 'genre', 'movie', movieId),
     hot: (period: string) => buildKey('stats', 'hot', period),
     top: (metric: string, period: string) =>
       buildKey('stats', 'top', metric, period),

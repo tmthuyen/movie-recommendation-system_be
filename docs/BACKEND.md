@@ -9,13 +9,13 @@
 
 `backend/` là **API server chính của hệ thống**, xây bằng **NestJS 11** (Express platform), đóng vai trò:
 
-- REST API cho toàn bộ nghiệp vụ: auth, users/RBAC, movies, genres/countries/peoples, ratings, comments, interactions, files, failed-events, health.
+- REST API cho toàn bộ nghiệp vụ: auth, users/RBAC, movies, genres/countries/peoples, ratings, comments, interactions, files, failed-events, health. Search event do service tự publish (`SearchEventService`), controller chỉ truyền ngữ cảnh HTTP.
 - Xác thực bằng **JWT (Bearer)** + **refresh token trong cookie (httpOnly)** + session lưu trên **Redis**; OAuth **Google**.
 - Real-time qua **Socket.IO** (comment/rating/viewCount/typing/interaction theo phim).
 - Giao tiếp với `ai-service/` qua **2 kênh**:
   - **RabbitMQ**: đồng bộ dữ liệu/event (movie/user/interaction/training) — xem mục RabbitMQ.
   - **HTTP**: module `recommendations` proxy sang ai-service qua `AI_SERVICE_URL` (mặc định `http://localhost:8082/api/recommendations`) — xem mục `Module recommendations`.
-- **Có endpoint recommendation trong backend** tại prefix `/api/recommendations`: `similar`, `similar/:id/cursor`, `semantic-search`, `semantic-search/cursor`, `for-you`, `for-you/cursor` đã hoạt động (proxy ai-service + map DB + cache Redis).
+- **Có endpoint recommendation trong backend** tại prefix `/api/recommendations`: `similar`, `similar/:id/cursor`, `semantic-search`, `semantic-search/cursor`, `search-rerank`, `search-rerank/cursor`, `for-you`, `for-you/cursor` đã hoạt động (proxy ai-service + map DB + cache Redis). Search có JWT phát event `user.search` (xem mục RabbitMQ).
 
 | Thông số | Giá trị |
 |---|---|
@@ -260,7 +260,7 @@ JWT payload: `{sub, fullName, email, scopes, sessionId, jti}`. `JwtStrategy` ki�
 | GET | `/api/movies` | Public | `BaseSearchRequest` `{page=1, limit=10, keyword?, filters?, sort?}` — keyword ILIKE `title` OR `titleVi` | movie[] + `pagination` | join `genres`, `countries` (M2M), `moviePeoples.people`; sort mặc định `createdAt DESC` + `id ASC`; filter: `id,tmdbId,imdbId,title,titleVi,overview,overviewVi,homepage,posterPath,backdropPath,releaseDate,status,originCountry,originalLanguage,tmdbRating,voteAverage,voteCount,viewCount,likeCount,createdAt,updatedAt,genreId,countryId,peopleId`; sort: `id,title,titleVi,releaseDate,tmdbRating,voteAverage,voteCount,viewCount,likeCount,createdAt,updatedAt`; **cache chỉ dùng cho truy vấn mặc định** (không filter + sort `createdAt:DESC` + `page <= 3`) — có filter/sort khác sẽ đọc DB trực tiếp |
 | GET | `/api/movies/search` | Public | query `MovieSearchRequestDto`: `page=1`, `limit=10`, `keyword?`, `sort=releaseDate:DESC`, `genreIds?` (number[]), `countryIds?` (number[]), `releaseYearFrom?`, `releaseYearTo?` | movie[] + `pagination` | Search nâng cao: chỉ lấy phim có đủ `title/titleVi/releaseDate/overview/overviewVi/posterPath/backdropPath`; `sort` cho phép `releaseDate,voteAverage,viewCount,likeCount,createdAt` (nhiều field cách nhau dấu phẩy, thêm `id ASC` để ổn định) |
 | GET | `/api/movies/:id` | Public | path `id` (number) | movie (kèm relations) | `404` nếu không thấy |
-| POST | `/api/movies/:id/view` | **Optional JWT** | path `id` | `{viewCount, score, interaction: 'created'\|'updated'\|'none'}` | transaction: luôn +`viewCount`; nếu đã đăng nhập: tạo Interaction `click` (score 1, publish MQ) hoặc xem lại → `score = min(5, score+1)` (không publish lại); WS `movie-{id}-viewCount` + `movie-{id}-interaction` (chỉ khi user đăng nhập) |
+| POST | `/api/movies/:id/view` | **Optional JWT** | path `id`, body `{genres?: [{id, name}]}` | `{viewCount, score, interaction: 'created'\|'updated'\|'none'}` | transaction: luôn +`viewCount`; nếu đã đăng nhập: tạo Interaction `click` (score 1, publish MQ) hoặc xem lại → `score = min(5, score+1)` (không publish lại); có `genres` → publish thêm `user.genre.update` `{type: 'click', score: 1}` (ai-service tự chuẩn hoá); WS `movie-{id}-viewCount` + `movie-{id}-interaction` (chỉ khi user đăng nhập) |
 | PATCH | `/api/movies/:id` | JWT + `@Roles` **⚠** | `UpdateMovieDto` = Partial(`CreateMovieDto`) | movie | publish `movie.updated` nếu đổi title/titleVi/overview/overviewVi/genreIds/peopleIds |
 | DELETE | `/api/movies/:id` | JWT + `@Roles` **⚠** | path `id` | `{success: true}` | publish `movie.deleted` |
 
@@ -302,7 +302,7 @@ JWT payload: `{sub, fullName, email, scopes, sessionId, jti}`. `JwtStrategy` ki�
 
 | Method | Path | Auth | Request | Response `result` | Ghi chú |
 |---|---|---|---|---|---|
-| POST | `/api/ratings` | JWT | `CreateRatingDto` `{rating: 0–5, movieId}` | rating đã lưu | `201`; **transaction**: tạo/cập nhật Rating + Interaction (`type=rating`, `score=rating`); **sau commit**: tính lại `COUNT`/`AVG` từ bảng `ratings`, ghi vào Redis stats, WS `movie-{id}-rating` (payload kèm `movieStats`) + publish `interaction.created` (`score=rating`) |
+| POST | `/api/ratings` | JWT | `CreateRatingDto` `{rating: 0–5, movieId, genres?: [{id, name}]}` | rating đã lưu | `201`; **transaction**: tạo/cập nhật Rating + Interaction (`type=rating`, `score=rating`); **sau commit**: tính lại `COUNT`/`AVG` từ bảng `ratings`, ghi vào Redis stats, WS `movie-{id}-rating` (payload kèm `movieStats`) + publish `interaction.created` (`score=rating`); có `genres` → publish thêm `user.genre.update` `{type: 'rating', score: rating}` (ai-service tự chuẩn hoá) |
 | GET | `/api/ratings` | Public | `BaseSearchRequest` `{page=1, limit=10, keyword?, filters?, sort?}` — keyword ILIKE `content`, `user.fullName`, `user.email`, `movie.title`, `movie.titleVi` | rating[] + `pagination` | join `user`, `movie`; filter: `id,rating,content,timestamp,createdAt,updatedAt,userId,userEmail,userFullName,movieId,movieTitle`; sort: `id,rating,timestamp,createdAt,updatedAt` |
 | GET | `/api/ratings/movie/:movieId` | Public | `BaseSearchRequest` như trên | rating[] + `pagination` | join `user` (+ `movie` để filter/keyword); cùng filter/sort với `GET /api/ratings` |
 | GET | `/api/ratings/:id` | Public | — | rating (user + movie) | |
@@ -315,7 +315,7 @@ Rating unique theo (user, movie).
 
 | Method | Path | Auth | Request | Response `result` | Ghi chú |
 |---|---|---|---|---|---|
-| POST | `/api/comments` | JWT | `CreateCommentDto` `{content, movieId, parentId?}` | comment đã lưu | `201`; **transaction**: Comment + Interaction (`comment`, `score=4`); **sau commit**: WS `movie-{id}-comment` + `movie-{id}-interaction` + publish `interaction.created` (`score=4`) |
+| POST | `/api/comments` | JWT | `CreateCommentDto` `{content, movieId, parentId?, genres?: [{id, name}]}` | comment đã lưu | `201`; **transaction**: Comment + Interaction (`comment`, `score=0` implicit); **sau commit**: WS `movie-{id}-comment` + `movie-{id}-interaction` + publish `interaction.created` (`score=null`; ai-service map action `comment` → band `4`); có `genres` → publish thêm `user.genre.update` `{type: 'comment', score: 4}` (ai-service tự chuẩn hoá) |
 | GET | `/api/comments` | Public | `QueryCommentDto` (extends `BaseSearchRequest`) `{page=1, limit=10, keyword?, filters?, sort?}` — keyword ILIKE `content`, `user.fullName`, `user.email`, `movie.title`, `movie.titleVi` | comment[] + `pagination` | join `user`, `movie`; filter: `id,content,parentId,createdAt,updatedAt,userId,userEmail,userFullName,movieId,movieTitle`; sort: `id,content,createdAt,updatedAt`; mặc định `createdAt DESC` |
 | GET | `/api/comments/movie/:movieId` | Public | `QueryCommentDto` + `parentId?` (number) | comment[] + `pagination` | không truyền `parentId` → lấy root (`parentId IS NULL`); mỗi item có thêm **`replyCount`** (số reply trực tiếp); filter/sort như `GET /api/comments` |
 | GET | `/api/comments/:id` | Public | — | comment (user + movie) | |
@@ -326,7 +326,7 @@ Rating unique theo (user, movie).
 
 | Method | Path | Auth | Request | Response `result` | Ghi chú |
 |---|---|---|---|---|---|
-| POST | `/api/interactions` | JWT | `CreateInteractionDto` `{type: 'like', movieId}` — **chỉ like** | `{action: 'added'\|'removed', type, score, likeCount, data?}` | **TOGGLE like**: đã tồn tại (user+movie+like) → xóa, `action='removed'`, publish `interaction.created` (`score=-5`, `removed=true`); chưa → tạo với `score=5`, publish (`removed=false`), `action='added'` + `data`; cả 2 trường hợp đều WS `movie-{id}-interaction` |
+| POST | `/api/interactions` | JWT | `CreateInteractionDto` `{type: 'like', movieId, genres?: [{id, name}]}` — **chỉ like**; `genres` do frontend gửi kèm, backend **không lưu vào payload `interaction.created`** | `{action: 'added'\|'removed', type, score, likeCount, data?}` | **TOGGLE like**: đã tồn tại (user+movie+like) → xóa, `action='removed'`, publish `interaction.created` (`score=-5`, `removed=true`); chưa → tạo với `score=5`, publish (`removed=false`), `action='added'` + `data`; có `genres` thì publish thêm event độc lập `user.genre.update`; cả 2 trường hợp đều WS `movie-{id}-interaction` |
 | GET | `/api/interactions/stats/popular` | Public | `limit=1..100` (mặc định 10) | `{movieId, score}[]` + `pagination` | ZSET `cache:stats:popular:all`; score = tổng view+like+comment+rating mọi thời đại, không query DB |
 | GET | `/api/interactions/stats/hot` | Public | `period=day\|week\|month`, `limit=1..100` | `{movieId, score}[]` + `pagination` | ZSET bucket theo kỳ hiện tại; score = tổng view+like+comment+rating trong kỳ, không weight |
 | GET | `/api/interactions/stats/top` | Public | `metric=view\|like\|comment\|rating`, `period=all\|day\|week\|month`, `limit=1..100` | `{movieId, score}[]` + `pagination` | `rating` dùng điểm trung bình ×10, các metric khác dùng tổng số lượt |
@@ -350,8 +350,12 @@ Module đã được đăng ký trong `AppModule` (`app.module.ts:42,118`) và i
 | GET | `/api/recommendations/similar/:id/cursor` | Public | path `id` (number), query `cursor?` (opaque string), `limit?` (1–50, mặc định `12`) | envelope chuẩn: `result` = movie[] kèm `score`, `rank`; `pagination = {limit, total, hasMore, nextCursor}` | **Load-more**: trang đầu bỏ trống `cursor`; dùng `nextCursor` cho trang kế. Tái sử dụng snapshot cache V25, không gọi AI lần 2 nếu cache hit. Cursor dùng chung ở `common/utils/cursor-pagination.util.ts` (scope/version/fingerprint). Cursor hỏng/sai movie → `400 INVALID_CURSOR`; snapshot đổi → `409 CURSOR_EXPIRED` (frontend reset về trang đầu). |
 | GET | `/api/recommendations/semantic-search` | Public | query `keyword` (hoặc alias `query`), `topK?` (1–100, mặc định `10`) | envelope chuẩn: `result` = movie[] kèm `score`, `rank`; `pagination = {page, limit, total, totalPages}` | **Đã hoạt động**: gọi `GET ${AI_SERVICE_URL}/semantic-search?keyword=...&topK=100` (window), lưu snapshot vào Redis sorted set, map DB như `similar`. `total` = số item trong cache. |
 | GET | `/api/recommendations/semantic-search/cursor` | Public | query `keyword` (hoặc alias `query`), `cursor?` (**rank**, number), `limit?` (1–50, mặc định `12`) | envelope chuẩn: `result` như trên; `pagination = {limit, total, hasMore, nextCursor}` | **Load-more**: `cursor` là rank cuối trang trước (số nguyên, không encode); trang đầu bỏ trống. `nextCursor = null` khi hết. |
+| GET | `/api/recommendations/search-rerank` | Public | query `keyword`, `topK?` (mặc định `10`, tối đa window) | envelope chuẩn: `result` = movie[] kèm `score`, `rank`; `pagination = {page, limit, total, totalPages}` | Tìm kiếm kết hợp Lexical (PostgreSQL) + Semantic Rerank (AI); dùng snapshot cache riêng, `totalPages = 1` khi có kết quả. |
+| GET | `/api/recommendations/search-rerank/cursor` | Public | query `keyword`, `cursor?` (opaque), `limit?` (1–50, mặc định `12`) | envelope chuẩn: `result` như trên; `pagination = {limit, total, hasMore, nextCursor}` | **Load-more** của `search-rerank`; cursor chứa version/fingerprint snapshot. |
 | GET | `/api/recommendations/for-you` | JWT | query `topK?` (1–100, mặc định `10`) | envelope chuẩn: `result` = movie[] kèm `score`, `rank`; `pagination = {page, limit, total, totalPages}` | **Đã hoạt động**: gọi `GET ${AI_SERVICE_URL}/hybrid?topK=100` kèm `Authorization: Bearer <token>`; ai-service lấy `userId` từ JWT (backend **không** gửi `userId`). |
 | GET | `/api/recommendations/for-you/cursor` | JWT | query `cursor?` (**rank**, number), `limit?` (1–50, mặc định `12`) | envelope chuẩn + `pagination = {limit, total, hasMore, nextCursor}` | **Load-more** như `semantic-search/cursor`. |
+
+> **Search event (V38)**: `semantic-search`, `search-rerank` và `/api/movies/search` do **service tự phát** `user.exchange / user.search` khi có JWT user **và** có ít nhất 1 kết quả; controller chỉ truyền ngữ cảnh HTTP. Guest không phát; cursor/page > 1 (load-more) không phát lại. `userId` nằm trong payload cùng `{mode, keywordRaw, keywordNormalized}`; chỉ `occurredAt`/`correlationId` nằm ở envelope (keyword đã chuẩn hoá NFC → lowercase → bỏ dấu → teencode → stopword → punctuation → gộp whitespace). **Không** lưu history vào DB/Redis, **không** đính kèm `resultIds/resultCount` trên queue.
 
 Ghi chú cursor:
 - `similar/:id/cursor` dùng cursor **opaque** (encode scope/version/fingerprint) để phát hiện snapshot đổi.
@@ -395,6 +399,8 @@ Redis dùng chung với session/blacklist/rate-limit.
 | genre list | `cache:genre:list:v{v}:p{p}:l{l}:f{hash}` | 3600s | `INCR cache:genre:ver:list` khi CRUD |
 | country list | `cache:country:list:v{v}:p{p}:l{l}:f{hash}` | 3600s | `INCR cache:country:ver:list` khi CRUD |
 | interaction stats | `cache:interaction:stats:{movieId}` | 60s | TTL (WS đã cập nhật UI) |
+| genre matrix ids | `cache:stats:genre:ids` | 43200s (12h) | rebuild lúc 01:00 |
+| genre movies | `cache:stats:genre:{genreId}:movies` | 43200s (12h) | rebuild lúc 01:00 |
 | recommendation similar | `cache:recommendation:similar:{movieId}:k{window}:v{ver}` | 900s | `INCR cache:recommendation:ver:similar:{id}` |
 
 Ghi chú:
@@ -408,6 +414,7 @@ Ghi chú:
 - `incrementViewCount` và `update/remove` đọc DB trực tiếp (`findOneFresh`) để tránh lost-update từ cache.
 - **Không dùng** `KEYS`/`SCAN`; invalidation bằng version counter (O(1), an toàn multi-instance).
 - Fail-open: Redis lỗi → API đi thẳng DB/ai-service. Dữ liệu đọc lên phải qua Zod; sai → xoá key + coi như miss.
+- Ma trận thể loại: job 01:00 đọc `cache:stats:popular:all` + bảng `movie_genres`, lấy top 100 movieId/theo `viewCount` cho mỗi genre, ghi **2 key** (`cache:stats:genre:ids` + `cache:stats:genre:{genreId}:movies`) bằng pipeline + rename (atomic swap). Mỗi ô ma trận genre↔movie có `score = 1` (không lưu giá trị popularity); ai-service đọc 2 key này về cache RAM/file, backend không gửi ma trận qua queue và ai-service không gọi HTTP backend lúc inference. Không có key reverse `cache:stats:genre:movie:{movieId}` và không có key Redis per-user.
 - Biến môi trường: `CACHE_ENABLED` (mặc định `true`), `RECOMMENDATION_WINDOW` (mặc định `100`).
 
 ## WebSocket events
@@ -427,7 +434,7 @@ Socket.IO server chạy **cùng cổng 8081**, CORS `origin: '*'` (`src/modules/
 
 Backend là **producer** cho các exchange topic và **consumer cho user/auth business queue cùng 2 DLQ**. Kết nối qua `amqp-connection-manager`, `RABBITMQ_URL` (mặc định `amqp://guest:guest@localhost:5672`), `publishTimeout: 3000`.
 
-**Envelope sự kiện** (`EventEnvelope<T>`): `{eventId, eventType, eventVersion, source, occurredAt, correlationId?, payload}`.
+**Envelope sự kiện** (`EventEnvelope<T>`): `{eventId, eventType, eventVersion, source, occurredAt, correlationId?, userId?, payload}`. `user.search` đưa `userId` vào payload; `user.genre.update` đưa `userId` ở envelope.
 
 | Exchange (topic) | Routing key | Producer (backend) | Nội dung payload | Người tiêu thụ |
 |---|---|---|---|---|
@@ -437,12 +444,14 @@ Backend là **producer** cho các exchange topic và **consumer cho user/auth bu
 | `user.exchange` | `user.created` | `UsersService.create` | `{userId, email, fullName, status, preferenceData}` | ai-service + `user.queue` |
 | `user.exchange` | `user.updated.profile` | `UsersService.update` | `{userId, preferenceData}` | ai-service + `user.queue` |
 | `user.exchange` | `user.deleted` | `UsersService.remove` | `{userId}` | ai-service |
+| `user.exchange` | `user.search` | `SearchEventService` được gọi từ `MoviesService.search` / `RecommendationsService.semanticSearch` / `searchLexicalSemanticRerank` (có JWT, có kết quả) | `{userId, mode, keywordRaw, keywordNormalized}` — `mode = 'semantic' \| 'hybrid' \| 'db'`; chỉ `occurredAt`/`correlationId` ở envelope | ai-service (`user.queue`) |
+| `user.exchange` | `user.genre.update` | `POST /api/movies/:id/view`, `POST /api/interactions` (like), `POST /api/ratings`, `POST /api/comments` khi payload có `genres` | `{type, genres: [{id, name}], score}` với score gốc: click `1`, comment `4`, like `5`, rating `0..5`; ai-service tự chuẩn hoá theo `type`; `userId` ở envelope | ai-service (`user.queue`) |
 | `auth.exchange` | `auth.email_verification.requested` | register / send-verification-email (khi `ASYNC_MAIL_ENABLED=true`) | `{userId, email, verificationToken}` | `auth.queue` → MailService |
 | `auth.exchange` | `auth.email_verified` | `POST /api/auth/verify-email` | `{userId, email}` | `auth.queue` → MailService |
-| `interaction.exchange` | `interaction.event` | `POST /api/interactions` (like/unlike), `POST /api/ratings`, `POST /api/comments`, `POST /api/movies/:id/view` (chỉ lần click đầu) | `{userId, movieId, action, score, removed, createdAt}` — `eventType='interaction.created'`; unlike: `score=-5`, `removed=true` | ai-service (cập nhật vector real-time) |
+| `interaction.exchange` | `interaction.event` | `POST /api/interactions` (like/unlike), `POST /api/ratings`, `POST /api/comments`, `POST /api/movies/:id/view` (chỉ lần click đầu) | `{userId, movieId, action, score, removed, createdAt}` — `eventType='interaction.created'`; unlike: `score=-5`, `removed=true`. `genres` từ frontend bị bỏ khỏi payload này | ai-service (cập nhật vector real-time) |
 | `interaction.exchange` | `training.batch` | cron `InteractionCronService` | `{interactions: [{userId, movieId, action, score, removed, createdAt}]}` — seed ratings + toàn bộ interactions app | ai-service (training ALS) |
 
-**Routing key / binding (hằng trong `messaging.constants.ts`)**: `movie.#` → `movie.queue`, `user.#` → `user.queue`, `auth.#` → `auth.queue`, `interaction.event` / `training.batch` → `interaction.queue` (queue do ai-service/infra định nghĩa). Lưu ý: `eventType` của sự kiện tương tác là `interaction.created`, routing key giữ `interaction.event`.
+**Routing key / binding (hằng trong `messaging.constants.ts`)**: `movie.#` → `movie.queue`, `user.#` → `user.queue`, `auth.#` → `auth.queue`, `interaction.event` / `training.batch` → `interaction.queue` (queue do ai-service/infra định nghĩa). Lưu ý: `eventType` của sự kiện tương tác là `interaction.created`, routing key giữ `interaction.event`; `user.search` và `user.genre.update` dùng routing key trùng `eventType`, đi chung `user.#` → `user.queue`; `user.search` lấy `userId` từ payload, `user.genre.update` lấy từ envelope.
 
 **DLQ flow (backend là consumer DLQ, ghi vào bảng `failed_events`)**:
 
@@ -453,7 +462,9 @@ Backend là **producer** cho các exchange topic và **consumer cho user/auth bu
 
 Consumer đọc header `x-death` / `x-first-death-*` để khôi phục routing key/queue gốc. (Trong quá trình thử còn có `recommendation.queue.retry.10s` + `movie.exchange.retry.10s` do ai-service cấu hình retry.)
 
-**Cron**: `@Cron('0 */1440 * * * *')` (**mỗi 24 giờ**) — `interaction.cron.ts`: gửi `training.batch` gồm seed ratings (chunk 10.000, tối đa 10.000 dòng) + toàn bộ interactions của app (chunk 10.000); có cờ chống chạy chồng.
+**Cron**:
+- `@Cron('0 */1440 * * * *')` (**mỗi 24 giờ**) — `interaction.cron.ts`: gửi `training.batch` gồm seed ratings (chunk 10.000, tối đa 10.000 dòng) + toàn bộ interactions của app (chunk 10.000); có cờ chống chạy chồng.
+- `@Cron('0 1 * * *')` (**01:00 daily**) — `genre-matrix.cron.ts`: refresh 2 key Redis ma trận thể loại dưới `RedisLockService` (lock `cache:stats:genre:refresh:lock`, TTL 10 phút), TTL dữ liệu 12 giờ. ai-service reload cache RAM/file sau cron.
 
 Backend consume `user.queue` và `auth.queue` để xử lý user/auth event; `movie.queue` và `interaction.queue` business vẫn do ai-service consume. Ngoài RabbitMQ, backend **có HTTP-call ai-service** qua module `recommendations` (`fetch` tới `AI_SERVICE_URL`), xem mục `Module recommendations`: `similar`, `semantic-search`, `for-you` (hybrid).
 

@@ -54,7 +54,6 @@ async def log_vector_db_health(vector_store: Any, settings: Any) -> dict[str, An
     hybrid_collections = (
         getattr(settings, "vector_user_cf_collection", "user_cf_vectors"),
         getattr(settings, "vector_movie_cf_collection", "movie_cf_vectors"),
-        getattr(settings, "vector_user_profile_collection", "user_profile_vectors"),
     )
     for name in hybrid_collections:
         if counts.get(name) == 0:

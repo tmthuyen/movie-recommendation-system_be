@@ -1,10 +1,18 @@
 import { Injectable, Inject, NotFoundException, Logger } from '@nestjs/common';
-import { CreateInteractionDto } from './dto/create-interaction.dto';
+import {
+  CreateInteractionDto,
+  InteractionGenreDto,
+} from './dto/create-interaction.dto';
 import { IInteractionRepository } from './interactions.repository';
 import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
 import { PaginationUtils } from '@/common/utils/search.util';
 import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
-import { Interaction, InteractionType } from './entities/interaction.entity';
+import { UserProducer } from '@/infrastructure/messaging/producers/user.producer';
+import {
+  Interaction,
+  InteractionScoreMap,
+  InteractionType,
+} from './entities/interaction.entity';
 import { Movie } from '@/modules/movies/entities/movie.entity';
 import { User } from '@/modules/users/entities/user.entity';
 import { EventsGateway } from '@/modules/events/events.gateway';
@@ -36,6 +44,7 @@ export class InteractionsService {
     @Inject(IInteractionRepository)
     private readonly repo: IInteractionRepository,
     private readonly interactionProducer: InteractionProducer,
+    private readonly userProducer: UserProducer,
     private readonly statsService: MovieInteractionStatsService,
     private readonly eventsGateway: EventsGateway,
     private readonly dataSource: DataSource,
@@ -49,7 +58,7 @@ export class InteractionsService {
     userId: string,
     createInteractionDto: CreateInteractionDto,
   ): Promise<ToggleInteractionResult> {
-    const { movieId, type } = createInteractionDto;
+    const { movieId, type, genres } = createInteractionDto;
 
     this.logger.log(
       `Xử lý tương tác userId=${userId}, movieId=${movieId}, type=${type}`,
@@ -99,7 +108,14 @@ export class InteractionsService {
             action === 'added' ? 1 : -1,
           )
         : await this.statsService.getStats(movieId);
-    await this.publishAndBroadcast(userId, movieId, type, action, stats);
+    await this.publishAndBroadcast(
+      userId,
+      movieId,
+      type,
+      action,
+      stats,
+      genres,
+    );
 
     return {
       action,
@@ -209,13 +225,19 @@ export class InteractionsService {
     return { success: true };
   }
 
+  /**
+   * Broadcast realtime và publish các event sinh ra từ một tương tác.
+   * `interaction.created` giữ nguyên; genre được phát riêng bằng `user.genre.update` khi có genres từ frontend.
+   * @returns Promise<void>; không ghi thêm DB/Redis, chỉ đẩy socket và RabbitMQ.
+   */
   private async publishAndBroadcast(
     userId: string,
     movieId: number,
     type: InteractionType,
     action: 'added' | 'removed',
     stats: MovieInteractionStats,
-  ) {
+    genres?: InteractionGenreDto[],
+  ): Promise<void> {
     this.logger.log(
       'Đang broadcast và publish sự kiện tương tác:',
       JSON.stringify({ userId, movieId, type, action, stats }),
@@ -249,6 +271,21 @@ export class InteractionsService {
       this.logger.log(
         `Đã publish queue sự kiện tương tác: userId=${userId}, movieId=${movieId}, type=${type}, action=${action}`,
       );
+
+      if (genres && genres.length > 0) {
+        await this.userProducer.publishUserGenreUpdate(
+          {
+            type,
+            genres: genres.map(genre => ({ id: genre.id, name: genre.name })),
+            score: InteractionScoreMap[type],
+          },
+          undefined,
+          userId,
+        );
+        this.logger.log(
+          `Đã publish user.genre.update: userId=${userId}, genres=${genres.length}`,
+        );
+      }
     }
   }
 

@@ -2,6 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { IInteractionRepository } from './interactions.repository';
 import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
+import type { UserProducer } from '@/infrastructure/messaging/producers/user.producer';
 import { EventsGateway } from '@/modules/events/events.gateway';
 import { MovieInteractionStatsService } from './movie-interaction-stats.service';
 import { RatingsService } from '@/modules/ratings/ratings.service';
@@ -32,6 +33,7 @@ describe('InteractionsService', () => {
     getRanking: jest.Mock;
   };
   let producer: { publishInteractionCreated: jest.Mock };
+  let userProducer: { publishUserGenreUpdate: jest.Mock };
   let gateway: { broadcastInteraction: jest.Mock };
   let ratingService: { findByUserAndMovie: jest.Mock };
 
@@ -74,12 +76,16 @@ describe('InteractionsService', () => {
       getRanking: jest.fn().mockResolvedValue([]),
     };
     producer = { publishInteractionCreated: jest.fn() };
+    userProducer = {
+      publishUserGenreUpdate: jest.fn().mockResolvedValue(undefined),
+    };
     gateway = { broadcastInteraction: jest.fn() };
     ratingService = { findByUserAndMovie: jest.fn().mockResolvedValue(null) };
 
     service = new InteractionsService(
       repo as unknown as IInteractionRepository,
       producer as unknown as InteractionProducer,
+      userProducer as unknown as UserProducer,
       statsService as unknown as MovieInteractionStatsService,
       gateway as unknown as EventsGateway,
       dataSource as unknown as DataSource,
@@ -135,6 +141,28 @@ describe('InteractionsService', () => {
         likeCount: 3,
       });
       expect(res.data).toBeDefined();
+    });
+
+    it('like kèm genres → publish user.genre.update với score chuẩn hoá 1', async () => {
+      manager.findOne
+        .mockResolvedValueOnce({ id: 1, likeCount: 2 })
+        .mockResolvedValueOnce(null);
+
+      await service.create('user-1', {
+        movieId: 1,
+        type: InteractionType.LIKE,
+        genres: [{ id: 7, name: 'Action' }],
+      });
+
+      expect(userProducer.publishUserGenreUpdate).toHaveBeenCalledWith(
+        {
+          type: InteractionType.LIKE,
+          genres: [{ id: 7, name: 'Action' }],
+          score: 5,
+        },
+        undefined,
+        'user-1',
+      );
     });
 
     it('đã like → xoá interaction, giảm likeCount, broadcast removed', async () => {

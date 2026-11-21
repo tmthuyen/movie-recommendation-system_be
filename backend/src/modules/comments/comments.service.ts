@@ -21,7 +21,9 @@ import { EventsGateway } from '@/modules/events/events.gateway';
 import { User } from '../users/entities/user.entity';
 import { Movie } from '../movies/entities/movie.entity';
 import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
+import { UserProducer } from '@/infrastructure/messaging/producers/user.producer';
 import { MovieInteractionStatsService } from '../interactions/movie-interaction-stats.service';
+
 import { ResultWithPagination } from '@/common/dtos/paginated-result.interface';
 import { PaginationUtils } from '@/common/utils/search.util';
 
@@ -34,6 +36,7 @@ export class CommentsService {
     private readonly dataSource: DataSource,
     private readonly eventsGateway: EventsGateway,
     private readonly interactionProducer: InteractionProducer,
+    private readonly userProducer: UserProducer,
     private readonly statsService: MovieInteractionStatsService,
   ) {}
 
@@ -41,7 +44,7 @@ export class CommentsService {
     userId: string,
     createCommentDto: CreateCommentDto,
   ): Promise<Comment> {
-    const { movieId, content, parentId } = createCommentDto;
+    const { movieId, content, parentId, genres } = createCommentDto;
 
     // check movieId exists
 
@@ -90,6 +93,18 @@ export class CommentsService {
       removed: false,
       createdAt: savedComment.createdAt ?? new Date(),
     });
+
+    if (genres && genres.length > 0) {
+      await this.userProducer.publishUserGenreUpdate(
+        {
+          type: InteractionType.COMMENT,
+          genres: genres.map(genre => ({ id: genre.id, name: genre.name })),
+          score: InteractionScoreMap[InteractionType.COMMENT],
+        },
+        undefined,
+        userId,
+      );
+    }
 
     return savedComment;
   }

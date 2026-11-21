@@ -17,7 +17,6 @@ import numpy as np
 
 from api.schemas import SimilarMoviesResponse
 from core.custom_exception import CustomException
-from core.fusion import reciprocal_rank_fusion_with_details
 from core.integrations import VectorStore
 from data.data_loader import build_search_text as _build_search_text
 from services.bm25_index_service import Bm25IndexService
@@ -27,6 +26,7 @@ from services.IALSRecommendationService import ALS_Implicit, ALSModelService
 from services.mapping_service import mapping_service
 from services.movie_vector_service import MovieVectorService
 from services.search_rerank_service import SearchRerankService
+from services.user_vector_aggregator_service import UserVectorAggregatorService
 from services.user_vector_service import UserVectorService
 from utils import setup_logger
 from utils.genre_utils import extract_genres
@@ -77,6 +77,7 @@ class RecommendService:
         user_vector_service: UserVectorService,
         als_model_service: ALSModelService,
         bm25_index: Bm25IndexService | None = None,
+        user_vector_aggregator: UserVectorAggregatorService | None = None,
     ) -> None:
         """Gợi ý phim theo ngữ nghĩa (Semantic Search), phim tương tự (Item-to-Item) và Hybrid CF."""
         """Gợi ý phim tương tự (Content Search), nội dung liên quan cho user dựa trên tương tác (CF)
@@ -98,6 +99,7 @@ class RecommendService:
         self._movie_vector_service = movie_vector_service
         self._user_vector_service = user_vector_service
         self._als_model_service = als_model_service
+        self._user_vector_aggregator = user_vector_aggregator
 
     def set_als_model_service(self, als_model_service: ALS_Implicit):
         """Set the ALS model service for collaborative filtering recommendations.
@@ -187,9 +189,19 @@ class RecommendService:
     async def hybrid_recommendation(
         self, user_id: str, top_k: int = 10
     ) -> list[dict[str, Any]]:
-        """Gợi ý lại với CF và CBF
-        CBF: Lấy danh sách phim liên quan dựa trên user profile vector
-        CF: Lấy danh sách phim liên quan dựa trên lịch sử tương tác bằng model iALS (Collaborative Filtering)
+        """Gợi ý lại với CF và các vector hành vi người dùng.
+        Vector:
+         + Lấy gợi ý từ các vector sau:
+           + user long term (lưu các hành vi tương tác, keyword search, preferences data),
+           + user short term (lưu các hành vi tương tác gần nhất),
+           + user search (lưu các keyword search),
+           + user genre (collection user_genre_vectors —lưu các trọng số thể loại phim mỗi khi tương tác phim thuộc thể loại)
+         + Mỗi danh sách lấy được, các row phải có field giải thích lý do gợi ý (evidence) để hiển thị cho user.
+        CF:
+         + Lấy danh sách phim liên quan dựa trên lịch sử tương tác bằng model iALS (Collaborative Filtering),
+         + evidence là user khác có hành vi tương tác giống bạn cũng xem
+
+        Kết quả trả về đúng yêu cầu: score, rank, id, title, các model đóng góp, các evidence hợp nhất từ các model
         Args:
             user_id (str): id người dùng
             top_k (int, optional): số lượng phim gợi ý. Defaults to 10.
@@ -200,8 +212,8 @@ class RecommendService:
                 "fused_rank"(int): rank sau khi RRF fusion,
                 "movie_id"(int): rank sau khi RRF fusion,
                 "rrf_score"(float): điểm RRF fusion,
-                "model_ranks"(dict[str, int]): thứ hạng của từng mô hình (CF, CBF),
-                "raw_scores"(dict[str, float]): điểm raw score của từng mô hình (CF, CBF),
+                "model_ranks"(dict[str, int]): thứ hạng của từng nguồn (CF, LONG_TERM, SHORT_TERM, SEARCH, GENRE),
+                "raw_scores"(dict[str, float]): điểm raw score của từng nguồn,
                 "contributing_models"(list[str]): danh sách mô hình đóng góp cho phim này,
                 "agreement_count"(int): số lượng mô hình đồng ý với phim này,
                 "best_individual_rank"(int): thứ hạng tốt nhất của phim này trong các mô hình.
@@ -215,7 +227,6 @@ class RecommendService:
         # Gợi ý theo user profile vector
 
         cf_results = []
-        cbf_results = []
 
         # =======================================================
         # CF: gợi ý phim lọc cộng tác với iALS model
@@ -260,80 +271,21 @@ class RecommendService:
                 f"[RecommendService] User {user_id} not found in CF mapping (Cold Start)."
             )
 
-        # =======================================================
-        # CBF: Gợi ý phim dựa trên sở thích nội dung (semantic) của user
-
-        # tìm user profile vector để lấy semantic recommendations
-        try:
-            user_data = await self._user_vector_service.find_user_profile_vector(
-                user_id=user_id
+        if self._user_vector_aggregator is not None:
+            return await self._user_vector_aggregator.aggregate(
+                user_id=user_id,
+                top_k=top_k,
+                cf_results=cf_results,
+                has_cf=bool(cf_results),
             )
-            user_vector = user_data.get("vector")
-            # tìm phim tương tự dựa trên user profile vector
-            if user_vector:
-                cbf_results = (
-                    await self._movie_vector_service.find_similar_movies_with_vector(
-                        vector=user_vector, top_k=top_k
-                    )
-                )
-            else:
-                logger.warning(
-                    f"[RecommendService] User {user_id} has no profile vector; skipping semantic recommendations."
-                )
-                cbf_results = []
 
-        except Exception as e:
-            logger.error(
-                f"[RecommendService] Error fetching semantic recommendations for user {user_id}: {e}"
-            )
-            cbf_results = []
-
-        logger.info(
-            f"[RecommendService] Found {len(cf_results)} CF hits and {len(cbf_results)} Semantic hits."
+        # Profile vector/CBF đã tắt; thiếu aggregator thì không tự dựng CBF.
+        logger.warning(
+            "[RecommendService] UserVectorAggregatorService missing; "
+            "skip hybrid recommendations for user=%s",
+            user_id,
         )
-
-        # =======================================================
-        #  Chạy thuật toán rerank RRF cho CF và CBF
-
-        # rank list là movie ids
-        ranked_lists = {
-            "CF": [item.get("id") for item in cf_results],
-            "CBF": [item.get("id") for item in cbf_results],
-        }
-        raw_scores = {
-            "CF": [item.get("score", 0.0) for item in cf_results],
-            "CBF": [item.get("score", 0.0) for item in cbf_results],
-        }
-
-        # nếu không có user idx thì cf weights thấp
-        if user_idx is None:
-            weights = {
-                "CF": 0.1,
-                "CBF": 0.8,
-            }
-        else:
-            weights = {
-                "CF": 0.6,
-                "CBF": 0.4,
-            }
-        detailed_fused = reciprocal_rank_fusion_with_details(
-            ranked_lists=ranked_lists,
-            raw_scores_lists=raw_scores,
-            weights=weights,
-            k=60,
-            top_n=top_k * 2,
-        )
-
-        # Canonical fields dùng chung cho backend: id / rank / score.
-        return [
-            {
-                **item,
-                "id": item["movie_id"],
-                "rank": item["fused_rank"],
-                "score": item["rrf_score"],
-            }
-            for item in detailed_fused
-        ]
+        return []
 
         # # 3. Combine and Rerank
         # combined_scores = {}

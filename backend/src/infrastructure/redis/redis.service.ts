@@ -1,8 +1,24 @@
 import { Inject, Injectable } from '@nestjs/common';
 import Redis from 'ioredis';
+import { idUtil } from '@/common/utils/id.util';
 
 export const REDIS_CLIENT = 'REDIS_CLIENT';
 export const REDIS_SERVICE = 'REDIS_SERVICE';
+
+export interface RedisSetReplacement {
+  key: string;
+  members: string[];
+}
+
+export interface RedisSortedSetEntry {
+  member: string;
+  score: number;
+}
+
+export interface RedisSortedSetReplacement {
+  key: string;
+  entries: RedisSortedSetEntry[];
+}
 
 export interface IRedisService {
   get(key: string): Promise<string | null>;
@@ -56,6 +72,13 @@ export interface IRedisService {
     start: number,
     stop: number,
   ): Promise<Array<{ member: string; score: number }>>;
+
+  /** Ghi đè nguyên tử các SET/ZSET qua temp key + RENAME, kèm TTL. */
+  replaceCollections(
+    sets: RedisSetReplacement[],
+    sortedSets: RedisSortedSetReplacement[],
+    ttlSeconds: number,
+  ): Promise<void>;
 }
 
 @Injectable()
@@ -189,5 +212,58 @@ export class RedisService implements IRedisService {
       result.push({ member: rows[i], score: Number(rows[i + 1]) });
     }
     return result;
+  }
+
+  async replaceCollections(
+    sets: RedisSetReplacement[],
+    sortedSets: RedisSortedSetReplacement[],
+    ttlSeconds: number,
+  ): Promise<void> {
+    const pipeline = this.redisClient.multi();
+
+    const swap = (
+      targetKey: string,
+      populate: (tempKey: string) => void,
+    ): void => {
+      const tempKey = `${targetKey}:tmp:${idUtil.generateUUID()}`;
+      pipeline.del(tempKey);
+      populate(tempKey);
+      pipeline.expire(tempKey, ttlSeconds);
+      pipeline.rename(tempKey, targetKey);
+    };
+
+    for (const { key, members } of sets) {
+      swap(key, tempKey => {
+        if (members.length > 0) {
+          pipeline.sadd(tempKey, ...members);
+          return;
+        }
+
+        // Tạo SET rỗng để RENAME vẫn có key nguồn hợp lệ.
+        pipeline.sadd(tempKey, '');
+        pipeline.srem(tempKey, '');
+      });
+    }
+
+    for (const { key, entries } of sortedSets) {
+      swap(key, tempKey => {
+        if (entries.length > 0) {
+          const args = entries.flatMap(entry => [entry.score, entry.member]);
+          pipeline.zadd(tempKey, ...args);
+          return;
+        }
+
+        // Tạo ZSET rỗng để RENAME vẫn có key nguồn hợp lệ.
+        pipeline.zadd(tempKey, 0, '');
+        pipeline.zrem(tempKey, '');
+      });
+    }
+
+    const results = (await pipeline.exec()) ?? [];
+    const failed = results.find(([error]) => error !== null);
+    if (failed) {
+      const error = failed[0];
+      throw error instanceof Error ? error : new Error(String(error));
+    }
   }
 }

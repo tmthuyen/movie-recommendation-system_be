@@ -1,6 +1,16 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsNotEmpty, IsNumber, Max, Min } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  Max,
+  Min,
+  ValidateNested,
+} from 'class-validator';
+import { InteractionGenreDto } from '@/modules/interactions/dto/create-interaction.dto';
 
 export class CreateRatingDto {
   @ApiProperty({ example: 4.5, description: 'Điểm đánh giá (0-5)' })
@@ -16,4 +26,16 @@ export class CreateRatingDto {
   @IsNotEmpty({ message: 'ID phim không được để trống' })
   @IsNumber({}, { message: 'ID phim phải là số' })
   movieId: number;
+
+  @ApiProperty({
+    type: [InteractionGenreDto],
+    required: false,
+    description: 'Genre của phim để cập nhật user genre vector',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => InteractionGenreDto)
+  genres?: InteractionGenreDto[];
 }

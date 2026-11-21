@@ -16,12 +16,9 @@ export class EventPublisherService {
   ) {}
 
   /**
-   * Publish an event to a RabbitMQ exchange
-   * @param exchange The exchange to publish to
-   * @param eventType The type of the event, equal to the routing key
-   * @param payload The payload of the event
-   * @param correlationId The correlation ID of the event, trace id in distributed systems
-   * @param routingKey Optional routing key when it differs from the event type
+   * Đóng gói và phát sự kiện lên RabbitMQ exchange.
+   * Sinh eventId/occurredAt, ưu tiên correlationId truyền vào rồi traceId, gắn userId vào envelope khi có và publish qua routingKey tương ứng.
+   * @returns Promise<void>; lỗi publish chỉ được ghi log, không ném ra cho caller.
    */
   publish<TPayload>(
     exchange: string,
@@ -29,6 +26,7 @@ export class EventPublisherService {
     payload: TPayload,
     correlationId?: string,
     routingKey?: string,
+    userId?: string,
   ): Promise<void> {
     this.logger.log(
       `Sự kiện: type=${eventType}, exchange=${exchange}, routingKey=${routingKey ?? eventType} | correlationId=${correlationId}`,
@@ -47,6 +45,7 @@ export class EventPublisherService {
       source: this.configService.get<string>('SERVICE_NAME', 'backend-service'),
       occurredAt: new Date().toISOString(),
       correlationId: correlationId ?? traceId,
+      ...(userId ? { userId } : {}),
       payload,
     };
 

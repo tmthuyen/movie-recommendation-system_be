@@ -6,11 +6,15 @@ import useInteraction from '@/hooks/tankstack/useInteraction';
 import { useMovieSocket } from '@/hooks/useMovieSocket';
 import { useRequireLogin } from '@/hooks/useRequireLogin';
 import { cn } from '@/lib/utils';
+import type { Genre } from '@/shared/types/api.types';
+import { toInteractionGenres } from '@/shared/utils/movie';
 
 interface MovieActionsProps {
   movieId: number;
   /** Số like ban đầu (dùng cho fallback khi chưa có socket). */
   originalLikeCount: number;
+  /** Genre của phim, gửi kèm payload tương tác để cập nhật user genre vector. */
+  genres?: Genre[];
   /** Kiểu hiển thị: `card` (compact cho card phim) hoặc `detail` (trang chi tiết). */
   variant?: 'card' | 'detail';
   className?: string;
@@ -27,6 +31,7 @@ interface MovieActionsProps {
 export function MovieActions({
   movieId,
   originalLikeCount,
+  genres,
   variant = 'card',
   className,
 }: MovieActionsProps) {
@@ -67,7 +72,7 @@ export function MovieActions({
   const handleToggle = () => {
     if (!requireLogin()) return;
     toggleInteraction.mutate(
-      { movieId, type: 'like' },
+      { movieId, type: 'like', genres: toInteractionGenres(genres) },
       {
         onSuccess: (result) => {
           // Cập nhật

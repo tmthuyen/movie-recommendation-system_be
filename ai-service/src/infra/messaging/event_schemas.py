@@ -13,12 +13,19 @@ DataT = TypeVar("DataT")
 
 
 class DomainEvent(BaseModel, Generic[DataT]):
+    """Envelope chung của sự kiện domain.
+
+    Các trường định danh người dùng và ngữ cảnh nằm ở envelope, không nằm trong
+    payload của event.
+    """
+
     eventId: str
     eventType: str
     eventVersion: int = 1
     source: str
     occurredAt: str
     correlationId: str | None = None
+    userId: str | None = None
     payload: DataT
 
 
@@ -67,6 +74,41 @@ class UserCreatedPayload(UserUpdatedPayload):
     email: str
     fullName: str
     status: str
+
+
+class UserSearchPayload(BaseModel):
+    """Payload của sự kiện tìm kiếm: userId nằm cùng keyword."""
+
+    userId: str
+    mode: str = "semantic"
+    keywordRaw: str = ""
+    keywordNormalized: str = ""
+
+
+class UserSearchEvent(DomainEvent[UserSearchPayload]):
+    eventType: str = "user.search"
+
+
+class GenreRef(BaseModel):
+    """Một thể loại được backend gửi kèm tương tác."""
+
+    id: int
+    name: str = ""
+
+
+class UserGenreUpdatePayload(BaseModel):
+    """Payload của sự kiện cập nhật trọng số thể loại người dùng.
+
+    `type` là loại tương tác để ai-service tự chuẩn hoá `score` theo band.
+    """
+
+    type: str
+    genres: list[GenreRef]
+    score: float
+
+
+class UserGenreUpdateEvent(DomainEvent[UserGenreUpdatePayload]):
+    eventType: str = "user.genre.update"
 
 
 class UserDeletedPayload(BaseModel):

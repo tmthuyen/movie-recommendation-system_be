@@ -50,12 +50,13 @@ Bảng theo dõi danh sách plan trong `docs/plans/`. Dùng để xác định `
 | 30 | V30_backend_hybrid-semantic-load-more.md | backend | hybrid-semantic-load-more | Load-more semantic-search & for-you bằng Redis sorted set (cursor = rank) | ✅ Hoàn thành 2026-11-13 (BE 381 passed / 46 suites; AI phạm vi liên quan 100 passed) |
 | 31 | V31_backend_search-filter-sort-apis.md | backend | search-filter-sort-apis | Chuẩn hoá search/filter/sort cho users, ratings, comments, interactions, failed-events | ✅ Hoàn thành 2026-11-13 (BE 412 passed / 47 suites; type-check clean, lint 0 errors) |
 | 32 | V32_fullstack_user-profile-vector-events.md | backend + frontend + ai | fullstack-user-profile-vector-events | Luồng user profile qua RabbitMQ để cập nhật vector AI | ✅ Hoàn thành |
-| 33 | V33_backend-auth-user-consumers.md | backend | auth-user-consumers | Tách queue user/auth và xử lý email qua event | 🟡 Đang triển khai |
+| 33 | V33_backend-auth-user-consumers.md | backend | auth-user-consumers | Tách queue user/auth và xử lý email qua event | 🟡 Đang triển khai |
+
 | 34 | V34_frontend_admin-table-upgrade.md | frontend | admin-table-upgrade | Nâng cấp UI danh sách admin bằng TanStack Table v9 → rollout toàn bộ trang (users/genres/countries/peoples/movies/interactions) + lọc null/rỗng, lọc quan hệ, cột ID, cột count, xem chi tiết phim | ✅ Hoàn thành (QA thủ công chưa chạy) |
 | 35 | V35_frontend_search-for-you-infinite.md | frontend | search-for-you-infinite | Trang tìm kiếm semantic/rerank/lexical + "Dành cho bạn" (tab chi tiết + `/for-you`) + grid phim infinite scroll dùng chung; sửa vỡ layout grid; chuẩn hoá comment; review UI bình luận (review-only) | 🟡 Task 1–2 code + gate tự động xong; Task 3 review xong, không sửa code; QA thủ công chưa chạy; chờ endpoint `lexical-search/cursor` |
 | 36 | V36_testing_performance-k6.md | testing | performance-k6 | Performance/load test k6 (public + AI service) | 🟡 Plan cũ chưa có mapping; bổ sung để giữ index liên tục |
 | 37 | V37_backend_cache-lock-stats-ttl.md | backend | cache-lock-stats-ttl | Cache dùng RedisLockService, stats cache-first + cron sync, TTL, semantic/forYou per-ID cache | 🟡 Đang triển khai |
-| 38 | V38_ai_search-history-user-vectors.md | ai | search-history-user-vectors | Search history + collection user vector | ⚪ Chưa duyệt / chưa triển khai |
+| 38 | V38_ai_search-history-user-vectors.md | ai | search-history-user-vectors | Search payload có userId do service publish; user_genre_vectors collection mới; Redis chỉ 2 key genre; ai-service cache ma trận RAM/file; cả click/view/like/rating/comment publish `user.genre.update` với score gốc + `type`, ai-service tự chuẩn hoá `[-1,1]` (chỉ rating âm); tắt profile/CBF, profile event cập nhật long/short-term; đặc tả vector user + trọng số ForYou ở mục 7 | ✅ Hoàn thành (2026-11-21) |
 
 ## Ghi chú legacy
 

@@ -1,6 +1,7 @@
 import { commentApi } from '@/apis/comment.api';
 import { parseAxiosError } from '@/lib/axiosClient';
 import { Comment } from '@/shared/types/comment.types';
+import type { InteractionGenrePayload } from '@/shared/utils/movie';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/stores/auth.store';
@@ -13,13 +14,7 @@ export function useGetComments(
   const { page = 1, limit = 5, parentId } = options;
 
   return useQuery({
-    queryKey: [
-      'comments',
-      String(movieId),
-      parentId ? String(parentId) : 'root',
-      page,
-      limit,
-    ],
+    queryKey: ['comments', String(movieId), parentId ? String(parentId) : 'root', page, limit],
     queryFn: async (): Promise<{ comments: Comment[]; total: number; totalPages: number }> => {
       const response = await commentApi.getByMovie(movieId, { page, limit, parentId });
       return {
@@ -45,6 +40,7 @@ export function useCreateComment(movieId: number | string) {
     mutationFn: async (input: {
       content: string;
       parentId?: number | string;
+      genres?: InteractionGenrePayload[];
     }): Promise<Comment> => {
       const response = await commentApi.create({ ...input, movieId });
       return response.result;
@@ -68,7 +64,9 @@ export function useCreateComment(movieId: number | string) {
           parentId: null,
           replyCount: 0,
           createdAt: new Date().toISOString(),
-          user: user ? { id: user.id, fullName: user.fullName, avatarUrl: user.avatarUrl } : undefined,
+          user: user
+            ? { id: user.id, fullName: user.fullName, avatarUrl: user.avatarUrl }
+            : undefined,
         };
         return { ...old, comments: [optimistic, ...old.comments], total: old.total + 1 };
       });

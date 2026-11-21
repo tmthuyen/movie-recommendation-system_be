@@ -8,6 +8,7 @@ import { DataSource } from 'typeorm';
 import { EventsGateway } from '@/modules/events/events.gateway';
 import {
   Interaction,
+  InteractionScoreMap,
   InteractionType,
   MAX_INTERACTION_SCORE,
 } from '@/modules/interactions/entities/interaction.entity';
@@ -21,6 +22,7 @@ import {
   MovieUpdatedPayload,
 } from '@/infrastructure/messaging/event.types';
 import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
+import { UserProducer } from '@/infrastructure/messaging/producers/user.producer';
 import { MovieInteractionStatsService } from '@/modules/interactions/movie-interaction-stats.service';
 import { MovieSearchRequestDto } from '@/modules/movies/dto/movie-search-request.dto';
 import {
@@ -45,6 +47,11 @@ import { idUtil } from '@/common/utils/id.util';
 import { PaginationUtils, SearchUtils } from '@/common/utils/search.util';
 import { REDIS_SERVICE } from '@/infrastructure/redis/redis.service';
 import type { IRedisService } from '@/infrastructure/redis/redis.service';
+import {
+  type SearchEventContext,
+  type SearchEventMode,
+  SearchEventService,
+} from '@/infrastructure/messaging/search-event.service';
 
 @Injectable()
 export class MoviesService {
@@ -64,10 +71,40 @@ export class MoviesService {
     private readonly movieProducer: MovieProducer,
     private readonly eventsGateway: EventsGateway,
     private readonly interactionProducer: InteractionProducer,
+    private readonly userProducer: UserProducer,
     private readonly statsService: MovieInteractionStatsService,
     @Inject(CACHE_SERVICE) private readonly cache: ICacheService,
     @Inject(REDIS_SERVICE) private readonly redis: IRedisService,
+    private readonly searchEventService: SearchEventService,
   ) {}
+
+  /**
+   * Phát event search ngay trong service sau khi đã có kết quả.
+   * Chỉ phát cho user JWT, trang đầu và có ít nhất một phim; controller không điều phối bước này.
+   * @returns Promise<void>; không ghi DB/Redis, guest hoặc trang sau bị bỏ qua.
+   */
+  private async publishSearchIfEligible(
+    context: SearchEventContext | undefined,
+    keywordRaw: string,
+    mode: SearchEventMode,
+    resultCount: number,
+  ): Promise<void> {
+    if (
+      context?.isFirstPage === false ||
+      !context?.userId ||
+      resultCount <= 0
+    ) {
+      return;
+    }
+
+    await this.searchEventService.publishIfEligible({
+      userId: context.userId,
+      keywordRaw,
+      mode,
+      resultCount,
+      correlationId: context.correlationId,
+    });
+  }
 
   private mapDtoToEntity(dto: any) {
     const { genreIds, countryId, peopleIds, ...rest } = dto;
@@ -301,7 +338,11 @@ export class MoviesService {
     await this.cache.incr(CacheKeys.recommendation.similarVersion(movieId));
   }
 
-  async incrementViewCount(id: number, userId?: string) {
+  async incrementViewCount(
+    id: number,
+    userId?: string,
+    genres?: Array<{ id: number; name: string }>,
+  ) {
     const movie = await this.findOneFresh(id);
     const stats = await this.statsService.recordView(id);
     const viewCount = stats.viewCount;
@@ -383,6 +424,18 @@ export class MoviesService {
         removed: false,
         createdAt: new Date(),
       });
+
+      if (genres && genres.length > 0) {
+        await this.userProducer.publishUserGenreUpdate(
+          {
+            type: InteractionType.CLICK,
+            genres: genres.map(genre => ({ id: genre.id, name: genre.name })),
+            score: InteractionScoreMap[InteractionType.CLICK],
+          },
+          undefined,
+          userId,
+        );
+      }
     }
 
     return {
@@ -392,17 +445,26 @@ export class MoviesService {
     };
   }
 
-  /** search nâng cao
-   * @param query: MovieSearchRequestDto
-   * @returns ResultWithPagination<Movie>
+  /**
+   * Tìm kiếm phim nâng cao bằng DB/cache.
+   * Đọc cache theo version/page/limit, loader fallback về DB, sau đó tự phát event search nếu đủ điều kiện.
+   * @returns ResultWithPagination<Movie> kèm event search đã được phát trong service.
    */
   async search(
     query: MovieSearchRequestDto,
+    context?: SearchEventContext,
   ): Promise<ResultWithPagination<Movie>> {
     const { page = 1, limit = 10, keyword } = query;
 
     if (page > MAX_CACHED_PAGE) {
-      return this.searchFromDb(query);
+      const result = await this.searchFromDb(query);
+      await this.publishSearchIfEligible(
+        context,
+        keyword ?? '',
+        'db',
+        result.result?.length ?? 0,
+      );
+      return result;
     }
 
     const version = await this.cache.getCounter(CacheKeys.movie.listVersion());
@@ -416,7 +478,7 @@ export class MoviesService {
     });
     const ttl = keyword?.trim() ? CacheTtl.movieKeyword : CacheTtl.movieList;
 
-    return this.cache.getOrLoad<ResultWithPagination<Movie>>({
+    const result = await this.cache.getOrLoad<ResultWithPagination<Movie>>({
       key,
       schema: MovieSearchCacheSchema,
       ttlSeconds: ttl,
@@ -432,6 +494,14 @@ export class MoviesService {
         };
       },
     });
+
+    await this.publishSearchIfEligible(
+      context,
+      keyword ?? '',
+      'db',
+      result.result?.length ?? 0,
+    );
+    return result;
   }
 
   private async searchFromDb(

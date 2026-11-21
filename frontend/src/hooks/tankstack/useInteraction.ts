@@ -1,6 +1,7 @@
 import { interactionApi } from '@/apis/interaction.api';
 import { parseAxiosError } from '@/lib/axiosClient';
 import { ApiPaginatedResponse, Pagination } from '@/shared/types/api.types';
+import type { InteractionGenrePayload } from '@/shared/utils/movie';
 import {
   Interaction,
   InteractionStats,
@@ -171,6 +172,7 @@ export function useToggleInteraction() {
     mutationFn: async (input: {
       movieId: number;
       type: 'like';
+      genres?: InteractionGenrePayload[];
     }): Promise<{
       action: 'added' | 'removed';
       type: InteractionType;
