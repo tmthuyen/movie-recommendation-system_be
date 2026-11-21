@@ -26,12 +26,82 @@ import { MovieResponseDto } from '@/modules/movies/dto/movie-response.dto';
 import { RecordViewDto } from '@/modules/movies/dto/record-view.dto';
 import { type SearchEventContext } from '@/infrastructure/messaging/search-event.service';
 
+import { TmdbDiscoverRequestDto } from './dto/tmdb-discover-request.dto';
+import { TmdbImportRequestDto } from './dto/tmdb-import-request.dto';
+import { Inject } from '@nestjs/common';
+import { IFetchMovieService } from './interfaces/fetch-movie.interface';
+
 type SearchRequest = Request & { correlationId?: string };
 
 @ApiTags('Movies')
 @Controller('movies')
 export class MoviesController {
-  constructor(private readonly moviesService: MoviesService) {}
+  constructor(
+    private readonly moviesService: MoviesService,
+    @Inject(IFetchMovieService)
+    private readonly fetchMovieService: IFetchMovieService,
+  ) {}
+
+  @Get('/tmdb/discover')
+  @UseGuards(JwtAuthGuard)
+  @Roles('ADMIN', 'SUPERADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Lấy phim mới từ TMDB chưa có trong database' })
+  async discoverTmdb(@Query() query: TmdbDiscoverRequestDto) {
+    const result = await this.fetchMovieService.discover(query);
+    const limit = query.limit ?? 10;
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Lấy danh sách phim mới từ TMDB thành công',
+      result,
+      pagination: {
+        page: query.page ?? 1,
+        limit,
+        total: result.length,
+        totalPages: result.length === 0 ? 0 : 1,
+      },
+    };
+  }
+
+  @Post('/tmdb/import')
+  @UseGuards(JwtAuthGuard)
+  @Roles('ADMIN', 'SUPERADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Thêm phim đã chọn từ TMDB vào database' })
+  async importTmdb(@Body() body: TmdbImportRequestDto) {
+    const tmdbIds = body.tmdbIds || (body.tmdbId ? [body.tmdbId] : []);
+    const result = await this.fetchMovieService.importMany(tmdbIds);
+    return {
+      success: true,
+      statusCode: 201,
+      message: 'Thêm phim mới từ TMDB thành công',
+      result: result.map(movie =>
+        plainToInstance(MovieResponseDto, movie, {
+          excludeExtraneousValues: true,
+        }),
+      ),
+    };
+  }
+
+  @Post('/tmdb/discover-and-import')
+  @UseGuards(JwtAuthGuard)
+  @Roles('ADMIN', 'SUPERADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Tự động lấy và thêm candidate hợp lệ từ TMDB' })
+  async discoverAndImportTmdb(@Query() query: TmdbDiscoverRequestDto) {
+    const result = await this.fetchMovieService.discoverAndImport(query);
+    return {
+      success: true,
+      statusCode: 201,
+      message: 'Tự động thêm phim mới từ TMDB thành công',
+      result: result.map(movie =>
+        plainToInstance(MovieResponseDto, movie, {
+          excludeExtraneousValues: true,
+        }),
+      ),
+    };
+  }
 
   @Post()
   @UseGuards(JwtAuthGuard)

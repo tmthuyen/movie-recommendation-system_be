@@ -17,46 +17,54 @@ Bảng theo dõi danh sách plan trong `docs/plans/`. Dùng để xác định `
 
 ## Bảng mapping hiện tại
 
-| index | file | scope | task_name | mô tả | ghi chú |
-|---|------|-------|-----------|-------|---------|
-| 1 | V1_backend_development-plan.md | backend | development-plan | Backend plan (NestJS) | Chuẩn hoá tên ở V24; không có V0 |
-| 3 | V3_backend_auth-rbac-security.md | backend | auth-rbac-security | Auth, User, RBAC & Security | Chuẩn hoá tên ở V24; thiếu V2 |
-| 4 | V4_backend_core-domain-apis.md | backend | core-domain-apis | Core Domain APIs & User Interactions | Chuẩn hoá tên ở V24 |
-| 5 | V5_backend_realtime-interactions.md | backend | realtime-interactions | Realtime Interactions & User Activity | Chuẩn hoá tên ở V24 |
-| 6 | V6_backend_message-queue.md | backend | message-queue | RabbitMQ Messaging Architecture | Chuẩn hoá tên ở V24 |
-| 7 | V7_ai_service-architecture.md | ai | service-architecture | AI-Service Architecture | Chuẩn hoá tên ở V24 |
-| 8 | V8_ai_collaborating.md | ai | collaborating | Collaborative + Content-based hybrid | Chuẩn hoá tên ở V24 |
-| 9 | V9_docs_copilot-instructions.md | docs | copilot-instructions | Hướng dẫn Copilot cho repository | Chuẩn hoá tên/scope ở V24 |
-| 10 | V10_ai_cf-model-report.md | ai | cf-model-report | Báo cáo mô hình CF | Chuẩn hoá tên ở V24 |
-| 11 | V11_frontend_ui-roadmap.md | frontend | ui-roadmap | Frontend UI roadmap | Phase 4 từng bị chặn bởi ai-service 500/CORS |
-| 12 | V12_docs_docs-api-update.md | docs | docs-api-update | Backend Docs & AGENTS.md cập nhật | Chuẩn hoá tên/scope ở V24 |
-| 13 | V13_frontend_ui-reuse.md | frontend | ui-reuse | Tối ưu quản lý UI & tái sử dụng component | Phase 1-2 xong |
-| 14 | V14_cicd_ci-cd-setup-fix-workflows.md | cicd | ci-cd-setup-fix-workflows | Sửa & hoàn thiện CI/CD (workflows xanh, CD placeholder) | Đã commit |
-| 15 | V15_frontend_preference-onboarding-popup.md | frontend | preference-onboarding-popup | Preference onboarding popup (cold-start user) | ✅ Hoàn thành |
-| 16 | V16_backend_realtime-interaction-band5.md | backend | realtime-interaction-band5 | Realtime interactions end-to-end + score band 5 | Chuẩn hoá tên ở V24 |
-| 17 | V17_docs_docs-plan-sync.md | docs | docs-plan-sync | Đồng bộ docs & plans với code hiện tại | ✅ Hoàn thành 2026-11-04 |
-| 18 | V18_docs_code-rules-extension.md | docs | code-rules-extension | Bổ sung rules: logging, async/await, testing, return contract, UI motion, DoD | ✅ Hoàn thành 2026-11-04 |
-| 19 | V19_testing_unit-test-program.md | testing | unit-test-program | Unit Test cho backend, frontend, ai-service | ✅ Hoàn thành 2026-11-04 (BE 328 test/72.29%, FE 232 test/68.05%, AI 270 test/66%) |
-| 20 | V20_docs_frontend-rules-merge.md | docs | frontend-rules-merge | Gộp 2 file rules frontend thành 1 (`FRONTEND_RULES.md`) | ✅ Hoàn thành 2026-11-04 (xoá `FRONTEND_UI_RULES.md`) |
-| 21 | V21_testing_ai-service-test-structure.md | testing | ai-service-test-structure | Tái cấu trúc test ai-service theo module/file/def + chạy được trong venv | ✅ Hoàn thành 2026-11-04 (32/32 module có test, 659 test, coverage 94%) |
-| 22 | V22_backend_email-role-error-fixes.md | backend | email-role-error-fixes | Sửa email boolean + RoleService trả 404 | ✅ Hoàn thành 2026-11-05 |
-| 23 | V23_frontend_motion-system.md | frontend | motion-system | Motion system dùng chung cho card/component/trang | ✅ Hoàn thành 2026-11-05 |
-| 24 | V24_docs_plan-standardization.md | docs | plan-standardization | Chuẩn hoá tên file plan, heading và PLAN_INDEX | ✅ Hoàn thành 2026-11-05 |
-| 25 | V25_backend_cache-layer.md | backend | cache-layer | Cache Redis: movie/genre/country/interaction/recommendation | 🟡 Đang triển khai; load-more (cursor) tách sang V27 |
-| 26 | V26_frontend_movie-search-filter.md | frontend | movie-search-filter | Search + filter phim từ DB, URL sync, UI responsive/modern | ✅ Hoàn thành 2026-11-07 (slider năm + toolbar grid; draft + nút "Áp dụng" — không auto-call API; QA responsive thủ công) |
-| 27 | V27_backend_similar-load-more.md | backend | similar-load-more | Cursor API load-more phim tương tự + frontend infinite scroll (API-first) | 🟡 Backend + frontend P6–P10 đã implement/verify; smoke runtime pending |
-| 28 | V28_backend_stale-tests-sync.md | backend | stale-tests-sync | Đồng bộ test backend NestJS với hành vi hiện tại | ✅ Hoàn thành 2026-11-12 |
-| 29 | V29_testing_ai-service-fix-failing-tests.md | testing | ai-service-fix-failing-tests | Sửa test AI-service fail do lệch API hiện tại | ✅ Hoàn thành 2026-11-12 (554 passed) |
-| 30 | V30_backend_hybrid-semantic-load-more.md | backend | hybrid-semantic-load-more | Load-more semantic-search & for-you bằng Redis sorted set (cursor = rank) | ✅ Hoàn thành 2026-11-13 (BE 381 passed / 46 suites; AI phạm vi liên quan 100 passed) |
-| 31 | V31_backend_search-filter-sort-apis.md | backend | search-filter-sort-apis | Chuẩn hoá search/filter/sort cho users, ratings, comments, interactions, failed-events | ✅ Hoàn thành 2026-11-13 (BE 412 passed / 47 suites; type-check clean, lint 0 errors) |
-| 32 | V32_fullstack_user-profile-vector-events.md | backend + frontend + ai | fullstack-user-profile-vector-events | Luồng user profile qua RabbitMQ để cập nhật vector AI | ✅ Hoàn thành |
-| 33 | V33_backend-auth-user-consumers.md | backend | auth-user-consumers | Tách queue user/auth và xử lý email qua event | 🟡 Đang triển khai |
+| index | file                                        | scope                   | task_name                            | mô tả                                                                                  | ghi chú                                                                                                                   |
+| ----- | ------------------------------------------- | ----------------------- | ------------------------------------ | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 1     | V1_backend_development-plan.md              | backend                 | development-plan                     | Backend plan (NestJS)                                                                  | Chuẩn hoá tên ở V24; không có V0                                                                                          |
+| 3     | V3_backend_auth-rbac-security.md            | backend                 | auth-rbac-security                   | Auth, User, RBAC & Security                                                            | Chuẩn hoá tên ở V24; thiếu V2                                                                                             |
+| 4     | V4_backend_core-domain-apis.md              | backend                 | core-domain-apis                     | Core Domain APIs & User Interactions                                                   | Chuẩn hoá tên ở V24                                                                                                       |
+| 5     | V5_backend_realtime-interactions.md         | backend                 | realtime-interactions                | Realtime Interactions & User Activity                                                  | Chuẩn hoá tên ở V24                                                                                                       |
+| 6     | V6_backend_message-queue.md                 | backend                 | message-queue                        | RabbitMQ Messaging Architecture                                                        | Chuẩn hoá tên ở V24                                                                                                       |
+| 7     | V7_ai_service-architecture.md               | ai                      | service-architecture                 | AI-Service Architecture                                                                | Chuẩn hoá tên ở V24                                                                                                       |
+| 8     | V8_ai_collaborating.md                      | ai                      | collaborating                        | Collaborative + Content-based hybrid                                                   | Chuẩn hoá tên ở V24                                                                                                       |
+| 9     | V9_docs_copilot-instructions.md             | docs                    | copilot-instructions                 | Hướng dẫn Copilot cho repository                                                       | Chuẩn hoá tên/scope ở V24                                                                                                 |
+| 10    | V10_ai_cf-model-report.md                   | ai                      | cf-model-report                      | Báo cáo mô hình CF                                                                     | Chuẩn hoá tên ở V24                                                                                                       |
+| 11    | V11_frontend_ui-roadmap.md                  | frontend                | ui-roadmap                           | Frontend UI roadmap                                                                    | Phase 4 từng bị chặn bởi ai-service 500/CORS                                                                              |
+| 12    | V12_docs_docs-api-update.md                 | docs                    | docs-api-update                      | Backend Docs & AGENTS.md cập nhật                                                      | Chuẩn hoá tên/scope ở V24                                                                                                 |
+| 13    | V13_frontend_ui-reuse.md                    | frontend                | ui-reuse                             | Tối ưu quản lý UI & tái sử dụng component                                              | Phase 1-2 xong                                                                                                            |
+| 14    | V14_cicd_ci-cd-setup-fix-workflows.md       | cicd                    | ci-cd-setup-fix-workflows            | Sửa & hoàn thiện CI/CD (workflows xanh, CD placeholder)                                | Đã commit                                                                                                                 |
+| 15    | V15_frontend_preference-onboarding-popup.md | frontend                | preference-onboarding-popup          | Preference onboarding popup (cold-start user)                                          | ✅ Hoàn thành                                                                                                             |
+| 16    | V16_backend_realtime-interaction-band5.md   | backend                 | realtime-interaction-band5           | Realtime interactions end-to-end + score band 5                                        | Chuẩn hoá tên ở V24                                                                                                       |
+| 17    | V17_docs_docs-plan-sync.md                  | docs                    | docs-plan-sync                       | Đồng bộ docs & plans với code hiện tại                                                 | ✅ Hoàn thành 2026-11-04                                                                                                  |
+| 18    | V18_docs_code-rules-extension.md            | docs                    | code-rules-extension                 | Bổ sung rules: logging, async/await, testing, return contract, UI motion, DoD          | ✅ Hoàn thành 2026-11-04                                                                                                  |
+| 19    | V19_testing_unit-test-program.md            | testing                 | unit-test-program                    | Unit Test cho backend, frontend, ai-service                                            | ✅ Hoàn thành 2026-11-04 (BE 328 test/72.29%, FE 232 test/68.05%, AI 270 test/66%)                                        |
+| 20    | V20_docs_frontend-rules-merge.md            | docs                    | frontend-rules-merge                 | Gộp 2 file rules frontend thành 1 (`FRONTEND_RULES.md`)                                | ✅ Hoàn thành 2026-11-04 (xoá `FRONTEND_UI_RULES.md`)                                                                     |
+| 21    | V21_testing_ai-service-test-structure.md    | testing                 | ai-service-test-structure            | Tái cấu trúc test ai-service theo module/file/def + chạy được trong venv               | ✅ Hoàn thành 2026-11-04 (32/32 module có test, 659 test, coverage 94%)                                                   |
+| 22    | V22_backend_email-role-error-fixes.md       | backend                 | email-role-error-fixes               | Sửa email boolean + RoleService trả 404                                                | ✅ Hoàn thành 2026-11-05                                                                                                  |
+| 23    | V23_frontend_motion-system.md               | frontend                | motion-system                        | Motion system dùng chung cho card/component/trang                                      | ✅ Hoàn thành 2026-11-05                                                                                                  |
+| 24    | V24_docs_plan-standardization.md            | docs                    | plan-standardization                 | Chuẩn hoá tên file plan, heading và PLAN_INDEX                                         | ✅ Hoàn thành 2026-11-05                                                                                                  |
+| 25    | V25_backend_cache-layer.md                  | backend                 | cache-layer                          | Cache Redis: movie/genre/country/interaction/recommendation                            | 🟡 Đang triển khai; load-more (cursor) tách sang V27                                                                      |
+| 26    | V26_frontend_movie-search-filter.md         | frontend                | movie-search-filter                  | Search + filter phim từ DB, URL sync, UI responsive/modern                             | ✅ Hoàn thành 2026-11-07 (slider năm + toolbar grid; draft + nút "Áp dụng" — không auto-call API; QA responsive thủ công) |
+| 27    | V27_backend_similar-load-more.md            | backend                 | similar-load-more                    | Cursor API load-more phim tương tự + frontend infinite scroll (API-first)              | 🟡 Backend + frontend P6–P10 đã implement/verify; smoke runtime pending                                                   |
+| 28    | V28_backend_stale-tests-sync.md             | backend                 | stale-tests-sync                     | Đồng bộ test backend NestJS với hành vi hiện tại                                       | ✅ Hoàn thành 2026-11-12                                                                                                  |
+| 29    | V29_testing_ai-service-fix-failing-tests.md | testing                 | ai-service-fix-failing-tests         | Sửa test AI-service fail do lệch API hiện tại                                          | ✅ Hoàn thành 2026-11-12 (554 passed)                                                                                     |
+| 30    | V30_backend_hybrid-semantic-load-more.md    | backend                 | hybrid-semantic-load-more            | Load-more semantic-search & for-you bằng Redis sorted set (cursor = rank)              | ✅ Hoàn thành 2026-11-13 (BE 381 passed / 46 suites; AI phạm vi liên quan 100 passed)                                     |
+| 31    | V31_backend_search-filter-sort-apis.md      | backend                 | search-filter-sort-apis              | Chuẩn hoá search/filter/sort cho users, ratings, comments, interactions, failed-events | ✅ Hoàn thành 2026-11-13 (BE 412 passed / 47 suites; type-check clean, lint 0 errors)                                     |
+| 32    | V32_fullstack_user-profile-vector-events.md | backend + frontend + ai | fullstack-user-profile-vector-events | Luồng user profile qua RabbitMQ để cập nhật vector AI                                  | ✅ Hoàn thành                                                                                                             |
+| 33    | V33_backend-auth-user-consumers.md          | backend                 | auth-user-consumers                  | Tách queue user/auth và xử lý email qua event                                          | 🟡 Đang triển khai                                                                                                        |
 
 | 34 | V34_frontend_admin-table-upgrade.md | frontend | admin-table-upgrade | Nâng cấp UI danh sách admin bằng TanStack Table v9 → rollout toàn bộ trang (users/genres/countries/peoples/movies/interactions) + lọc null/rỗng, lọc quan hệ, cột ID, cột count, xem chi tiết phim | ✅ Hoàn thành (QA thủ công chưa chạy) |
 | 35 | V35_frontend_search-for-you-infinite.md | frontend | search-for-you-infinite | Trang tìm kiếm semantic/rerank/lexical + "Dành cho bạn" (tab chi tiết + `/for-you`) + grid phim infinite scroll dùng chung; sửa vỡ layout grid; chuẩn hoá comment; review UI bình luận (review-only) | 🟡 Task 1–2 code + gate tự động xong; Task 3 review xong, không sửa code; QA thủ công chưa chạy; chờ endpoint `lexical-search/cursor` |
 | 36 | V36_testing_performance-k6.md | testing | performance-k6 | Performance/load test k6 (public + AI service) | 🟡 Plan cũ chưa có mapping; bổ sung để giữ index liên tục |
 | 37 | V37_backend_cache-lock-stats-ttl.md | backend | cache-lock-stats-ttl | Cache dùng RedisLockService, stats cache-first + cron sync, TTL, semantic/forYou per-ID cache | 🟡 Đang triển khai |
 | 38 | V38_ai_search-history-user-vectors.md | ai | search-history-user-vectors | Search payload có userId do service publish; user_genre_vectors collection mới; Redis chỉ 2 key genre; ai-service cache ma trận RAM/file; cả click/view/like/rating/comment publish `user.genre.update` với score gốc + `type`, ai-service tự chuẩn hoá `[-1,1]` (chỉ rating âm); tắt profile/CBF, profile event cập nhật long/short-term; đặc tả vector user + trọng số ForYou ở mục 7 | ✅ Hoàn thành (2026-11-21) |
+| 39 | V39_backend_fetch_more_movie.md | backend | fetch-more-movie | Admin discover phim mới từ TMDB, xem candidate chưa trùng DB, import thủ công hoặc mode tự động, không lấy cast/crew và không thêm cache/metrics riêng | 🟡 Backend core đã code; smoke runtime TMDB pending |
+
+## Cách xác định index khi tạo plan mới
+
+1. Đọc `docs/plans/PLAN_INDEX.md` → lấy `next_index`.
+2. Gán file mới `V{next_index}_{scope}_{task_name}.md`.
+3. Cập nhật bảng mapping trong `PLAN_INDEX.md` (thêm dòng mới).
+4. Cập nhật `next_index = next_index + 1`.
 
 ## Ghi chú legacy
 
@@ -67,15 +75,8 @@ Bảng theo dõi danh sách plan trong `docs/plans/`. Dùng để xác định `
 
 ## Cách tính next_index
 
-`max(index) = 38` → `next_index = 39`
+`max(index) = 39` → `next_index = 40`
 
 ## next_index
 
-`39`
-
-## Cách xác định index khi tạo plan mới
-
-1. Đọc `docs/plans/PLAN_INDEX.md` → lấy `next_index`.
-2. Gán file mới `V{next_index}_{scope}_{task_name}.md`.
-3. Cập nhật bảng mapping trong `PLAN_INDEX.md` (thêm dòng mới).
-4. Cập nhật `next_index = next_index + 1`.
+`40`

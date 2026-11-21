@@ -15,6 +15,6 @@ import { CountryRepository, ICountryRepository } from './countries.repository';
     },
     CountriesService,
   ],
-  exports: [CountriesService],
+  exports: [CountriesService, ICountryRepository],
 })
 export class CountriesModule {}
