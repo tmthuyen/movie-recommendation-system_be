@@ -190,10 +190,7 @@ class UserVectorService:
             updated_from=updated_from,
             metadata={
                 GENRE_PAYLOAD_METADATA_KEY: json.dumps(
-                    {
-                        str(genre_id): float(score)
-                        for genre_id, score in scores.items()
-                    },
+                    {str(genre_id): float(score) for genre_id, score in scores.items()},
                     separators=(",", ":"),
                 )
             },
@@ -248,5 +245,3 @@ class UserVectorService:
         )
         for collection_name in collections:
             await self.delete_named_user_vector(user_id, collection_name)
-
-
