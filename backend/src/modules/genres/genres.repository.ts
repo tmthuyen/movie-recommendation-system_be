@@ -11,6 +11,7 @@ export const IGenreRepository = Symbol('IGenreRepository');
 export interface IGenreRepository {
   findAll(request: BaseSearchRequest): Promise<PaginatedResult<Genre>>;
   findById(id: number): Promise<Genre | null>;
+  findByNameOrEnName(name: string, enName?: string): Promise<Genre | null>;
   create(genre: Partial<Genre>): Promise<Genre>;
   update(id: number, genre: Partial<Genre>): Promise<Genre | null>;
   remove(id: number): Promise<boolean>;
@@ -81,6 +82,16 @@ export class GenreRepository implements IGenreRepository {
 
   async findById(id: number): Promise<Genre | null> {
     return this.repo.findOne({ where: { id } });
+  }
+
+  async findByNameOrEnName(
+    name: string,
+    enName?: string,
+  ): Promise<Genre | null> {
+    const where = enName
+      ? [{ name }, { enName }, { name: enName }, { enName: name }]
+      : [{ name }];
+    return this.repo.findOne({ where });
   }
 
   async create(genre: Partial<Genre>): Promise<Genre> {

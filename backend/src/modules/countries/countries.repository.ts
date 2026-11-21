@@ -11,6 +11,7 @@ export const ICountryRepository = Symbol('ICountryRepository');
 export interface ICountryRepository {
   findAll(request: BaseSearchRequest): Promise<PaginatedResult<Country>>;
   findById(id: number): Promise<Country | null>;
+  findByCode(code: string): Promise<Country | null>;
   create(country: Partial<Country>): Promise<Country>;
   update(id: number, country: Partial<Country>): Promise<Country | null>;
   remove(id: number): Promise<boolean>;
@@ -89,6 +90,12 @@ export class CountryRepository implements ICountryRepository {
 
   async findById(id: number): Promise<Country | null> {
     return this.repo.findOne({ where: { id } });
+  }
+
+  async findByCode(code: string): Promise<Country | null> {
+    const normalizedCode = code.trim().toUpperCase();
+    if (!normalizedCode) return null;
+    return this.repo.findOne({ where: { code: normalizedCode } });
   }
 
   async create(country: Partial<Country>): Promise<Country> {

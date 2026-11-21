@@ -168,7 +168,7 @@ export class EnvironmentVariables {
   @IsString()
   S3_PUBLIC_URL: string;
 
-  // --- CACHE (optional, có default trong code) ---
+  // --- CACHE
   @IsOptional()
   @IsBoolean()
   @Transform(toBoolean)
@@ -178,6 +178,20 @@ export class EnvironmentVariables {
   @IsNumber()
   @Type(() => Number)
   RECOMMENDATION_WINDOW: number;
+
+  // --- TMDB API
+  @IsOptional()
+  @IsString()
+  TMDB_API_TOKEN: string;
+
+  @IsOptional()
+  @IsString()
+  TMDB_API_BASE_URL: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  TMDB_HTTP_TIMEOUT_MS: number;
 }
 
 export const validateConfiguration = (config: Record<string, unknown>) => {

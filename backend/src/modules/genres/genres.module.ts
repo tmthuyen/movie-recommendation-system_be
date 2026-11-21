@@ -15,6 +15,6 @@ import { GenreRepository, IGenreRepository } from './genres.repository';
     },
     GenresService,
   ],
-  exports: [GenresService],
+  exports: [GenresService, IGenreRepository],
 })
 export class GenresModule {}

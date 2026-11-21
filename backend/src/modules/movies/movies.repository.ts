@@ -11,6 +11,7 @@ export const IMovieRepository = Symbol('IMovieRepository');
 export interface IMovieRepository {
   findAll(request: BaseSearchRequest): Promise<PaginatedResult<Movie>>;
   findById(id: number): Promise<Movie | null>;
+  findByTmdbId(tmdbId: number): Promise<Movie | null>;
   create(movie: Partial<Movie>): Promise<Movie>;
   update(id: number, movie: Partial<Movie>): Promise<Movie | null>;
   remove(id: number): Promise<boolean>;
@@ -130,6 +131,10 @@ export class MovieRepository implements IMovieRepository {
       .leftJoinAndSelect('moviePeople.people', 'people')
       .where('movie.id = :id', { id })
       .getOne();
+  }
+
+  async findByTmdbId(tmdbId: number): Promise<Movie | null> {
+    return this.repo.findOne({ where: { tmdbId } });
   }
 
   async create(movie: Partial<Movie>): Promise<Movie> {
