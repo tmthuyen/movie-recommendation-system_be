@@ -150,7 +150,9 @@ async def lifespan(application: FastAPI):
         except Exception as exc:
             logger.warning("Khong the nap ALS model (%s): %s", als_model_path, exc)
     else:
-        logger.warning("Chua co file model ALS tai %s (se dung fallback)", als_model_path)
+        logger.warning(
+            "Chua co file model ALS tai %s (se dung fallback)", als_model_path
+        )
 
     # recommend service
     recommend_svc = RecommendService(

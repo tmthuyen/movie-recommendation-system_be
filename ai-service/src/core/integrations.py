@@ -273,7 +273,10 @@ class QdrantVectorBackend(VectorBackend):
                 query_vector=vector,
                 limit=top_k,
             )
-        return [{"id": int(h.id), "score": float(h.score), "payload": h.payload or {}} for h in hits]
+        return [
+            {"id": int(h.id), "score": float(h.score), "payload": h.payload or {}}
+            for h in hits
+        ]
 
     async def get_by_id(
         self, id: int, collection_name: str | None = None

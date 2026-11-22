@@ -18,21 +18,19 @@ Lexical của Hybrid Search (BM25 + Semantic, RRF) kèm quản lý CRUD (Thêm /
 from __future__ import annotations
 
 import asyncio
+import json
+import zlib
 from collections import Counter
 from datetime import datetime, timezone
-import json
 from pathlib import Path
 from typing import Any
-import zlib
 
 import joblib
 from qdrant_client import QdrantClient, models
 
 from core.tokenizer import BaseTokenizer
-from data.data_loader import (
-    build_search_text as _build_search_text,
-    compute_corpus_fingerprint,
-)
+from data.data_loader import build_search_text as _build_search_text
+from data.data_loader import compute_corpus_fingerprint
 from utils import setup_logger
 
 logger = setup_logger(name=__name__, filename=__name__)
@@ -276,7 +274,9 @@ class Bm25IndexService:
         self._qdrant_api_key = (
             qdrant_api_key if qdrant_api_key is not None else cfg.bm25_qdrant_api_key
         )
-        self._collection_name = collection_name or cfg.bm25_qdrant_collection or DEFAULT_COLLECTION
+        self._collection_name = (
+            collection_name or cfg.bm25_qdrant_collection or DEFAULT_COLLECTION
+        )
         self._client: QdrantClient | None = qdrant_client
         self._manifest: dict[str, Any] | None = None
         self._records_by_id: dict[int, dict[str, Any]] = {}
@@ -373,9 +373,7 @@ class Bm25IndexService:
     def _recompute_avgdl(self) -> None:
         if not self._records_by_id:
             return
-        total_len = sum(
-            int(r.get("doc_len", 0)) for r in self._records_by_id.values()
-        )
+        total_len = sum(int(r.get("doc_len", 0)) for r in self._records_by_id.values())
         if total_len > 0:
             self._avgdl = total_len / len(self._records_by_id)
 
@@ -417,7 +415,11 @@ class Bm25IndexService:
         - ``upsert_movie(movie_id, "chuỗi văn bản phim")``
         """
         if isinstance(movie_data_or_id, dict):
-            raw_id = movie_data_or_id.get("movieId") or movie_data_or_id.get("movie_id") or movie_data_or_id.get("id")
+            raw_id = (
+                movie_data_or_id.get("movieId")
+                or movie_data_or_id.get("movie_id")
+                or movie_data_or_id.get("id")
+            )
             if raw_id is None:
                 raise ValueError("movie_data phải chứa trường 'movieId'")
             movie_id = int(raw_id)
@@ -503,9 +505,7 @@ class Bm25IndexService:
         if not self.is_ready or self._client is None:
             return 0
         return int(
-            self._client.count(
-                collection_name=self._collection_name, exact=True
-            ).count
+            self._client.count(collection_name=self._collection_name, exact=True).count
         )
 
     def search(self, query: str, top_k: int = 50) -> list[dict[str, Any]]:
