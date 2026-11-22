@@ -159,6 +159,16 @@ class MovieVectorService:
                 "delete_movie_vector: movieId=%s da xoa khoi ChromaDB.", movie_id
             )
             return True
+        elif backend is not None and hasattr(backend, "delete_by_id"):
+            try:
+                await backend.delete_by_id(id=movie_id, collection_name=self.collection_name)
+                logger.info(
+                    "delete_movie_vector: movieId=%s da xoa khoi Qdrant.", movie_id
+                )
+                return True
+            except Exception as exc:
+                logger.warning("delete_movie_vector that bai: %s", exc)
+                return False
         logger.warning(
             "delete_movie_vector: backend %s khong ho tro xoa.", type(backend).__name__
         )

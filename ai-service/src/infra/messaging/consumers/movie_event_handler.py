@@ -18,9 +18,12 @@ class MovieEventHandler:
     def __init__(
         self,
         movie_vector_service: MovieVectorService,
+        recommend_service: Any | None = None,
+        bm25_index: Any | None = None,
     ) -> None:
-        # self._svc = recommend_service
         self._movie_vector_service = movie_vector_service
+        self._recommend_service = recommend_service
+        self._bm25 = bm25_index
         self._logger = setup_logger(name="FastAPI-Recommendations")
 
     async def handle(self, event_type: str, payload: dict[str, Any]) -> None:
@@ -59,27 +62,53 @@ class MovieEventHandler:
     # ── Handlers ──────────────────────────────────────────────────────────────
 
     async def _on_movie_created(self, payload: dict[str, Any]) -> None:
-        """Validate schema MovieCreated -> upsert vector moi vao ChromaDB."""
+        """Validate schema MovieCreated -> upsert vector vao Qdrant/Chroma va Qdrant BM25."""
         event = MovieCreated(**payload)
         movie_data = self._to_movie_data(event)
-        await self._movie_vector_service.upsert_movie_vector(movie_data)
+        if self._recommend_service is not None and hasattr(
+            self._recommend_service, "upsert_movie_vector"
+        ):
+            await self._recommend_service.upsert_movie_vector(movie_data)
+        else:
+            await self._movie_vector_service.upsert_movie_vector(movie_data)
+            if self._bm25 is not None:
+                await self._bm25.upsert_movie_async(movie_data)
         self._logger.info(
             "movie.created: upsert vector thanh cong movieId=%s", event.movieId
         )
 
     async def _on_movie_updated(self, payload: dict[str, Any]) -> None:
-        """Validate schema MovieUpdated -> cap nhat (ghi de) vector trong ChromaDB."""
+        """Validate schema MovieUpdated -> cap nhat (ghi de) vector trong Qdrant/Chroma va Qdrant BM25."""
         event = MovieUpdated(**payload)
         movie_data = self._to_movie_data(event)
-        await self._movie_vector_service.upsert_movie_vector(movie_data)
+        if self._recommend_service is not None and hasattr(
+            self._recommend_service, "upsert_movie_vector"
+        ):
+            await self._recommend_service.upsert_movie_vector(movie_data)
+        else:
+            await self._movie_vector_service.upsert_movie_vector(movie_data)
+            if self._bm25 is not None:
+                await self._bm25.upsert_movie_async(movie_data)
         self._logger.info(
             "movie.updated: upsert vector thanh cong movieId=%s", event.movieId
         )
 
     async def _on_movie_deleted(self, payload: dict[str, Any]) -> None:
-        """Validate schema MovieDeleted -> xoa vector khoi ChromaDB."""
+        """Validate schema MovieDeleted -> xoa vector khoi Qdrant/Chroma va Qdrant BM25."""
         event = MovieDeleted(**payload)
-        deleted = await self._movie_vector_service.delete_movie_vector(event.movieId)
+        deleted = False
+        if self._recommend_service is not None and hasattr(
+            self._recommend_service, "delete_movie_vector"
+        ):
+            deleted = await self._recommend_service.delete_movie_vector(event.movieId)
+        else:
+            deleted_vs = await self._movie_vector_service.delete_movie_vector(
+                event.movieId
+            )
+            deleted_bm25 = False
+            if self._bm25 is not None:
+                deleted_bm25 = await self._bm25.delete_movie_async(event.movieId)
+            deleted = bool(deleted_vs or deleted_bm25)
         if deleted:
             self._logger.info(
                 "movie.deleted: xoa vector thanh cong movieId=%s", event.movieId

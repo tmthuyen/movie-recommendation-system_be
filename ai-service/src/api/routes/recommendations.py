@@ -116,7 +116,7 @@ async def get_similar_movies(
             movie_id=movie_id, top_k=topK
         )
 
-        if data[0].get("rank") is None:
+        if data and data[0].get("rank") is None:
             logger.warning(f"Chưa có rank similar movies cho movie_id={movie_id}")
 
     except ValueError as exc:
