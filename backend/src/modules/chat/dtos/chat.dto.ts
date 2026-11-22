@@ -48,7 +48,8 @@ export class ChatRagResponseDto {
   movies: SimilarMovieResponseDto[];
 
   @ApiPropertyOptional({
-    description: 'Ý định được phân loại (CHITCHAT | MOVIE_SEARCH_RAG | SYSTEM_STATS | OUT_OF_SCOPE)',
+    description:
+      'Ý định được phân loại (CHITCHAT | MOVIE_SEARCH_RAG | SYSTEM_STATS | OUT_OF_SCOPE)',
     example: 'MOVIE_SEARCH_RAG',
   })
   intent?: string;

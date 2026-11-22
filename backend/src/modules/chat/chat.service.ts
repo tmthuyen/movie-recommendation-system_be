@@ -163,8 +163,8 @@ export class ChatService implements IChatService {
         }
 
         const movieIds = topComments
-          .map((item) => Number(item.movieId))
-          .filter((id) => !isNaN(id) && id > 0);
+          .map(item => Number(item.movieId))
+          .filter(id => !isNaN(id) && id > 0);
 
         const movies = await this.movieService.findByIds(movieIds);
         const movieMap = new Map<number, Movie>();
@@ -181,9 +181,7 @@ export class ChatService implements IChatService {
             const m = movieMap.get(Number(item.movieId));
             if (!m) return null;
             const title = m.titleVi || m.title;
-            lines.push(
-              `${idx + 1}. **${title}** — 💬 ${item.count} bình luận`,
-            );
+            lines.push(`${idx + 1}. **${title}** — 💬 ${item.count} bình luận`);
             return {
               ...m,
               score: Number(item.count),
@@ -395,13 +393,13 @@ export class ChatService implements IChatService {
     if (items.length === 0) return [];
 
     const seen = new Set<number>();
-    const uniqueItems = items.filter((item) => {
+    const uniqueItems = items.filter(item => {
       if (seen.has(item.id)) return false;
       seen.add(item.id);
       return true;
     });
 
-    const itemIds = uniqueItems.map((item) => item.id);
+    const itemIds = uniqueItems.map(item => item.id);
     const movies = await this.movieService.findByIds(itemIds);
 
     const movieById = new Map<number, Movie>();

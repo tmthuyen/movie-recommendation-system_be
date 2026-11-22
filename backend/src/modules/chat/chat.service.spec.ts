@@ -120,7 +120,9 @@ describe('ChatService', () => {
         }),
     } as Response);
 
-    const res = await service.ask({ message: 'Viết code python giải bài toán' });
+    const res = await service.ask({
+      message: 'Viết code python giải bài toán',
+    });
 
     expect(res.intent).toBe('OUT_OF_SCOPE');
     expect(res.answer).toContain('chỉ trả lời về phim ảnh');
