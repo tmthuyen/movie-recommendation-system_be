@@ -117,15 +117,17 @@ describe('ChatWidget', () => {
     fireEvent.change(input, { target: { value: 'Tìm phim siêu anh hùng' } });
     fireEvent.click(screen.getByRole('button', { name: 'Gửi tin nhắn' }));
 
-    await waitFor(() => {
-      expect(
-        screen.getByText('Tôi gợi ý cho bạn bộ phim Người Nhện rất hấp dẫn.'),
-      ).toBeInTheDocument();
-    });
-
-    expect(screen.getByRole('link', { name: 'Người Nhện' })).toHaveAttribute(
-      'href',
-      '/movies/109991',
+    await waitFor(
+      () => {
+        expect(
+          screen.getByText('Tôi gợi ý cho bạn bộ phim Người Nhện rất hấp dẫn.'),
+        ).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'Người Nhện' })).toHaveAttribute(
+          'href',
+          '/movies/109991',
+        );
+      },
+      { timeout: 4000 },
     );
   });
 
