@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from api.middleware import setup_middleware
-from api.routes import health, recommendations
+from api.routes import chat, health, recommendations
 from core.config import get_settings
 from core.custom_exception import CustomException
 from core.handle_model_updated import handle_model_updated
@@ -310,6 +310,7 @@ def metrics():
 # prefix: /api/recommendations
 api_router.include_router(health.router)
 api_router.include_router(recommendations.router)
+api_router.include_router(chat.router)
 app.include_router(api_router)
 
 # Setup middleware (logging, auth, etc.)

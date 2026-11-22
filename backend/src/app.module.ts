@@ -47,6 +47,7 @@ import {
 } from './infrastructure/cache/genre-movie.repository';
 import { GenreStatsCacheService } from './infrastructure/cache/genre-stats-cache.service';
 import { GenreMatrixRefreshCron } from './infrastructure/cache/genre-matrix.cron';
+import { ChatModule } from './modules/chat/chat.module';
 @Module({
   imports: [
     // Configuration
@@ -124,6 +125,7 @@ import { GenreMatrixRefreshCron } from './infrastructure/cache/genre-matrix.cron
     FailedEventsModule,
     InteractionsModule,
     RecommendationsModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [
