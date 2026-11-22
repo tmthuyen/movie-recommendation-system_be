@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-from enum import Enum
 import os
-from pathlib import Path
 import re
+from enum import Enum
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -131,18 +131,14 @@ class ChatRagService:
 
         # Nhánh MOVIE_SEARCH_RAG: Tìm phim trên Qdrant + Sinh câu trả lời ngữ cảnh
         movies = await self._retrieve_movies(clean_query, top_k=top_k)
-        answer = await asyncio.to_thread(
-            self._generate_answer, clean_query, movies
-        )
+        answer = await asyncio.to_thread(self._generate_answer, clean_query, movies)
         return {
             "intent": intent.value,
             "answer": answer,
             "movies": movies,
         }
 
-    def classify_intent(
-        self, query: str
-    ) -> tuple[ChatIntent, StatType | None]:
+    def classify_intent(self, query: str) -> tuple[ChatIntent, StatType | None]:
         """Phân loại câu hỏi thành 1 trong 4 nhánh:
 
         - Heuristic pattern matching tốc độ cao (<1ms).
@@ -158,7 +154,9 @@ class ChatRagService:
 
         # Kiểm tra fallback nếu không có LLM: câu hỏi kiến thức "tại sao...", "vì sao..."
         q_lower = query.lower()
-        if re.search(r"^(tại sao|vì sao|nguyên nhân|thế nào là|lý do tại sao)\b", q_lower) and not re.search(
+        if re.search(
+            r"^(tại sao|vì sao|nguyên nhân|thế nào là|lý do tại sao)\b", q_lower
+        ) and not re.search(
             r"\b(phim|movie|film|nhân vật|đạo diễn|diễn viên)\b", q_lower
         ):
             return ChatIntent.OUT_OF_SCOPE, None
@@ -404,8 +402,8 @@ class ChatRagService:
 
         return (
             "Xin chào! Tôi là **Moviere AI** – trợ lý phim ảnh thông minh.\n\n"
-            "Bạn có thể yêu cầu tôi tìm phim (ví dụ: *\"gợi ý phim hành động gay cấn\"*, "
-            "*\"tìm phim giống Người Nhện\"*) hoặc hỏi thống kê (ví dụ: *\"phim nào nhiều bình luận nhất\"*).\n\n"
+            'Bạn có thể yêu cầu tôi tìm phim (ví dụ: *"gợi ý phim hành động gay cấn"*, '
+            '*"tìm phim giống Người Nhện"*) hoặc hỏi thống kê (ví dụ: *"phim nào nhiều bình luận nhất"*).\n\n'
             "Hôm nay bạn muốn xem phim gì nào?"
         )
 
@@ -451,9 +449,7 @@ class ChatRagService:
         lines: list[str] = []
         for idx, movie in enumerate(movies, start=1):
             title = (
-                movie.get("titleVi")
-                or movie.get("title")
-                or f"Phim #{movie.get('id')}"
+                movie.get("titleVi") or movie.get("title") or f"Phim #{movie.get('id')}"
             )
             orig_title = movie.get("title")
             title_display = (
@@ -461,9 +457,7 @@ class ChatRagService:
                 if orig_title and orig_title != title
                 else str(title)
             )
-            genres = movie.get("genres") or ", ".join(
-                movie.get("genreNames") or []
-            )
+            genres = movie.get("genres") or ", ".join(movie.get("genreNames") or [])
             overview = movie.get("overviewVi") or movie.get("overview") or ""
             score = movie.get("similarityScore") or movie.get("score") or 0.0
 
@@ -477,9 +471,7 @@ class ChatRagService:
 
         return "\n".join(lines)
 
-    def _generate_answer(
-        self, user_message: str, movies: list[dict[str, Any]]
-    ) -> str:
+    def _generate_answer(self, user_message: str, movies: list[dict[str, Any]]) -> str:
         """Gọi Gemini LLM với ngữ cảnh phim; tự động fallback nếu không có API key hoặc lỗi mạng."""
         if not self._gemini_api_key:
             return self._build_fallback_answer(user_message, movies)
@@ -518,12 +510,8 @@ class ChatRagService:
                     data = resp.json()
                     candidates = data.get("candidates") or []
                     if candidates:
-                        parts = (
-                            candidates[0].get("content", {}).get("parts") or []
-                        )
-                        text = "".join(
-                            str(p.get("text", "")) for p in parts
-                        ).strip()
+                        parts = candidates[0].get("content", {}).get("parts") or []
+                        text = "".join(str(p.get("text", "")) for p in parts).strip()
                         if text:
                             return text
                 logger.warning(
@@ -535,9 +523,7 @@ class ChatRagService:
         return self._build_fallback_answer(user_message, movies)
 
     @staticmethod
-    def _build_fallback_answer(
-        user_message: str, movies: list[dict[str, Any]]
-    ) -> str:
+    def _build_fallback_answer(user_message: str, movies: list[dict[str, Any]]) -> str:
         """Câu trả lời RAG tổng hợp trực tiếp từ dữ liệu Qdrant khi LLM không khả dụng."""
         if not movies:
             return (
@@ -550,27 +536,19 @@ class ChatRagService:
         ]
         for idx, movie in enumerate(movies[:5], start=1):
             title = (
-                movie.get("titleVi")
-                or movie.get("title")
-                or f"Phim #{movie.get('id')}"
+                movie.get("titleVi") or movie.get("title") or f"Phim #{movie.get('id')}"
             )
-            genres = movie.get("genres") or ", ".join(
-                movie.get("genreNames") or []
-            )
+            genres = movie.get("genres") or ", ".join(movie.get("genreNames") or [])
             overview = movie.get("overviewVi") or movie.get("overview")
             item_line = f"- **{idx}. {title}**"
             if genres:
                 item_line += f" (*{genres}*)"
             if overview:
                 short_overview = (
-                    overview[:140].rstrip() + "..."
-                    if len(overview) > 140
-                    else overview
+                    overview[:140].rstrip() + "..." if len(overview) > 140 else overview
                 )
                 item_line += f": {short_overview}"
             lines.append(item_line)
 
-        lines.append(
-            "\nBạn có thể nhấn vào từng phim bên dưới để xem chi tiết nhé!"
-        )
+        lines.append("\nBạn có thể nhấn vào từng phim bên dưới để xem chi tiết nhé!")
         return "\n".join(lines)
