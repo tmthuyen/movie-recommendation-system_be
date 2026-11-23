@@ -36,7 +36,15 @@ COPY pyproject.toml ./
 COPY . .
 
 # Install dependencies
-RUN pip install --no-cache-dir .
+ARG TORCH_VERSION=2.6.0
+
+RUN pip install --no-cache-dir \
+    "torch==${TORCH_VERSION}+cpu" \
+    --index-url https://download.pytorch.org/whl/cpu
+
+RUN printf 'torch==%s+cpu\n' "$TORCH_VERSION" > /tmp/torch-constraints.txt \
+    && pip install --no-cache-dir \
+       -c /tmp/torch-constraints.txt .
 
 
 # =========================================================
@@ -61,38 +69,6 @@ ENV PATH="/opt/venv/bin:$PATH" \
     ENVIRONMENT=production
 
 COPY --from=builder /app /app
-
-RUN useradd --create-home --uid 10001 appuser \
-    && chown -R appuser:appuser /app
-
-USER appuser
-
-EXPOSE 8082
-
-CMD ["uvicorn", "src.api.server:app", "--host", "0.0.0.0", "--port", "8082"]
-
-# =========================================================
-# DEVELOPMENT
-# =========================================================
-FROM builder AS development
-
-COPY . .
-
-EXPOSE 8082
-
-CMD ["uvicorn", "src.api.server:app", "--host", "0.0.0.0", "--port", "8082", "--reload"]
-
-
-# =========================================================
-# PRODUCTION
-# =========================================================
-FROM base AS production
-
-COPY --from=builder /opt/venv /opt/venv
-
-ENV PATH="/opt/venv/bin:$PATH"
-
-COPY . .
 
 RUN useradd --create-home --uid 10001 appuser \
     && chown -R appuser:appuser /app

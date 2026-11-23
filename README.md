@@ -113,6 +113,18 @@ docker compose -p movie-app -f docker/docker-compose.dev.yml -f docker/docker-co
 docker compose --env-file .env -p movie-app-dev -f docker/docker-compose.yml -f docker/compose.dev.yml --profile tools up -d --build
 ```
 
+- Build docker again: backend service
+
+```bash
+docker compose --env-file .env -p movie-app-dev -f docker/docker-compose.yml -f docker/compose.dev.yml --profile tools up -d --build --force-recreate --no-deps backend
+```
+
+- Xem logs container:
+
+```bash
+docker compose -p movie-app-dev -f docker/docker-compose.yml -f docker/compose.dev.yml logs -f backend
+```
+
 - Health check: http://localhost:8081/api/health
 
 ```curl
