@@ -47,8 +47,8 @@ function LoginForm() {
     resolver: zodResolver(loginEmailPasswordSchema),
     mode: 'onChange',
     defaultValues: {
-      username: 'tranthuyen2222@gmail.com',
-      password: '123456',
+      username: '',
+      password: '',
     },
   });
 

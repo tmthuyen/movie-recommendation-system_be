@@ -1,0 +1,131 @@
+services:
+  # ==========================================================
+  # POSTGRESQL
+  # ==========================================================
+  db:
+    restart: always
+
+    security_opt:
+      - no-new-privileges:true
+
+  # ==========================================================
+  # QDRANT
+  # ==========================================================
+  qdrant:
+    restart: always
+
+    security_opt:
+      - no-new-privileges:true
+
+  # ==========================================================
+  # REDIS
+  # ==========================================================
+  redis:
+    restart: always
+
+    security_opt:
+      - no-new-privileges:true
+
+  # ==========================================================
+  # RABBITMQ
+  # ==========================================================
+  rabbitmq:
+    restart: always
+
+    security_opt:
+      - no-new-privileges:true
+
+  # ==========================================================
+  # NESTJS BACKEND
+  # ==========================================================
+  backend:
+    build:
+      target: production
+
+    restart: always
+
+    environment:
+      NODE_ENV: production
+
+    expose:
+      - '8081'
+
+    security_opt:
+      - no-new-privileges:true
+
+    init: true
+
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  # ==========================================================
+  # FASTAPI AI SERVICE
+  # ==========================================================
+  ai-service:
+    build:
+      target: production
+
+    restart: always
+
+    environment:
+      ENVIRONMENT: production
+
+    expose:
+      - '8082'
+
+    security_opt:
+      - no-new-privileges:true
+
+    init: true
+
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  # ==========================================================
+  # KONG - PUBLIC ENTRY POINT
+  # ==========================================================
+  kong:
+    restart: always
+
+    ports:
+      - '80:8000'
+
+    # HTTPS cần bổ sung chứng chỉ TLS và listener 8443
+    # trước khi mở cổng 443.
+
+    security_opt:
+      - no-new-privileges:true
+
+  # ==========================================================
+  # PROMETHEUS
+  # ==========================================================
+  prometheus:
+    restart: always
+
+    security_opt:
+      - no-new-privileges:true
+
+  # ==========================================================
+  # GRAFANA
+  # ==========================================================
+  grafana:
+    restart: always
+
+    ports:
+      - '3000:3000'
+
+    security_opt:
+      - no-new-privileges:true
+
+  # ==========================================================
+  # JAEGER
+  # ==========================================================
+  jaeger:
+    restart: always
+
+    security_opt:
+      - no-new-privileges:true

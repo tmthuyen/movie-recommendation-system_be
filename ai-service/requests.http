@@ -5,8 +5,12 @@
 @aiUrl = http://localhost:8082/api/recommendations
 @nestUrl = http://localhost:8081/api/recommendations
 
+@kongUrl = http://localhost:8000/api/health
+
 ### 1. Health check AI-Service
 GET {{aiUrl}}/health HTTP/1.1
+### 1. Health check AI-Service
+GET {{kongUrl}}/health HTTP/1.1
 
 ### ------------------------------------------------------------------------------
 ### 2. [AI-Service] Semantic Search (Tìm kiếm theo ý định tự nhiên)

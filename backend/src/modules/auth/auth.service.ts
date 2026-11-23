@@ -218,7 +218,7 @@ export class AuthService {
   async testEmail() {
     await this.userProducer.publishEmailVerificationRequested({
       userId: '1',
-      email: 'tranthuyen2222@gmail.com',
+      email: 'admin@gmail.com',
       verificationToken: 'ccccc',
     });
   }

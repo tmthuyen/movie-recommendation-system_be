@@ -104,15 +104,6 @@ export class EnvironmentVariables {
   @Transform(toBoolean)
   ASYNC_MAIL_ENABLED: boolean;
 
-  /**
-   * MAIL_PROVIDER=smtp # smtp, sendgrid, aes
-    MAIL_HOST=smtp.gmail.com
-    MAIL_PORT=587
-    MAIL_SECURE=false
-    MAIL_USER=tranthuyen2222@gmail.com
-    MAIL_PASS=mwnkkzbvvbfriyha
-    MAIL_FROM=tranthuyen2222@gmail.com
-   */
   @IsNotEmpty()
   @IsString()
   MAIL_PROVIDER: string;

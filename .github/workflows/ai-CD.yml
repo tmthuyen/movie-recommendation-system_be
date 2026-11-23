@@ -8,67 +8,150 @@ on:
       - '.github/workflows/ai-CD.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ai-service-cd-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  ai-service-cd:
-    # Chạy khi push lên main hoặc production
+  build-and-push:
+    name: Validate, build and publish movie-ai-service
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production'
     runs-on: ubuntu-latest
-    environment: production
-    defaults:
-      run:
-        working-directory: ai-service
-
+    outputs:
+      image_ref: ${{ steps.metadata.outputs.image_ref }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python 3.10
+      - name: Setup Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-          cache: 'pip'
-          # Repo không có requirements.txt → cache theo pyproject.toml
+          python-version: '3.12'
+          cache: pip
           cache-dependency-path: ai-service/pyproject.toml
 
-      - name: Build check
+      - name: Validate Python package
+        working-directory: ai-service
         run: |
           python -m pip install --upgrade pip
-          if [ -f pyproject.toml ]; then
-            pip install -e .
-          else
-            echo "ERROR: pyproject.toml not found"
-            exit 1
-          fi
-        shell: bash
+          python -m pip install -e .
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Detect Dockerfile
-        id: docker
-        run: |
-          if [ -f Dockerfile ]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
+      - name: Resolve registry name and tags
+        id: metadata
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         shell: bash
+        run: |
+          image="${DOCKERHUB_USERNAME}/movie-ai-service"
+          immutable_ref="${image}:sha-${GITHUB_SHA}"
+          echo "image_ref=${immutable_ref}" >> "$GITHUB_OUTPUT"
+          echo "image_name=${image}" >> "$GITHUB_OUTPUT"
 
-      - name: Build Docker image
-        id: build-docker
-        if: steps.docker.outputs.exists == 'true'
-        run: |
-          echo "Building image..."
-          echo "build_docker=true" >> $GITHUB_OUTPUT
-        shell: bash
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Deploy
-        run: |
-          echo "================================"
-          echo "ai-service CD simulation successful"
-          echo "Branch: $GITHUB_REF_NAME"
-          echo "Commit: $GITHUB_SHA"
-          echo "No production server configured"
-          echo "================================"
-        shell: bash
+      - name: Build and push production image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ai-service
+          file: ./ai-service/Dockerfile
+          target: production
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.metadata.outputs.image_ref }}
+            ${{ steps.metadata.outputs.image_name }}:${{ github.ref_name }}
+          cache-from: type=gha,scope=ai-service
+          cache-to: type=gha,mode=max,scope=ai-service
+
+      - name: Published image
+        run: echo "Image pushed - ${{ steps.metadata.outputs.image_ref }}"
+
+  # # ============================================================
+  # # FUTURE DEPLOYMENT: VPS / CLOUD VM / AWS EC2 VIA SSH
+  # # DISABLED: explicitly change 'false' when infrastructure exists.
+  # # VPS must already have Compose, runtime environment and registry login.
+  # # Production compose must reference AI_SERVICE_IMAGE as its image.
+  # # ============================================================
+  # deploy-vps:
+  #   name: Deploy to VPS / Cloud VM (disabled)
+  #   if: ${{ false }}
+  #   needs: build-and-push
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Setup SSH
+  #       env:
+  #         SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+  #         SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+  #       run: |
+  #         install -m 700 -d ~/.ssh
+  #         printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+  #         printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+  #         chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+  #     - name: Deploy published image
+  #       env:
+  #         DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+  #         DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+  #         IMAGE_REF: ${{ needs.build-and-push.outputs.image_ref }}
+  #       shell: bash
+  #       run: |
+  #         # On the remote machine, runtime env is already managed by you.
+  #         ssh -i ~/.ssh/id_ed25519 "${DEPLOY_USER}@${DEPLOY_HOST}" \
+  #           "AI_SERVICE_IMAGE='${IMAGE_REF}' docker compose -f /opt/movie/docker/compose.prod.yml pull ai-service && AI_SERVICE_IMAGE='${IMAGE_REF}' docker compose -f /opt/movie/docker/compose.prod.yml up -d --no-deps ai-service"
+
+  # # ============================================================
+  # # FUTURE DEPLOYMENT: AWS ECS
+  # # DISABLED: needs pre-existing ECS cluster/service/task definition,
+  # # an OIDC role and Docker Hub pull credentials if images are private.
+  # # ============================================================
+  # deploy-aws-ecs:
+  #   name: Deploy to AWS ECS (disabled)
+  #   if: ${{ false }}
+  #   needs: build-and-push
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     id-token: write
+  #     contents: read
+  #   steps:
+  #     - name: Configure AWS credentials (OIDC)
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+  #         aws-region: ${{ vars.AWS_REGION }}
+
+  #     - name: Fetch current task definition and change image
+  #       env:
+  #         TASK_FAMILY: ${{ vars.AWS_TASK_FAMILY }}
+  #         CONTAINER_NAME: ai-service
+  #         IMAGE_REF: ${{ needs.build-and-push.outputs.image_ref }}
+  #       shell: bash
+  #       run: |
+  #         aws ecs describe-task-definition --task-definition "$TASK_FAMILY" \
+  #           --query 'taskDefinition' --output json > /tmp/task-current.json
+  #         jq --arg image "$IMAGE_REF" --arg container "$CONTAINER_NAME" '
+  #           .containerDefinitions |= map(if .name == $container then .image = $image else . end)
+  #           | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
+  #                 .compatibilities, .registeredAt, .registeredBy)
+  #         ' /tmp/task-current.json > /tmp/task-next.json
+  #         aws ecs register-task-definition --cli-input-json file:///tmp/task-next.json \
+  #           --query 'taskDefinition.taskDefinitionArn' --output text > /tmp/task-arn
+
+  #     - name: Update ECS service and wait for stability
+  #       env:
+  #         ECS_CLUSTER: ${{ vars.AWS_ECS_CLUSTER }}
+  #         ECS_SERVICE: ${{ vars.AWS_ECS_SERVICE }}
+  #       shell: bash
+  #       run: |
+  #         task_arn="$(cat /tmp/task-arn)"
+  #         aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" \
+  #           --task-definition "$task_arn"
+  #         aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE"

@@ -8,7 +8,7 @@ services:
   # ============================================
 
   - name: nestjs-api
-    url: http://host.docker.internal:8081
+    url: http://backend:8081
     routes:
       - name: nestjs-api-route
         paths:
@@ -23,12 +23,12 @@ services:
   # ============================================
 
   - name: fastapi-ai
-    url: http://host.docker.internal:8082
+    url: http://ai-service:8082
     routes:
       - name: fastapi-ai-route
         paths:
-          - /api/recommendations
-        strip_path: false
+          - /api/ai
+        strip_path: true
         protocols:
           - http
           - https
@@ -72,7 +72,7 @@ plugins:
   # Request ID
   # --------------------------------------------
 
-  - name: correlation-id
+  - name: request-id
     config:
       header_name: X-Request-ID
       generator: uuid
@@ -84,4 +84,12 @@ plugins:
   - name: rate-limiting
     config:
       minute: 120
-      policy: local
+      limit_by: ip
+      policy: redis
+
+      redis:
+        host: redis
+        port: 6379
+        database: 1
+
+      fault_tolerant: true

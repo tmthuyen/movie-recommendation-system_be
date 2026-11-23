@@ -1,0 +1,328 @@
+services:
+  # ==========================================================
+  # DATABASE - POSTGRESQL
+  # ==========================================================
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-nestjs_db}
+      TZ: Asia/Ho_Chi_Minh
+
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    networks:
+      - movie-network
+
+  # ==========================================================
+  # VECTOR DATABASE - QDRANT
+  # Dense / Sparse Vector / Hybrid Search
+  # ==========================================================
+  qdrant:
+    image: ${QDRANT_IMAGE:-qdrant/qdrant:latest}
+    restart: unless-stopped
+
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+    networks:
+      - movie-network
+
+  # ==========================================================
+  # CACHE - REDIS
+  # ==========================================================
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+    command:
+      - redis-server
+      - --appendonly
+      - 'yes'
+
+    volumes:
+      - redis_data:/data
+
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+    networks:
+      - movie-network
+
+  # ==========================================================
+  # REDIS INSIGHT
+  # ==========================================================
+  redis-insight:
+    image: redis/redisinsight:latest
+    restart: unless-stopped
+
+    profiles:
+      - tools
+
+    volumes:
+      - redis_insight_data:/data
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    networks:
+      - movie-network
+
+  # ==========================================================
+  # MESSAGE BROKER - RABBITMQ
+  # ==========================================================
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    restart: unless-stopped
+
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-admin}
+      TZ: Asia/Ho_Chi_Minh
+
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+    networks:
+      - movie-network
+
+  # ==========================================================
+  # NESTJS BACKEND
+  # ==========================================================
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+
+    image: movie-backend:${APP_VERSION:-local}
+    restart: unless-stopped
+
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 8081
+
+      # # PostgreSQL
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USERNAME: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      DB_DATABASE: ${POSTGRES_DB:-nestjs_db}
+
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+      # RabbitMQ
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${RABBITMQ_USER:?Set RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
+      RABBITMQ_URL: amqp://admin:admin@rabbitmq:5672
+
+      # Qdrant
+      QDRANT_URL: http://qdrant:6333
+
+      # AI service
+      AI_SERVICE_URL: http://ai-service:8082
+
+      # OpenTelemetry
+      OTEL_SERVICE_NAME: movie-backend
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+
+      TZ: Asia/Ho_Chi_Minh
+
+    depends_on:
+      - redis
+      - rabbitmq
+
+    expose:
+      - '8081'
+
+    networks:
+      - movie-network
+
+  # ==========================================================
+  # AI SERVICE - FASTAPI
+  # ==========================================================
+  ai-service:
+    build:
+      context: ../ai-service
+      dockerfile: Dockerfile
+
+    image: movie-ai-service:${APP_VERSION:-local}
+    restart: unless-stopped
+
+    environment:
+      ENVIRONMENT: ${APP_ENV:-production}
+      PORT: 8082
+
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+      # Qdrant
+      QDRANT_URL: http://qdrant:6333
+
+      # OpenTelemetry
+      OTEL_SERVICE_NAME: movie-ai-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+
+      TZ: Asia/Ho_Chi_Minh
+
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+
+    expose:
+      - '8082'
+
+    networks:
+      - movie-network
+
+  # ==========================================================
+  # KONG API GATEWAY
+  # ==========================================================
+  kong:
+    image: kong:3.9
+    restart: unless-stopped
+
+    environment:
+      KONG_DATABASE: 'off'
+      KONG_DECLARATIVE_CONFIG: /kong/kong.yml
+
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+
+    volumes:
+      - ../gateway/kong.yml:/kong/kong.yml:ro
+
+    # extra_hosts:
+    #   - 'host.docker.internal:host-gateway'
+
+    depends_on:
+      - backend
+      - ai-service
+      - redis
+
+    networks:
+      - movie-network
+
+  # ==========================================================
+  # PROMETHEUS
+  # ==========================================================
+  prometheus:
+    image: prom/prometheus:v3.8.0
+    restart: unless-stopped
+
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+
+    depends_on:
+      - backend
+      - ai-service
+
+    networks:
+      - movie-network
+
+  # ==========================================================
+  # GRAFANA
+  # ==========================================================
+  grafana:
+    image: grafana/grafana:12.3.0
+    restart: unless-stopped
+
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?Set GRAFANA_PASSWORD}
+
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+
+    depends_on:
+      - prometheus
+
+    networks:
+      - movie-network
+
+  # ==========================================================
+  # JAEGER - DISTRIBUTED TRACING
+  # ==========================================================
+  jaeger:
+    image: jaegertracing/all-in-one:1.76.0
+    restart: unless-stopped
+
+    environment:
+      COLLECTOR_OTLP_ENABLED: 'true'
+
+    networks:
+      - movie-network
+
+# ============================================================
+# NETWORKS
+# ============================================================
+networks:
+  movie-network:
+    driver: bridge
+
+# ============================================================
+# PERSISTENT VOLUMES
+# ============================================================
+volumes:
+  db-data:
+    driver: local
+
+  qdrant_data:
+    driver: local
+
+  redis_data:
+    driver: local
+
+  redis_insight_data:
+    driver: local
+
+  rabbitmq_data:
+    driver: local
+
+  prometheus_data:
+    driver: local
+
+  grafana_data:
+    driver: local

@@ -1,13 +1,104 @@
-# FROM python:3.11-slim
+# =========================================================
+# BASE
+# =========================================================
+FROM python:3.12-slim AS base
 
-# WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    TZ=Asia/Ho_Chi_Minh
 
-# COPY pyproject.toml ./
-# COPY src/ ./src/
-# COPY config/ ./config/ 
+WORKDIR /app
 
-# RUN pip install --no-cache-dir -e .
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-# EXPOSE 8082
 
-# CMD ["uvicorn", "src.api.server:app", "--host", "0.0.0.0", "--port", "8082"]
+# =========================================================
+# BUILDER
+# =========================================================
+FROM base AS builder
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       build-essential \
+       gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python -m venv /opt/venv
+
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy only requirements to cache dependencies
+COPY pyproject.toml ./
+COPY . .
+
+# Install dependencies
+RUN pip install --no-cache-dir .
+
+
+# =========================================================
+# DEVELOPMENT
+# =========================================================
+FROM builder AS development
+
+ENV ENVIRONMENT=development
+
+EXPOSE 8082
+
+CMD ["uvicorn", "src.api.server:app", "--host", "0.0.0.0", "--port", "8082", "--reload"]
+
+# =========================================================
+# PRODUCTION
+# =========================================================
+FROM base AS production
+
+COPY --from=builder /opt/venv /opt/venv
+
+ENV PATH="/opt/venv/bin:$PATH" \
+    ENVIRONMENT=production
+
+COPY --from=builder /app /app
+
+RUN useradd --create-home --uid 10001 appuser \
+    && chown -R appuser:appuser /app
+
+USER appuser
+
+EXPOSE 8082
+
+CMD ["uvicorn", "src.api.server:app", "--host", "0.0.0.0", "--port", "8082"]
+
+# =========================================================
+# DEVELOPMENT
+# =========================================================
+FROM builder AS development
+
+COPY . .
+
+EXPOSE 8082
+
+CMD ["uvicorn", "src.api.server:app", "--host", "0.0.0.0", "--port", "8082", "--reload"]
+
+
+# =========================================================
+# PRODUCTION
+# =========================================================
+FROM base AS production
+
+COPY --from=builder /opt/venv /opt/venv
+
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY . .
+
+RUN useradd --create-home --uid 10001 appuser \
+    && chown -R appuser:appuser /app
+
+USER appuser
+
+EXPOSE 8082
+
+CMD ["uvicorn", "src.api.server:app", "--host", "0.0.0.0", "--port", "8082"]
