@@ -8,36 +8,150 @@ on:
       - '.github/workflows/backend-CD.yml'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: backend-cd-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
-  detect:
-    # Chạy khi push lên main hoặc production
+  build-and-push:
+    name: Validate, build and publish movie-backend
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/production'
     runs-on: ubuntu-latest
     outputs:
-      has_docker: ${{ steps.scan.outputs.has_docker }}
+      image_ref: ${{ steps.metadata.outputs.image_ref }}
     steps:
-      - uses: actions/checkout@v4
-      - id: scan
-        run: |
-          cnt=$(find backend -name 'Dockerfile' 2>/dev/null | wc -l)
-          echo "has_docker=$cnt" >> $GITHUB_OUTPUT
-        shell: bash
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  backend-cd:
-    needs: detect
-    runs-on: ubuntu-latest
-    # environment: production
-    steps:
-      - uses: actions/checkout@v4
-      - name: Deploy placeholder
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install and compile NestJS
+        working-directory: backend
         run: |
-          if [ "${{ needs.detect.outputs.has_docker }}" != "0" ]; then
-            echo "backend CD: Dockerfiles found. Add registry/ssh secrets to enable build+deploy."
-          else
-            echo "backend CD: no Dockerfile. Skipping."
-          fi
+          npm ci
+          npm run build
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Resolve registry name and tags
+        id: metadata
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         shell: bash
+        run: |
+          image="${DOCKERHUB_USERNAME}/movie-backend"
+          immutable_ref="${image}:sha-${GITHUB_SHA}"
+          echo "image_ref=${immutable_ref}" >> "$GITHUB_OUTPUT"
+          echo "image_name=${image}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push production image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: production
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.metadata.outputs.image_ref }}
+            ${{ steps.metadata.outputs.image_name }}:${{ github.ref_name }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Published image
+        run: echo "Image pushed - ${{ steps.metadata.outputs.image_ref }}"
+
+  # # ============================================================
+  # # FUTURE DEPLOYMENT: VPS / CLOUD VM / AWS EC2 VIA SSH
+  # # DISABLED: explicitly change 'false' when infrastructure exists.
+  # # VPS must already have Compose, runtime environment and registry login.
+  # # Production compose must reference BACKEND_IMAGE as its image.
+  # # ============================================================
+  # deploy-vps:
+  #   name: Deploy to VPS / Cloud VM (disabled)
+  #   if: ${{ false }}
+  #   needs: build-and-push
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Setup SSH
+  #       env:
+  #         SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+  #         SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+  #       run: |
+  #         install -m 700 -d ~/.ssh
+  #         printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+  #         printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+  #         chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+  #     - name: Deploy published image
+  #       env:
+  #         DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+  #         DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+  #         IMAGE_REF: ${{ needs.build-and-push.outputs.image_ref }}
+  #       shell: bash
+  #       run: |
+  #         # On the remote machine, runtime env is already managed by you.
+  #         ssh -i ~/.ssh/id_ed25519 "${DEPLOY_USER}@${DEPLOY_HOST}" \
+  #           "BACKEND_IMAGE='${IMAGE_REF}' docker compose -f /opt/movie/docker/compose.prod.yml pull backend && BACKEND_IMAGE='${IMAGE_REF}' docker compose -f /opt/movie/docker/compose.prod.yml up -d --no-deps backend"
+
+  # # ============================================================
+  # # FUTURE DEPLOYMENT: AWS ECS
+  # # DISABLED: needs pre-existing ECS cluster/service/task definition,
+  # # an OIDC role and Docker Hub pull credentials if images are private.
+  # # ============================================================
+  # deploy-aws-ecs:
+  #   name: Deploy to AWS ECS (disabled)
+  #   if: ${{ false }}
+  #   needs: build-and-push
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     id-token: write
+  #     contents: read
+  #   steps:
+  #     - name: Configure AWS credentials (OIDC)
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+  #         aws-region: ${{ vars.AWS_REGION }}
+
+  #     - name: Fetch current task definition and change image
+  #       env:
+  #         TASK_FAMILY: ${{ vars.AWS_TASK_FAMILY }}
+  #         CONTAINER_NAME: backend
+  #         IMAGE_REF: ${{ needs.build-and-push.outputs.image_ref }}
+  #       shell: bash
+  #       run: |
+  #         aws ecs describe-task-definition --task-definition "$TASK_FAMILY" \
+  #           --query 'taskDefinition' --output json > /tmp/task-current.json
+  #         jq --arg image "$IMAGE_REF" --arg container "$CONTAINER_NAME" '
+  #           .containerDefinitions |= map(if .name == $container then .image = $image else . end)
+  #           | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
+  #                 .compatibilities, .registeredAt, .registeredBy)
+  #         ' /tmp/task-current.json > /tmp/task-next.json
+  #         aws ecs register-task-definition --cli-input-json file:///tmp/task-next.json \
+  #           --query 'taskDefinition.taskDefinitionArn' --output text > /tmp/task-arn
+
+  #     - name: Update ECS service and wait for stability
+  #       env:
+  #         ECS_CLUSTER: ${{ vars.AWS_ECS_CLUSTER }}
+  #         ECS_SERVICE: ${{ vars.AWS_ECS_SERVICE }}
+  #       shell: bash
+  #       run: |
+  #         task_arn="$(cat /tmp/task-arn)"
+  #         aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" \
+  #           --task-definition "$task_arn"
+  #         aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE"

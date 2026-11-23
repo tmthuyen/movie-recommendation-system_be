@@ -55,10 +55,10 @@ function SignUpForm() {
     resolver: zodResolver(signupWithEmailSchema),
     mode: 'onChange',
     defaultValues: {
-      fullName: 'Trần Minh Thuyên',
-      email: 'tranthuyen2222@gmail.com',
-      password: '123456',
-      confirmPassword: '123456',
+      fullName: '',
+      email: 'your@gmail.com',
+      password: '',
+      confirmPassword: '',
     },
   });
   const [showPassword, setShowPassword] = useState({

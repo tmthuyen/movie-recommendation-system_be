@@ -102,8 +102,15 @@ docker compose \
   -f docker/docker-compose.observability.yml \
   up -d
 ```
+
 ```bash
 docker compose -p movie-app -f docker/docker-compose.dev.yml -f docker/docker-compose.observability.yml up -d
+```
+
+- Run docker dev:
+
+```bash
+docker compose --env-file .env -p movie-app-dev -f docker/docker-compose.yml -f docker/compose.dev.yml --profile tools up -d --build
 ```
 
 - Health check: http://localhost:8081/api/health
@@ -141,6 +148,27 @@ curl -X 'GET' \
 }
 ```
 
+## Deployment
+
+- Secrets
+  - DOCKERHUB_TOKEN
+  - VPS_SSH_PRIVATE_KEY
+  - VPS_SSH_KNOWN_HOSTS
+  - BACKEND_ENV
+  - AI_SERVICE_ENV
+- Variables
+  - DOCKERHUB_USERNAME: yourdockerhubusername
+  - BACKEND_IMAGE_NAME: movie-backend
+  - AI_IMAGE_NAME: movie-ai-service
+  - VPS_HOST: yourvpsipordomain
+  - VPS_USER: yourvpsusername
+  - VPS_DEPLOY_PATH: /opt/movie
+  - AWS_REGION: ap-southeast-1
+  - AWS_ECS_CLUSTER: your-ecs-cluster-name
+  - AWS_ECS_BACKEND_SERVICE: your-backend-ecs-service-name
+  - AWS_ECS_AI_SERVICE: your-ai-ecs-service-name
+  - AWS_DEPLOY_ROLE_ARN: your-aws-deploy-role-arn
+
 ## Usage
 
 ## Api Documentation
@@ -152,6 +180,6 @@ curl -X 'GET' \
 ## Contributing
 
 - Thuyendev
-- other
+- Thang
 
 ## License
