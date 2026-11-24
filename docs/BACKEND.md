@@ -43,7 +43,7 @@ Bảng library thật lấy từ `backend/package.json`:
 | Cron | `@nestjs/schedule` (batch training interactions) |
 | Health | `@nestjs/terminus` + `@nestjs/axios` |
 | Tracing | `@opentelemetry/sdk-node`, `@opentelemetry/exporter-trace-otlp-http`, `@opentelemetry/auto-instrumentations-node` |
-| Logging | `winston`, `nest-winston`, `winston-daily-rotate-file` |
+| Logging | `winston`, `nest-winston` (stdout/stderr JSON production; không ghi file trong container) |
 | Per-request context | `nestjs-cls` |
 | Config | `@nestjs/config` (`dotenv`, validate bằng class-validator) |
 | Storage | `@aws-sdk/client-s3` (S3 / Cloudflare R2) |
@@ -54,6 +54,15 @@ Bảng library thật lấy từ `backend/package.json`:
 | Test / tooling | Jest + Supertest (`*.spec.ts`), ESLint, Prettier, ts-jest |
 
 Scripts chính: `npm run dev` (watch), `npm run build`, `npm run start:prod`, `npm run lint`, `npm test`.
+
+## Logging & observability
+
+- Backend ghi log ra **stdout/stderr**; production mặc định JSON (`LOG_FORMAT=json`), dev text. Không ghi file trong container.
+- Env: `LOG_LEVEL` (`info` production), `SERVICE_NAME` (metadata), `OTEL_EXPORTER_URL` (trace OTLP).
+- Thu log do hạ tầng quyết định:
+  - Local/VPS: Docker `json-file` + Promtail → Loki, xem bằng Grafana.
+  - AWS ECS Fargate: FireLens (`awsfirelens`) → Loki VPS, hoặc `awslogs` → CloudWatch.
+- Metrics: `GET /api/metrics` (Prometheus). Health: `GET /api/health`. Trace: OTLP → Jaeger/Tempo.
 
 ## Kiến trúc & Cấu trúc thư mục
 
@@ -67,7 +76,7 @@ backend/src/
 ├── app.controller.ts              # GET /api -> plain text "Hello World!" (không envelope)
 ├── config/
 │   ├── env.validation.ts          # schema bắt buộc của biến môi trường
-│   ├── logger.config.ts           # Winston (console dev / JSON + rotate file prod)
+│   ├── logger.config.ts           # Winston (text dev / JSON prod; chỉ stdout/stderr)
 │   └── tracing.config.ts          # OpenTelemetry (import trước khi bootstrap)
 ├── common/
 │   ├── audits/                    # BaseAuditEntity (createdAt/createdBy/updatedAt/updatedBy) + subscriber

@@ -72,7 +72,7 @@ plugins:
   # Request ID
   # --------------------------------------------
 
-  - name: request-id
+  - name: correlation-id
     config:
       header_name: X-Request-ID
       generator: uuid

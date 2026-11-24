@@ -39,11 +39,13 @@ services:
   # NESTJS BACKEND
   # ==========================================================
   backend:
-    # build:
-    #   target: production
-    image: movie-backend:main
+    build:
+      target: production
 
-    restart: always
+    env_file:
+      - ../backend/.env
+
+    # restart: always
 
     environment:
       NODE_ENV: production
@@ -65,10 +67,13 @@ services:
   # FASTAPI AI SERVICE
   # ==========================================================
   ai-service:
-    # build:
-    #   target: production
-    image: movie-ai-service:main
-    restart: always
+    build:
+      target: production
+
+    env_file:
+      - ../ai-service/.env
+
+    # restart: always
 
     environment:
       ENVIRONMENT: production

@@ -113,6 +113,10 @@ docker compose -p movie-app -f docker/docker-compose.dev.yml -f docker/docker-co
 docker compose --env-file .env -p movie-app-dev -f docker/docker-compose.yml -f docker/compose.dev.yml --profile tools up -d --build
 ```
 
+```bash
+docker compose --env-file .env.production -p movie-app-prod -f docker/docker-compose.yml -f docker/docker-compose.prod.yml --profile tools up -d --build
+```
+
 - Build docker again: backend service
 
 ```bash

@@ -40,7 +40,7 @@ Python yêu cầu: `>=3.10` (`pyproject.toml:6`). Đóng gói bằng `pip instal
 ```
 ai-service/
 ├── .env / .env.example          # cấu hình runtime (JWT, DB, RabbitMQ, Redis, R2…)
-├── Dockerfile                   # ⚠ toàn bộ nội dung đang comment (13 dòng)
+├── Dockerfile                   # multi-stage: base / builder / development / production
 ├── pyproject.toml               # dependencies + pytest config
 ├── README.md
 ├── docs/                        # INITITAL_DATA.md, KHOI_DONG_FASTAPI.md, models/CF_Model_Report.md
@@ -88,7 +88,7 @@ ai-service/
 
 **Quy ước test**: `src/<pkg>/<file>.py` ⇔ `tests/unit/<pkg>/test_<file>.py`; trong mỗi file, mỗi public class/def có một `Test<Class>`/`Test<Func>` với happy path + error path. Chi tiết mapping + bug: `docs/plans/V21_testing_ai-service-test-structure.md`.
 
-Ghi chú: các thư mục `src/core/`, `src/models/`, `src/services/` **đã tồn tại** (khác với mô tả cũ trong tài liệu trước). `Dockerfile` hiện **không dùng được** để build image (xem mục 7).
+Ghi chú: các thư mục `src/core/`, `src/models/`, `src/services/` **đã tồn tại** (khác với mô tả cũ trong tài liệu trước). `Dockerfile` dùng multi-stage và build được image production (xem mục 7).
 
 ## 4. Luồng khởi động (`src/api/server.py:29-102`)
 
@@ -175,10 +175,11 @@ Base URL: `http://localhost:8082/api/recommendations`. Swagger: `/docs`.
 | Embedding | ✅ Sentence-Transformers, model `paraphrase-multilingual-MiniLM-L12-v2`, 384 chiều (`config.py:63-73`). |
 | ALS / Hybrid | ✅ `implicit` + `UserVectorAggregatorService` (CF, 4 collection semantic/search + GENRE từ payload `user_genre_vectors`, popular fallback); `/hybrid` giữ envelope/cursor, `/search-rerank` không đổi. |
 | OpenTelemetry | ✅ `configure_tracing` (`OTEL_ENABLED=true`, endpoint `:4318`) (`config.py:16-18`; `server.py:108`). |
+| Logging | ✅ `utils/logger.py` ghi stderr; JSON khi `ENVIRONMENT=production` hoặc `LOG_FORMAT=json`; không ghi file trong container. Collector Loki/CloudWatch thu. |
 | Prometheus | ✅ `/api/metrics` + system metrics thread (`server.py:31-40,147-149`). |
 | Cron | ✅ `TrainingScheduler`; cron mặc định `0 3 * * 0`, `MODEL_TRAIN_ENABLED=false` (`config.py:75-76`). |
 | Test | ✅ `tests/` có **44 file Python**, **579 passed**, coverage **73%** (V38, 2026-11-21). Chỉ cập nhật spec hiện hữu; không tạo file test mới cho file nguồn mới. Chạy trong venv project: `.\.venv\Scripts\python -m pytest tests -q --cov=src`. |
-| Dockerfile | ⚠ **Toàn bộ 13 dòng đang comment** (`ai-service/Dockerfile:1-13`) — chưa build image được; chạy local bằng uvicorn. |
+| Dockerfile | ✅ Multi-stage (`base` / `builder` / `development` / `production`). Runtime production cài `libgomp1` cho native wheels của `torch` / `implicit`; thiếu gói này sẽ lỗi `ImportError: libgomp.so.1`. |
 
 ### Cấu hình CORS
 
@@ -214,7 +215,7 @@ Tham chiếu: `ai-service/docs/KHOI_DONG_FASTAPI.md`, `ai-service/README.md`, `a
 1. **`/search` lỗi 500**: route dùng `request.pageSize`, schema định nghĩa `page_size` (`recommendations.py:102-115` vs `schemas.py:60-64`) — sửa thành `page_size` hoặc đổi schema.
 2. **CORS thiếu `:3002`**: thêm vào `CORS_ORIGINS` khi frontend gọi trực tiếp `:8082`.
 3. **Lệch query param semantic-search**: backend/FE đang gửi `query` (`frontend/src/apis/recommendation.api.ts:26-34`) nhưng ai-service yêu cầu `keyword` (`recommendations.py:49-51`).
-4. **Dockerfile chưa dùng được** (comment toàn bộ); cần viết lại nếu muốn container hoá.
+4. **Runtime image cần `libgomp1`** (OpenMP cho `torch` / `implicit`) — đã thêm vào stage `base` của `Dockerfile`.
 5. **`/hybrid-search` yêu cầu JWT + `userId` khớp `sub`**; `/hybrid/no-auth` là debug, không dùng production.
 6. **Mapping/model storage** phụ thuộc R2 (`S3_*`); nếu thiếu cấu hình, startup có thể bỏ qua mapping (xem log) — cần xác minh.
 7. Consumer `user.queue` đã xử lý `user.created/updated/deleted/search/genre.update`; `preferenceData` của `user.created/updated.profile` được embed và trộn EMA vào `user_long_term_vectors` + `user_short_term_vectors`, không còn ghi `user_profile_vectors`.

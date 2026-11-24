@@ -10,10 +10,10 @@ scrape_configs:
     scrape_interval: 5s
     metrics_path: '/api/metrics'
     static_configs:
-      - targets: ['host.docker.internal:8081']
+      - targets: ['backend:8081']
 
   - job_name: 'ai'
     metrics_path: '/api/metrics'
     scrape_interval: 5s
     static_configs:
-      - targets: ['host.docker.internal:8082']
+      - targets: ['ai-service:8082']

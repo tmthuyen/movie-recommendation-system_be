@@ -132,6 +132,10 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
       DB_DATABASE: ${POSTGRES_DB:-nestjs_db}
 
+      # gg call back
+      # exact domain in production, for example: https://yourdomain.com/api/auth/google/callback
+      GOOGLE_CALLBACK_URL: 'http://localhost:80/api/auth/google/callback'
+
       # Redis
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -151,7 +155,11 @@ services:
 
       # OpenTelemetry
       OTEL_SERVICE_NAME: movie-backend
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_EXPORTER_URL: http://jaeger:4318
+
+      # Logging (stdout JSON; collector bên ngoài quyết định nơi lưu)
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
 
       TZ: Asia/Ho_Chi_Minh
 
@@ -161,6 +169,12 @@ services:
 
     expose:
       - '8081'
+
+    logging:
+      driver: json-file
+      options:
+        max-size: '20m'
+        max-file: '5'
 
     networks:
       - movie-network
@@ -186,10 +200,20 @@ services:
 
       # Qdrant
       QDRANT_URL: http://qdrant:6333
+      VECTOR_DB_PROVIDER: qdrant
+      VECTOR_DB_URL: http://qdrant:6333
+      BM25_QDRANT_URL: http://qdrant:6333
 
       # OpenTelemetry
       OTEL_SERVICE_NAME: movie-ai-service
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_EXPORTER_URL: http://jaeger:4318
+
+      # Logging (stdout JSON; collector bên ngoài quyết định nơi lưu)
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+      RABBITMQ_URL: amqp://admin:admin@rabbitmq:5672
+      REDIS_URL: redis://redis:6379
 
       TZ: Asia/Ho_Chi_Minh
 
@@ -201,6 +225,12 @@ services:
 
     expose:
       - '8082'
+
+    logging:
+      driver: json-file
+      options:
+        max-size: '20m'
+        max-file: '5'
 
     networks:
       - movie-network
@@ -234,6 +264,43 @@ services:
       - backend
       - ai-service
       - redis
+
+    networks:
+      - movie-network
+
+  # ==========================================================
+  # LOKI - CENTRALIZED LOGS
+  # ==========================================================
+  loki:
+    image: grafana/loki:3.5.0
+    restart: unless-stopped
+
+    command:
+      - -config.file=/etc/loki/loki-config.yml
+
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+
+    networks:
+      - movie-network
+
+  # ==========================================================
+  # PROMTAIL - DOCKER LOG SHIPPER
+  # ==========================================================
+  promtail:
+    image: grafana/promtail:3.5.0
+    restart: unless-stopped
+
+    command:
+      - -config.file=/etc/promtail/promtail-config.yml
+
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+    depends_on:
+      - loki
 
     networks:
       - movie-network
@@ -278,6 +345,7 @@ services:
 
     depends_on:
       - prometheus
+      - loki
 
     networks:
       - movie-network
@@ -325,4 +393,7 @@ volumes:
     driver: local
 
   grafana_data:
+    driver: local
+
+  loki_data:
     driver: local

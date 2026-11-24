@@ -10,9 +10,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# Runtime system libraries required by native wheels:
+# - libgomp1: OpenMP runtime for torch / implicit / scikit-learn
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        ca-certificates \
+       libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 

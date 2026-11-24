@@ -1,47 +1,63 @@
+import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
+
+
+class JsonFormatter(logging.Formatter):
+    """JSON log format để CloudWatch/Loki parse theo level/service."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "timestamp": datetime.fromtimestamp(
+                record.created, tz=timezone.utc
+            ).isoformat(),
+            "level": record.levelname.lower(),
+            "service": os.getenv("SERVICE_NAME", "movie-ai-service"),
+            "logger": record.name,
+            "message": record.getMessage(),
+            "module": record.module,
+            "function": record.funcName,
+            "line": record.lineno,
+        }
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+        return json.dumps(payload, ensure_ascii=False, default=str)
 
 
 def setup_logger(name="project_logger", filename=None):
-    """Tạo logger
-    Tên file log sẽ được tạo theo name và ngày tháng (VD: logs/train_2026-02-23.log)
+    """Tạo logger ghi ra stdout/stderr.
+
+    Không ghi file trong container: Docker/ECS thu stdout/stderr và chuyển
+    tới Loki hoặc CloudWatch. `filename` giữ lại để tương thích call site cũ.
 
     Args:
-        name (str, optional): Tên của logger. Defaults to "project_logger".
-        filename (str, optional): Không dùng nữa
+        name (str, optional): Tên logger. Defaults to "project_logger".
+        filename (str, optional): Không dùng nữa.
 
     Returns:
-        _type_: Logger đã được tạo.
+        logging.Logger: Logger đã cấu hình.
     """
-    # 1. Tạo thư mục logs nếu chưa có
-    if not os.path.exists("logs"):
-        os.makedirs("logs")
-
-    # 2. Tạo tên file log theo ngày tháng (VD: logs/train_2026-02-23.log)
-    current_time = datetime.now().strftime("%Y-%m-%d")
-    log_file = f"logs/{name}_{current_time}.log"
-
-    # 3. Cấu hình logger
     logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)  # Bắt mọi cấp độ log
+    logger.setLevel((os.getenv("LOG_LEVEL") or "DEBUG").upper())
+    logger.propagate = False
 
     # Tránh bị nhân đôi dòng log nếu gọi nhiều lần
     if not logger.handlers:
-        # 4. Định dạng dòng log cho đẹp (Thời gian - Cấp độ - Tên File - Lời nhắn)
-        formatter = logging.Formatter(
-            "%(asctime)s - [%(levelname)s] - %(filename)s - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
+        log_format = os.getenv("LOG_FORMAT") or (
+            "json" if os.getenv("ENVIRONMENT") == "production" else "text"
         )
 
-        # 5a. Ghi ra màn hình (thay thế print)
+        if log_format == "json":
+            formatter: logging.Formatter = JsonFormatter()
+        else:
+            formatter = logging.Formatter(
+                "%(asctime)s - [%(levelname)s] - %(filename)s - %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+
         console_handler = logging.StreamHandler()
         console_handler.setFormatter(formatter)
         logger.addHandler(console_handler)
-
-        # 5b. Ghi âm thầm vào file text
-        file_handler = logging.FileHandler(log_file, encoding="utf-8")
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
 
     return logger
