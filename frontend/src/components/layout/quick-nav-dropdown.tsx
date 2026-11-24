@@ -20,7 +20,7 @@ export type QuickNavVariant = 'user' | 'admin';
 /** Nhóm nav hiển thị trong dropdown, lấy từ `NAV_SECTIONS` (một nguồn dữ liệu duy nhất). */
 const QUICK_NAV_SECTIONS: Record<QuickNavVariant, NavSectionKey[]> = {
   user: ['user', 'personal', 'settings'],
-  admin: ['learning', 'auth', 'admin', 'interaction'],
+  admin: ['content', 'auth', 'admin', 'interaction'],
 };
 
 /** Nhóm chỉ dành cho người đã đăng nhập. */
@@ -54,7 +54,7 @@ export function QuickNavDropdown({
           aria-label="Điều hướng nhanh"
           title="Điều hướng nhanh"
           className={cn(
-            'cursor-pointer rounded-full p-2 text-gray-600 outline-none transition-colors ring-ring hover:bg-gray-100 focus-visible:ring-2 dark:text-gray-300 dark:hover:bg-slate-800',
+            'ring-ring cursor-pointer rounded-full p-2 text-gray-600 transition-colors outline-none hover:bg-gray-100 focus-visible:ring-2 dark:text-gray-300 dark:hover:bg-slate-800',
             className,
           )}
         >

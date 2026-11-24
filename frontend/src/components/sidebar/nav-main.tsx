@@ -66,9 +66,9 @@ export function UserNavMain() {
 export function NavMain() {
   return (
     <div>
-      <NavSection groupLabel={dataBar.learning.groupLabel} items={dataBar.learning.items} />
-      <NavSection groupLabel={dataBar.auth.groupLabel} items={dataBar.auth.items} />
       <NavSection groupLabel={dataBar.admin.groupLabel} items={dataBar.admin.items} />
+      <NavSection groupLabel={dataBar.auth.groupLabel} items={dataBar.auth.items} />
+      <NavSection groupLabel={dataBar.content.groupLabel} items={dataBar.content.items} />
       <NavSection groupLabel={dataBar.interaction.groupLabel} items={dataBar.interaction.items} />
       <NavSection groupLabel={dataBar.settings.groupLabel} items={dataBar.settings.items} />
     </div>

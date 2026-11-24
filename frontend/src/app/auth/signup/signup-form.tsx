@@ -19,7 +19,7 @@ import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
-import { EyeIcon, EyeOffIcon } from 'lucide-react';
+import { ArrowLeft, EyeIcon, EyeOffIcon } from 'lucide-react';
 import { authApi } from '@/apis/auth.api';
 import LoginGoogle from '@/app/auth/login/google-button';
 import useAuthApi from '@/hooks/tankstack/useAuthApi';
@@ -56,7 +56,7 @@ function SignUpForm() {
     mode: 'onChange',
     defaultValues: {
       fullName: '',
-      email: 'your@gmail.com',
+      email: '',
       password: '',
       confirmPassword: '',
     },
@@ -85,156 +85,165 @@ function SignUpForm() {
   };
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-bold">Đăng ký tài khoản</CardTitle>
-        <CardDescription>Bắt đầu hành trình khám phá phim</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form
-          id="signup-form"
-          onSubmit={handleSubmit(onSubmit)}
-          className="space-y-2"
-          suppressHydrationWarning={true}
-        >
-          {/* API err message */}
-          {error && (
-            <div className="text-destructive bg-destructive/10 border-destructive/20 rounded-lg border p-3 text-sm">
-              {error}
-            </div>
-          )}
-          <FieldGroup className="gap-2">
-            <Controller
-              control={control}
-              name="fullName"
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor="fullName" className="cursor-pointer">
-                    Full Name
-                  </FieldLabel>
-                  <Input
-                    {...field}
-                    id="fullName"
-                    aria-invalid={fieldState.invalid}
-                    placeholder="John Doe"
-                    autoComplete="name"
-                  />
-                  {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                </Field>
-              )}
-            />
+    <div className="w-full max-w-md space-y-2">
+      <Button asChild variant="ghost" size="sm" className="text-muted-foreground h-11 gap-2">
+        <Link href="/">
+          <ArrowLeft className="size-4" aria-hidden="true" />
+          Về trang chủ
+        </Link>
+      </Button>
 
-            <Controller
-              name="email"
-              control={control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor="email" className="cursor-pointer">
-                    Email
-                  </FieldLabel>
-                  <Input
-                    {...field}
-                    id="email"
-                    aria-invalid={fieldState.invalid}
-                    placeholder="you@example.com"
-                    autoComplete="email"
-                  />
-                  {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                </Field>
-              )}
-            />
-
-            <Controller
-              name="password"
-              control={control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor="password" className="cursor-pointer">
-                    Password
-                  </FieldLabel>
-                  <InputGroup>
-                    <InputGroupInput
+      <Card className="w-full">
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl font-bold">Đăng ký tài khoản</CardTitle>
+          <CardDescription>Bắt đầu hành trình khám phá phim</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form
+            id="signup-form"
+            onSubmit={handleSubmit(onSubmit)}
+            className="space-y-2"
+            suppressHydrationWarning={true}
+          >
+            {/* API err message */}
+            {error && (
+              <div className="text-destructive bg-destructive/10 border-destructive/20 rounded-lg border p-3 text-sm">
+                {error}
+              </div>
+            )}
+            <FieldGroup className="gap-2">
+              <Controller
+                control={control}
+                name="fullName"
+                render={({ field, fieldState }) => (
+                  <Field data-invalid={fieldState.invalid}>
+                    <FieldLabel htmlFor="fullName" className="cursor-pointer">
+                      Full Name
+                    </FieldLabel>
+                    <Input
                       {...field}
-                      id="password"
-                      type={showPassword.password ? 'text' : 'password'}
+                      id="fullName"
                       aria-invalid={fieldState.invalid}
-                      placeholder="Enter password"
-                      autoComplete="current-password"
+                      placeholder="John Doe"
+                      autoComplete="name"
                     />
-                    <InputGroupAddon
-                      align="inline-end"
-                      className="cursor-pointer"
-                      onClick={() => {
-                        setShowPassword((prev) => ({ ...prev, password: !prev.password }));
-                      }}
-                    >
-                      {showPassword.password ? <EyeOffIcon /> : <EyeIcon />}
-                    </InputGroupAddon>
-                  </InputGroup>
-                  {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                </Field>
-              )}
-            />
-            <Controller
-              name="confirmPassword"
-              control={control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel htmlFor="confirmPassword" className="cursor-pointer">
-                    Confirm Password
-                  </FieldLabel>
-                  <InputGroup>
-                    <InputGroupInput
+                    {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+                  </Field>
+                )}
+              />
+
+              <Controller
+                name="email"
+                control={control}
+                render={({ field, fieldState }) => (
+                  <Field data-invalid={fieldState.invalid}>
+                    <FieldLabel htmlFor="email" className="cursor-pointer">
+                      Email
+                    </FieldLabel>
+                    <Input
                       {...field}
-                      id="confirmPassword"
-                      type={showPassword.confirmPassword ? 'text' : 'password'}
+                      id="email"
                       aria-invalid={fieldState.invalid}
-                      placeholder="Confirm password"
-                      autoComplete="current-confirm-password"
+                      placeholder="you@example.com"
+                      autoComplete="email"
                     />
-                    <InputGroupAddon
-                      align="inline-end"
-                      className="cursor-pointer"
-                      onClick={() => {
-                        setShowPassword((prev) => ({
-                          ...prev,
-                          confirmPassword: !prev.confirmPassword,
-                        }));
-                      }}
-                    >
-                      {showPassword.confirmPassword ? <EyeOffIcon /> : <EyeIcon />}
-                    </InputGroupAddon>
-                  </InputGroup>
-                  {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-                </Field>
-              )}
-            />
-          </FieldGroup>
-        </form>
-      </CardContent>
+                    {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+                  </Field>
+                )}
+              />
 
-      <CardFooter className="flex-col gap-4 text-center">
-        <Button
-          type="submit"
-          form="signup-form"
-          className="w-full"
-          disabled={!isValid || isSubmitting}
-        >
-          {isSubmitting ? 'Đang đăng ký...' : 'Đăng ký'}
-        </Button>
+              <Controller
+                name="password"
+                control={control}
+                render={({ field, fieldState }) => (
+                  <Field data-invalid={fieldState.invalid}>
+                    <FieldLabel htmlFor="password" className="cursor-pointer">
+                      Password
+                    </FieldLabel>
+                    <InputGroup>
+                      <InputGroupInput
+                        {...field}
+                        id="password"
+                        type={showPassword.password ? 'text' : 'password'}
+                        aria-invalid={fieldState.invalid}
+                        placeholder="Enter password"
+                        autoComplete="current-password"
+                      />
+                      <InputGroupAddon
+                        align="inline-end"
+                        className="cursor-pointer"
+                        onClick={() => {
+                          setShowPassword((prev) => ({ ...prev, password: !prev.password }));
+                        }}
+                      >
+                        {showPassword.password ? <EyeOffIcon /> : <EyeIcon />}
+                      </InputGroupAddon>
+                    </InputGroup>
+                    {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+                  </Field>
+                )}
+              />
+              <Controller
+                name="confirmPassword"
+                control={control}
+                render={({ field, fieldState }) => (
+                  <Field data-invalid={fieldState.invalid}>
+                    <FieldLabel htmlFor="confirmPassword" className="cursor-pointer">
+                      Confirm Password
+                    </FieldLabel>
+                    <InputGroup>
+                      <InputGroupInput
+                        {...field}
+                        id="confirmPassword"
+                        type={showPassword.confirmPassword ? 'text' : 'password'}
+                        aria-invalid={fieldState.invalid}
+                        placeholder="Confirm password"
+                        autoComplete="current-confirm-password"
+                      />
+                      <InputGroupAddon
+                        align="inline-end"
+                        className="cursor-pointer"
+                        onClick={() => {
+                          setShowPassword((prev) => ({
+                            ...prev,
+                            confirmPassword: !prev.confirmPassword,
+                          }));
+                        }}
+                      >
+                        {showPassword.confirmPassword ? <EyeOffIcon /> : <EyeIcon />}
+                      </InputGroupAddon>
+                    </InputGroup>
+                    {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+                  </Field>
+                )}
+              />
+            </FieldGroup>
+          </form>
+        </CardContent>
 
-        <div className="text-center text-sm">
-          <span className="text-muted-foreground">Đăng nhập bằng tài khoản khác</span>
-        </div>
-        <LoginGoogle />
-        <div className="mt-4 text-center text-sm">
-          <span className="text-muted-foreground">Đã có tài khoản? </span>
-          <Link href="/auth/login" className="text-primary font-medium hover:underline">
-            Đăng nhập
-          </Link>
-        </div>
-      </CardFooter>
-    </Card>
+        <CardFooter className="flex-col gap-4 text-center">
+          <Button
+            type="submit"
+            form="signup-form"
+            className="w-full"
+            disabled={!isValid || isSubmitting}
+          >
+            {isSubmitting ? 'Đang đăng ký...' : 'Đăng ký'}
+          </Button>
+
+          <div className="text-center text-sm">
+            <span className="text-muted-foreground">Đăng nhập bằng tài khoản khác</span>
+          </div>
+          <LoginGoogle />
+          <div className="mt-4 text-center text-sm">
+            <span className="text-muted-foreground">Đã có tài khoản? </span>
+            <Link href="/auth/login" className="text-primary font-medium hover:underline">
+              Đăng nhập
+            </Link>
+          </div>
+        </CardFooter>
+      </Card>
+    </div>
   );
 }
 export default SignUpForm;

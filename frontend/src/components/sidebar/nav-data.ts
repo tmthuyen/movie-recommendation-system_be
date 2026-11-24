@@ -3,6 +3,7 @@ import {
   BarChart4,
   Bell,
   Clock,
+  Compass,
   ContactRound,
   Film,
   Flag,
@@ -43,13 +44,18 @@ export const NAV_SECTIONS = {
         icon: Home,
       },
       {
+        title: 'Dành cho bạn',
+        url: '/for-you',
+        icon: Compass,
+      },
+      {
         title: 'Phim',
         url: '/movies',
         icon: Film,
       },
     ],
   },
-  learning: {
+  admin: {
     groupLabel: 'Dashboard',
     items: [
       {
@@ -57,10 +63,20 @@ export const NAV_SECTIONS = {
         url: '/dashboard',
         icon: Home,
       },
+      {
+        title: 'Dành cho bạn',
+        url: '/for-you',
+        icon: Compass,
+      },
+      {
+        title: 'Tìm kiếm phim',
+        url: '/movies',
+        icon: Film,
+      },
     ],
   },
   auth: {
-    groupLabel: 'Auth',
+    groupLabel: 'Người dùng và quyền hạn',
     items: [
       {
         title: 'Tài khoản',
@@ -74,8 +90,8 @@ export const NAV_SECTIONS = {
       },
     ],
   },
-  admin: {
-    groupLabel: 'Movie',
+  content: {
+    groupLabel: 'Nội dung',
     items: [
       {
         title: 'Phim',
@@ -100,7 +116,7 @@ export const NAV_SECTIONS = {
     ],
   },
   interaction: {
-    groupLabel: 'Interaction',
+    groupLabel: 'Tương tác',
     items: [
       {
         title: 'Tương tác',
@@ -125,10 +141,10 @@ export const NAV_SECTIONS = {
     ],
   },
   settings: {
-    groupLabel: 'Settings',
+    groupLabel: 'Cài đặt',
     items: [
       {
-        title: 'Theme',
+        title: 'Chủ đề',
         url: '/setting/theme',
         icon: Palette,
       },
