@@ -48,3 +48,28 @@ export interface TmdbMovieCandidate {
   voteCount: number;
   genres: Array<{ id: number; name: string }>;
 }
+
+/** Option thể loại TMDB cho bộ lọc Movie Scanner. */
+export interface TmdbGenreOption {
+  id: number;
+  name: string;
+}
+
+/** Option ngôn ngữ TMDB đã map từ payload `/configuration/languages`. */
+export interface TmdbLanguageOption {
+  code: string;
+  englishName: string;
+  name: string;
+}
+
+/** Payload thô của TMDB `/genre/movie/list`. */
+export interface TmdbGenreListResponse {
+  genres: TmdbGenreOption[];
+}
+
+/** Payload thô của TMDB `/configuration/languages`. */
+export interface TmdbRawLanguageOption {
+  iso_639_1: string;
+  english_name: string;
+  name: string;
+}

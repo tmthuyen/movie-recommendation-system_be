@@ -39,8 +39,9 @@ services:
   # NESTJS BACKEND
   # ==========================================================
   backend:
-    build:
-      target: production
+    # build:
+    #   target: production
+    image: movie-backend:main
 
     restart: always
 
@@ -64,9 +65,9 @@ services:
   # FASTAPI AI SERVICE
   # ==========================================================
   ai-service:
-    build:
-      target: production
-
+    # build:
+    #   target: production
+    image: movie-ai-service:main
     restart: always
 
     environment:

@@ -1,6 +1,10 @@
 import { Movie } from '@/modules/movies/entities/movie.entity';
 import { TmdbDiscoverRequestDto } from '@/modules/movies/dto/tmdb-discover-request.dto';
-import { TmdbMovieCandidate } from '@/modules/movies/tmdb/tmdb-movie.types';
+import {
+  TmdbGenreOption,
+  TmdbLanguageOption,
+  TmdbMovieCandidate,
+} from '@/modules/movies/tmdb/tmdb-movie.types';
 
 export const IFetchMovieService = Symbol('IFetchMovieService');
 
@@ -9,4 +13,6 @@ export interface IFetchMovieService {
   importOne(tmdbId: number): Promise<Movie | null>;
   importMany(tmdbIds: number[]): Promise<Movie[]>;
   discoverAndImport(request: TmdbDiscoverRequestDto): Promise<Movie[]>;
+  getGenreOptions(): Promise<TmdbGenreOption[]>;
+  getLanguageOptions(): Promise<TmdbLanguageOption[]>;
 }

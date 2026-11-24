@@ -1,122 +1,73 @@
-!README.md
-!src/
-!config/
-!tests/
-!notebooks/
-!scripts/
-!docs
-!requirements.txt
-!pyproject.toml
-!Dockerfile
-!docker-compose.yml
-
-__pycache__/
-_.py[cod]
-_$py.class
-
-.pytest_cache
-.mypy_cache
-.ruff_cache
-
-.venv
-venv
-env
-
-.git
+# ==========================================
+# git
+# ==========================================
+.git/
 .gitignore
+.github/
 
+# ==========================================
+# venv, Python, build
+# ==========================================
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# ==========================================
+# Testing, Linting & IDE
+# ==========================================
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.coverage
+htmlcov/
+coverage/
+tests/
+test/
+.vscode/
+.idea/
+.DS_Store
+
+# ==========================================
+# .env, logs
+# ==========================================
 .env
 .env.*
 !.env.example
-
-Dockerfile
-
-tests
-test
-
-coverage
-.coverage
-htmlcov
-
-.vscode
-.idea
-
-.DS_Store
-
-.git/
-
-.github/
-
-docs/
-
-README.md
-
-*.pyc
-
+logs/
 *.log
 
-Git
-
-.git
-
-.gitignore
-
-
-__pycache__/
-.pyc
-
-.pyo
-
-*.pyd
-
-.pytest_cache/
-
-.mypy_cache/
-
-.ipynb_checkpoints/
-
-
-venv/
-
-.venv/
-
-env/
-
-
-data/**
-
-logs/
-
-
+# ==========================================
+# data, models
+# ==========================================
+data/
+notebooks/
+docs/
 *.pkl
-
 *.pickle
-
 *.joblib
-
 *.pth
-
 *.pt
-
 *.onnx
-
 *.h5
-
 *.keras
-
 *.npy
-
 *.npz
-
 *.csv
-
 *.jsonl
-
 *.parquet
 
-
-.DS_Store
-
-.vscode/
-
-.idea/
+# ==========================================
+# docker
+# ==========================================
+Dockerfile*
+docker-compose*.yml
+.dockerignore

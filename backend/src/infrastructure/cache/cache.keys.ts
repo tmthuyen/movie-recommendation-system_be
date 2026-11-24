@@ -12,6 +12,7 @@ export const CacheTtl = {
   recommendation: 1800,
   statsDetail: 604800,
   statsHot: 2592000,
+  tmdbOptions: 86400,
 } as const;
 
 /** Số trang tối đa được cache cho list/search. */
@@ -171,5 +172,9 @@ export const CacheKeys = {
     top: (metric: string, period: string) =>
       buildKey('stats', 'top', metric, period),
     dirty: () => buildKey('stats', 'dirty'),
+  },
+  tmdb: {
+    genres: () => buildKey('tmdb', 'options', 'genres'),
+    languages: () => buildKey('tmdb', 'options', 'languages'),
   },
 } as const;

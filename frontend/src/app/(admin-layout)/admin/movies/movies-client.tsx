@@ -19,6 +19,7 @@ import { createMovieFilterFields } from './movie-filter-fields';
 import { MovieDetailDialog } from './movie-detail-dialog';
 import { MovieGrid } from './movie-grid';
 import { createMovieColumns } from './movies-columns';
+import { TmdbScannerDialog } from './tmdb-scanner-dialog';
 
 type ViewMode = 'table' | 'grid';
 
@@ -351,7 +352,12 @@ export function MoviesClient() {
       emptyDescription="Thêm phim đầu tiên để bắt đầu quản lý thư viện."
       addLabel="Thêm phim"
       onAdd={openCreate}
-      toolbarActions={viewToggle}
+      toolbarActions={
+        <>
+          <TmdbScannerDialog />
+          {viewToggle}
+        </>
+      }
       body={
         viewMode === 'grid' ? (
           <MovieGrid

@@ -3,7 +3,13 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AxiosError } from 'axios';
 import { firstValueFrom } from 'rxjs';
-import { TmdbDiscoverMovie, TmdbMovieDetail } from './tmdb-movie.types';
+import {
+  TmdbDiscoverMovie,
+  TmdbGenreListResponse,
+  TmdbGenreOption,
+  TmdbMovieDetail,
+  TmdbRawLanguageOption,
+} from './tmdb-movie.types';
 
 interface TmdbDiscoverResponse {
   page: number;
@@ -17,7 +23,7 @@ export class TmdbMovieClient {
   private readonly logger = new Logger(TmdbMovieClient.name);
   private readonly baseUrl: string;
   private readonly token: string;
-  private readonly apiKey: string;
+  private readonly useBearerAuth: boolean;
   private readonly timeout: number;
 
   constructor(
@@ -28,19 +34,22 @@ export class TmdbMovieClient {
       this.configService.get<string>('TMDB_API_BASE_URL') ||
       'https://api.themoviedb.org/3';
     this.token = this.configService.get<string>('TMDB_API_TOKEN') || '';
+    // Token dạng JWT (có dấu '.') dùng Bearer; API key v3 thì dùng query `api_key`.
+    // Không gửi cả hai cùng lúc để tránh TMDB trả 401.
+    this.useBearerAuth = this.token.split('.').length === 3;
     this.timeout =
       this.configService.get<number>('TMDB_HTTP_TIMEOUT_MS') || 10000;
   }
 
-  private headers() {
-    if (!this.token) return undefined;
+  private headers(): Record<string, string> | undefined {
+    if (!this.token || !this.useBearerAuth) return undefined;
     return { Authorization: `Bearer ${this.token}` };
   }
 
   private authParams(
     params: Record<string, string | number>,
   ): Record<string, string | number> {
-    if (!this.token) return params;
+    if (!this.token || this.useBearerAuth) return params;
     return { ...params, api_key: this.token };
   }
 
@@ -83,6 +92,44 @@ export class TmdbMovieClient {
       return data;
     } catch (error) {
       this.logHttpError(`/movie/${tmdbId}`, error);
+      throw error;
+    }
+  }
+
+  async getGenres(language = 'vi-VN'): Promise<TmdbGenreOption[]> {
+    try {
+      const { data } = await firstValueFrom(
+        this.httpService.get<TmdbGenreListResponse>(
+          `${this.baseUrl}/genre/movie/list`,
+          {
+            headers: this.headers(),
+            timeout: this.timeout,
+            params: this.authParams({ language }),
+          },
+        ),
+      );
+      return data?.genres ?? [];
+    } catch (error) {
+      this.logHttpError('/genre/movie/list', error);
+      throw error;
+    }
+  }
+
+  async getLanguages(): Promise<TmdbRawLanguageOption[]> {
+    try {
+      const { data } = await firstValueFrom(
+        this.httpService.get<TmdbRawLanguageOption[]>(
+          `${this.baseUrl}/configuration/languages`,
+          {
+            headers: this.headers(),
+            timeout: this.timeout,
+            params: this.authParams({}),
+          },
+        ),
+      );
+      return data ?? [];
+    } catch (error) {
+      this.logHttpError('/configuration/languages', error);
       throw error;
     }
   }

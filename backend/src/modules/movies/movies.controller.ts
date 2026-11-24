@@ -12,7 +12,14 @@ import {
 import { MoviesService } from './movies.service';
 import { CreateMovieDto } from './dto/create-movie.dto';
 import { UpdateMovieDto } from './dto/update-movie.dto';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiCreatedResponse,
+  ApiBody,
+} from '@nestjs/swagger';
 import { Roles } from '@/common/decorators/roles.decorator';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '@/modules/auth/guards/optional-jwt-auth.guard';
@@ -46,7 +53,15 @@ export class MoviesController {
   @UseGuards(JwtAuthGuard)
   @Roles('ADMIN', 'SUPERADMIN')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Lấy phim mới từ TMDB chưa có trong database' })
+  @ApiOperation({
+    summary: 'Lấy phim mới từ TMDB chưa có trong database',
+    description:
+      'Gọi TMDB discover, validate candidate rồi loại các tmdbId đã tồn tại. Không lưu database; response gồm result[] và pagination.',
+  })
+  @ApiOkResponse({
+    description:
+      'Candidate TMDB hợp lệ, chưa tồn tại trong DB (result[] + pagination).',
+  })
   async discoverTmdb(@Query() query: TmdbDiscoverRequestDto) {
     const result = await this.fetchMovieService.discover(query);
     const limit = query.limit ?? 10;
@@ -68,7 +83,18 @@ export class MoviesController {
   @UseGuards(JwtAuthGuard)
   @Roles('ADMIN', 'SUPERADMIN')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Thêm phim đã chọn từ TMDB vào database' })
+  @ApiOperation({
+    summary: 'Thêm phim đã chọn từ TMDB vào database',
+    description:
+      'Nhận {tmdbId} hoặc {tmdbIds:[...]}; kiểm tra trùng tmdbId lần cuối trước khi persist.',
+  })
+  @ApiBody({
+    type: TmdbImportRequestDto,
+    description: 'Một ID hoặc nhiều TMDB ID cần import.',
+  })
+  @ApiCreatedResponse({
+    description: 'Danh sách phim đã lưu thành công (result[]).',
+  })
   async importTmdb(@Body() body: TmdbImportRequestDto) {
     const tmdbIds = body.tmdbIds || (body.tmdbId ? [body.tmdbId] : []);
     const result = await this.fetchMovieService.importMany(tmdbIds);
@@ -88,7 +114,14 @@ export class MoviesController {
   @UseGuards(JwtAuthGuard)
   @Roles('ADMIN', 'SUPERADMIN')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Tự động lấy và thêm candidate hợp lệ từ TMDB' })
+  @ApiOperation({
+    summary: 'Tự động lấy và thêm candidate hợp lệ từ TMDB',
+    description:
+      'Dùng chung query của /tmdb/discover; tự validate và import tối đa limit candidate hợp lệ. UI Scanner không dùng endpoint này.',
+  })
+  @ApiCreatedResponse({
+    description: 'Danh sách phim đã lưu tự động (result[]).',
+  })
   async discoverAndImportTmdb(@Query() query: TmdbDiscoverRequestDto) {
     const result = await this.fetchMovieService.discoverAndImport(query);
     return {
@@ -100,6 +133,38 @@ export class MoviesController {
           excludeExtraneousValues: true,
         }),
       ),
+    };
+  }
+
+  @Get('/tmdb/options/genres')
+  @UseGuards(JwtAuthGuard)
+  @Roles('ADMIN', 'SUPERADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Lấy danh sách thể loại TMDB cho bộ lọc' })
+  @ApiOkResponse({ description: 'Danh sách thể loại TMDB' })
+  async getTmdbGenres() {
+    const result = await this.fetchMovieService.getGenreOptions();
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Lấy danh sách thể loại TMDB thành công',
+      result,
+    };
+  }
+
+  @Get('/tmdb/options/languages')
+  @UseGuards(JwtAuthGuard)
+  @Roles('ADMIN', 'SUPERADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Lấy danh sách ngôn ngữ TMDB cho bộ lọc' })
+  @ApiOkResponse({ description: 'Danh sách ngôn ngữ TMDB' })
+  async getTmdbLanguages() {
+    const result = await this.fetchMovieService.getLanguageOptions();
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Lấy danh sách ngôn ngữ TMDB thành công',
+      result,
     };
   }
 

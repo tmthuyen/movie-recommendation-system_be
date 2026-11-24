@@ -1,12 +1,13 @@
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AxiosError } from 'axios';
+import { z } from 'zod';
 import { AppException } from '@/common/custom-exception/app-exception';
 import {
   CACHE_SERVICE,
   type ICacheService,
 } from '@/infrastructure/cache/redis-cache.service';
-import { CacheKeys } from '@/infrastructure/cache/cache.keys';
+import { CacheKeys, CacheTtl } from '@/infrastructure/cache/cache.keys';
 import { MovieProducer } from '@/infrastructure/messaging/producers/movie.producer';
 import { TmdbDiscoverRequestDto } from './dto/tmdb-discover-request.dto';
 import { IMovieRepository } from './movies.repository';
@@ -17,7 +18,27 @@ import { Country } from '@/modules/countries/entities/country.entity';
 import { ICountryRepository } from '@/modules/countries/countries.repository';
 import { IFetchMovieService } from './interfaces/fetch-movie.interface';
 import { TmdbMovieClient } from './tmdb/tmdb-movie-client';
-import { TmdbMovieCandidate, TmdbMovieDetail } from './tmdb/tmdb-movie.types';
+import {
+  TmdbGenreOption,
+  TmdbLanguageOption,
+  TmdbMovieCandidate,
+  TmdbMovieDetail,
+} from './tmdb/tmdb-movie.types';
+
+const GENRE_OPTIONS_SCHEMA = z.array(
+  z.object({
+    id: z.number().int().positive(),
+    name: z.string().min(1),
+  }),
+);
+
+const LANGUAGE_OPTIONS_SCHEMA = z.array(
+  z.object({
+    code: z.string().min(2),
+    englishName: z.string(),
+    name: z.string(),
+  }),
+);
 
 @Injectable()
 export class FetchMovieService implements IFetchMovieService {
@@ -120,6 +141,47 @@ export class FetchMovieService implements IFetchMovieService {
     }
 
     return saved;
+  }
+
+  async getGenreOptions(): Promise<TmdbGenreOption[]> {
+    this.requireToken();
+    const key = CacheKeys.tmdb.genres();
+    const cached = await this.cache.get<TmdbGenreOption[]>(
+      key,
+      GENRE_OPTIONS_SCHEMA,
+    );
+    if (cached) return cached;
+
+    try {
+      const options = await this.tmdbClient.getGenres('vi-VN');
+      await this.cache.set(key, options, CacheTtl.tmdbOptions);
+      return options;
+    } catch (error) {
+      throw this.toTmdbAppException(error, 'lấy danh sách thể loại TMDB');
+    }
+  }
+
+  async getLanguageOptions(): Promise<TmdbLanguageOption[]> {
+    this.requireToken();
+    const key = CacheKeys.tmdb.languages();
+    const cached = await this.cache.get<TmdbLanguageOption[]>(
+      key,
+      LANGUAGE_OPTIONS_SCHEMA,
+    );
+    if (cached) return cached;
+
+    try {
+      const raw = await this.tmdbClient.getLanguages();
+      const options = raw.map(item => ({
+        code: item.iso_639_1,
+        englishName: item.english_name,
+        name: item.name,
+      }));
+      await this.cache.set(key, options, CacheTtl.tmdbOptions);
+      return options;
+    } catch (error) {
+      throw this.toTmdbAppException(error, 'lấy danh sách ngôn ngữ TMDB');
+    }
   }
 
   private requireToken(): void {

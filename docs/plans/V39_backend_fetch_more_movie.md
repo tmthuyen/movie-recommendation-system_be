@@ -1,18 +1,20 @@
-# V39 — Backend: lấy phim mới từ TMDB
+# V39 — Backend + Frontend: lấy phim mới từ TMDB
 
 ## Trạng thái
 
-🟡 Đang triển khai — backend core đã code; smoke runtime TMDB pending
+🟡 Đang triển khai — Phase 1–7 (backend, Swagger, options, UI) đã xong code + gate tự động; smoke runtime option chờ token TMDB thật; QA browser thủ công chưa chạy
 
 ## Người thực hiện & thời gian
 
-| Hạng mục        | Nội dung     |
-| --------------- | ------------ |
-| Người thực hiện | Dev, Copilot |
-| Bắt đầu         | 2026-11-20   |
-| Phạm vi         | Backend      |
-| Methodology     | Traditional  |
-| Complexity      | Simple       |
+| Hạng mục         | Nội dung     |
+| ---------------- | ------------ |
+| Người thực hiện  | Dev, Copilot |
+| Bắt đầu          | 2026-11-20   |
+| Cập nhật backend | 2026-11-24   |
+| Cập nhật frontend | 2026-11-24  |
+| Phạm vi          | Backend + Frontend |
+| Methodology      | Traditional  |
+| Complexity       | Simple       |
 
 ## 1. Mục tiêu
 
@@ -21,8 +23,10 @@
 - Backend validate candidate trước khi trả hoặc lưu.
 - Admin có thể xem danh sách rồi quyết định thêm từng phim hoặc danh sách đã chọn.
 - Cũng có thể tạo mode tự động thêm các candidate hợp lệ.
+- Backend expose option genres/languages cho Admin Scanner; cache ngắn hạn option theo đặc tả gốc.
+- UI Admin xem candidate và import nằm ở Phase 7, triển khai sau Phase 6.
 - Logic TMDB nằm trong `FetchMovieService` riêng, không sửa `MoviesService`.
-- Không cần cast/crew, cache option/genre/language, metrics hoặc observability riêng.
+- Không cần cast/crew, cache kết quả discover/import, metrics hoặc observability riêng.
 
 ## 2. Hành vi bắt buộc
 
@@ -52,6 +56,20 @@
 - Có thể thêm method `discoverAndImport(request)`.
 - Service tự validate và lưu tất cả candidate hợp lệ trong giới hạn `limit`.
 - Không bắt buộc UI bắt buộc dùng mode này.
+
+### 2.4 Load options cho Admin
+
+1. Admin mở Movie Scanner → UI gọi 2 endpoint options của backend.
+2. Backend gọi TMDB `/3/genre/movie/list?language=vi-VN` và `/3/configuration/languages`.
+3. Backend map/trả option, ưu tiên cache ngắn hạn; không gọi lại TMDB nếu cache còn hạn.
+4. UI dùng genre select đơn và language select theo `iso_639_1`.
+
+### 2.5 UI Admin (Phase 7)
+
+1. UI nằm trong trang `/admin/movies`, mở dialog “Lấy phim từ TMDB”.
+2. UI gọi discover với filter đã chọn, hiển thị candidate chưa trùng DB.
+3. Admin tick chọn candidate rồi gọi import; frontend không gọi thẳng TMDB.
+4. Sau import thành công, UI refresh danh sách phim trong DB.
 
 ## 3. API
 
@@ -146,6 +164,44 @@ Request dùng cùng filter với discover.
 Endpoint này có thể tự validate và lưu candidate hợp lệ trong giới hạn `limit`.
 UI không bắt buộc dùng endpoint này; Admin có thể dùng luồng discover/import thủ công.
 
+### 3.4. Load options cho UI Admin
+
+```http
+GET /api/movies/tmdb/options/genres
+GET /api/movies/tmdb/options/languages
+Authorization: Bearer <accessToken>
+```
+
+Auth: JWT + `@Roles('ADMIN', 'SUPERADMIN')`.
+
+Response `genres`:
+
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Lấy danh sách thể loại TMDB thành công",
+  "result": [{ "id": 28, "name": "Hành động" }]
+}
+```
+
+Response `languages`:
+
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Lấy danh sách ngôn ngữ TMDB thành công",
+  "result": [
+    { "code": "en", "englishName": "English", "name": "English" },
+    { "code": "ko", "englishName": "Korean", "name": "한국어" }
+  ]
+}
+```
+
+Mapping TMDB: `iso_639_1 → code`, `english_name → englishName`, `name → name`.
+Option list không phân trang; cache ngắn hạn ở backend.
+
 ## 4. TMDB API
 
 Chỉ dùng TMDB API v3:
@@ -153,9 +209,11 @@ Chỉ dùng TMDB API v3:
 - `GET /3/discover/movie`
 - `GET /3/movie/{movie_id}?language=en-US`
 - `GET /3/movie/{movie_id}?language=vi-VN`
+- `GET /3/genre/movie/list?language=vi-VN`
+- `GET /3/configuration/languages`
 - Optional `GET /3/movie/{movie_id}/external_ids` nếu cần lưu IMDb ID.
 
-Không gọi `/credits`.
+Không gọi `/credits` hoặc `/translations`.
 Không lấy hoặc lưu cast/crew.
 
 ## 5. Filter TMDB
@@ -213,7 +271,8 @@ Không thêm TMDB logic vào `MoviesService`.
 ```text
 MoviesController
   -> IFetchMovieService
-       -> TmdbMovieClient
+       -> TmdbMovieClient (discover/detail/options)
+       -> ICacheService (option genres/languages, TTL ngắn)
        -> IMovieRepository
        -> IGenreRepository
        -> MovieProducer
@@ -233,11 +292,24 @@ Interface đề xuất:
 ```ts
 export const IFetchMovieService = Symbol('IFetchMovieService');
 
+export interface TmdbGenreOption {
+  id: number;
+  name: string;
+}
+
+export interface TmdbLanguageOption {
+  code: string;
+  englishName: string;
+  name: string;
+}
+
 export interface IFetchMovieService {
   discover(request: TmdbDiscoverRequestDto): Promise<TmdbMovieCandidate[]>;
   importOne(tmdbId: number): Promise<Movie | null>;
   importMany(tmdbIds: number[]): Promise<Movie[]>;
   discoverAndImport(request: TmdbDiscoverRequestDto): Promise<Movie[]>;
+  getGenreOptions(): Promise<TmdbGenreOption[]>;
+  getLanguageOptions(): Promise<TmdbLanguageOption[]>;
 }
 ```
 
@@ -329,20 +401,47 @@ Không log Authorization header hoặc bearer token.
 - [x] Thêm endpoint `discover-and-import`.
 - [x] Giới hạn candidate theo `limit`.
 
-### Phase 5 — Hoàn thiện
+### Phase 5 — Hoàn thiện endpoint cũ
 
-- [ ] Cập nhật Swagger.
+- [x] Cập nhật Swagger cho discover/import/discover-and-import (`ApiPropertyOptional` trên DTO; `ApiOperation`/`ApiBody`/`ApiOkResponse`/`ApiCreatedResponse` trên controller).
 - [x] Cập nhật `docs/BACKEND.md`.
 - [x] Chạy type-check/build và test controller hiện có.
+
+### Phase 6 — Load options backend (bổ sung 2026-11-24)
+
+- [x] Thêm `TmdbGenreOption`, `TmdbLanguageOption` vào `tmdb-movie.types.ts`.
+- [x] Thêm `getGenres(language = 'vi-VN')` và `getLanguages()` vào `TmdbMovieClient`.
+- [x] Thêm `getGenreOptions()` / `getLanguageOptions()` vào `IFetchMovieService` và `FetchMovieService`.
+- [x] Cache option qua `ICacheService` hiện hữu: `tmdb:options:genres`, `tmdb:options:languages`; TTL 24h; cache lỗi thì fallback gọi TMDB.
+- [x] Thêm `GET /api/movies/tmdb/options/genres` và `GET /api/movies/tmdb/options/languages` vào `MoviesController` (JWT + ADMIN/SUPERADMIN).
+- [x] Cập nhật Swagger cho 2 endpoint options.
+- [x] Cập nhật `docs/BACKEND.md` với 2 endpoint mới.
+- [x] Chạy type-check/build + test controller hiện có (460 tests passed).
+- [x] Check auth scheme: token dạng JWT dùng `Authorization: Bearer`, API key v3 dùng query `api_key`; không gửi cả hai cùng lúc.
+- [ ] Smoke runtime với TMDB token hợp lệ (cần token thật; `.env.example` chỉ placeholder).
+
+### Phase 7 — Admin UI trong `/admin/movies` (triển khai 2026-11-24)
+
+- [x] Thêm nút “Lấy phim từ TMDB” vào `toolbarActions` của `movies-client.tsx`.
+- [x] Dialog load option từ 2 endpoint Phase 6; frontend không gọi thẳng TMDB.
+- [x] Filter: mode, page/limit, ngày/năm, **genre select đơn**, **language select**.
+  - Genre: “Tất cả” → không gửi `genreIds`; chọn 1 genre → gửi `genreIds: [id]`.
+  - Language: label = `name || englishName`, value = `code`.
+- [x] Discover → grid candidate (poster/phân trang) → tick chọn (`aria-pressed`) → `POST /tmdb/import`.
+- [x] Sau import: toast + invalidate `adminMovies` + dọn selection + refetch discover.
+- [x] Không dùng `discover-and-import` trừ khi được yêu cầu.
+- [x] QA responsive/dark mode/a11y theo rules + chạy type-check/lint/test/build frontend (37 files / 286 tests; lint 0 error). Chưa QA browser thủ công.
+
+File liên quan: `frontend/src/apis/movie.api.ts`, `frontend/src/hooks/tankstack/tmdb.ts`, `frontend/src/app/(admin-layout)/admin/movies/tmdb-scanner-dialog.tsx`, `frontend/src/app/(admin-layout)/admin/movies/movies-client.tsx`.
 
 ## 13. Ngoài phạm vi
 
 - Không lấy cast/crew.
-- Không gọi `/credits`.
+- Không gọi `/credits` hoặc `/translations`.
 - Không viết test mới làm mục tiêu chính của plan.
-- Không thêm cache option/genre/language.
+- Không cache kết quả discover/import/candidate; option genres/languages được cache ngắn hạn theo đặc tả gốc.
 - Không thêm metrics/observability riêng.
-- Không triển khai UI trong plan này.
+- Không triển khai UI trong đợt bổ sung backend này; UI nằm Phase 7 của plan này.
 - Không commit/push nếu chưa được yêu cầu.
 
 ## Đặc tả yêu cầu gốc
