@@ -23,6 +23,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { chatApi } from '@/apis/chat.api';
 import { useAskChat } from '@/hooks/tankstack/useChat';
 import { parseAxiosError } from '@/lib/axiosClient';
 import { MOTION_DURATION_FAST, MOTION_EASE } from '@/lib/motion';
@@ -38,15 +39,17 @@ const QUICK_SUGGESTIONS = [
   'Tìm phim giống Người Nhện',
 ];
 
-/** Component hiển thị câu trả lời AI với hiệu ứng gõ chữ (Typewriter / Streaming). */
+/** Component hiển thị câu trả lời AI với hiệu ứng gõ chữ mượt mà (Smooth Typing Buffer + SSE). */
 function StreamingMarkdown({
   content,
   isStreaming,
+  isStreamActive,
   onComplete,
   onTypingStep,
 }: {
   content: string;
   isStreaming?: boolean;
+  isStreamActive?: boolean;
   onComplete?: () => void;
   onTypingStep?: () => void;
 }) {
@@ -59,17 +62,41 @@ function StreamingMarkdown({
       return;
     }
 
+    // Nếu đã gõ hết buffer hiện tại:
     if (displayedLength >= content.length) {
-      onComplete?.();
+      // Chỉ kích hoạt onComplete khi luồng dữ liệu từ server đã kết thúc hoàn toàn (!isStreamActive).
+      // Nếu server vẫn đang stream dữ liệu tiếp theo, giữ nguyên trạng thái chờ token mới.
+      if (!isStreamActive) {
+        onComplete?.();
+      }
       return;
     }
 
-    // Tốc độ gõ chữ tự nhiên theo cụm từ (chunk 2-4 ký tự mỗi 18ms)
-    // Tạm dừng nhẹ khi gặp dấu câu hoặc xuống dòng
+    // Tốc độ gõ chữ mượt mà thích ứng (Adaptive Pacing)
+    // Tự động điều chỉnh nhịp gõ theo lượng ký tự đang chờ trong buffer:
+    // - Khi buffer dồn nhiều (LLM trả về nhanh): tăng nhẹ step để đuổi kịp tự nhiên, không lag đọng.
+    // - Khi buffer ngắn: gõ nhẹ nhàng từng ký tự (1-2 chars mỗi 16-18ms).
+    // - Tạm dừng nhẹ khi gặp dấu câu hoặc ngắt dòng để tạo cảm giác tự nhiên như người gõ.
+    const remaining = content.length - displayedLength;
     const currentChar = content[displayedLength] || '';
     const isPause = /[.,!?\n]/.test(currentChar);
-    const delay = isPause ? 40 : 18;
-    const step = isPause ? 1 : Math.min(3, content.length - displayedLength);
+
+    let step = 1;
+    let delay = 18;
+
+    if (isPause) {
+      step = 1;
+      delay = 35;
+    } else if (remaining > 60) {
+      step = 3;
+      delay = 12;
+    } else if (remaining > 20) {
+      step = 2;
+      delay = 16;
+    } else {
+      step = 1;
+      delay = 18;
+    }
 
     const timer = setTimeout(() => {
       setDisplayedLength((prev) => Math.min(prev + step, content.length));
@@ -77,18 +104,20 @@ function StreamingMarkdown({
     }, delay);
 
     return () => clearTimeout(timer);
-  }, [content, displayedLength, shouldStream, onComplete, onTypingStep]);
+  }, [content, displayedLength, shouldStream, isStreamActive, onComplete, onTypingStep]);
 
   const displayedContent = shouldStream ? content.slice(0, displayedLength) : content;
-  const isTyping = shouldStream && displayedLength < content.length;
+  const isTyping = shouldStream && (displayedLength < content.length || Boolean(isStreamActive));
 
   return (
     <div
       onClick={() => {
         if (isTyping) {
-          // Bấm vào tin nhắn để hiển thị ngay toàn bộ nội dung
+          // Bấm vào tin nhắn để hiển thị ngay toàn bộ nội dung hiện có trong buffer
           setDisplayedLength(content.length);
-          onComplete?.();
+          if (!isStreamActive) {
+            onComplete?.();
+          }
         }
       }}
       className="prose prose-sm dark:prose-invert max-w-none break-words [&_p]:my-1 [&_ul]:my-1 [&_ul]:pl-4"
@@ -163,10 +192,19 @@ export function ChatWidget() {
 
   const [inputValue, setInputValue] = useState('');
   const [lastFailedQuestion, setLastFailedQuestion] = useState<string | null>(null);
+  const [isStreamLoading, setIsStreamLoading] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const reduceMotion = useReducedMotion();
 
   const { mutateAsync: askChat, isPending } = useAskChat();
+  const isGenerating = isPending || isStreamLoading;
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     if (isOpen && messagesEndRef.current) {
@@ -174,7 +212,7 @@ export function ChatWidget() {
         messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
       }
     }
-  }, [messages, isOpen, isPending, isExpanded]);
+  }, [messages, isOpen, isGenerating, isExpanded]);
 
   useEffect(() => {
     if (!isExpanded) return;
@@ -189,35 +227,142 @@ export function ChatWidget() {
 
   const sendQuestion = async (rawQuestion: string) => {
     const question = rawQuestion.trim();
-    if (!question || isPending) return;
+    if (!question || isGenerating) return;
 
     setInputValue('');
     setLastFailedQuestion(null);
+
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     addMessage({
       role: 'user',
       content: question,
     });
 
+    setIsStreamLoading(true);
+
+    let assistantMsgId = '';
+    let accumulatedText = '';
+    let hasCreatedAssistantMessage = false;
+    let capturedMovies: MovieWithSimilarScore[] = [];
+    let capturedIntent: string | undefined;
+    let capturedStatType: string | undefined;
+
     try {
-      const result = await askChat({ message: question, topK: 5 });
-      addMessage({
-        role: 'assistant',
-        content: result?.answer || 'Tôi đã tìm thấy một số bộ phim phù hợp với yêu cầu của bạn.',
-        movies: result?.movies ?? [],
-        intent: result?.intent,
-        statType: result?.statType,
-        isStreaming: true,
-      });
+      if (typeof chatApi.askStream === 'function') {
+        await chatApi.askStream(
+          { message: question, topK: 5 },
+          {
+            onMetadata: (metadata) => {
+              capturedMovies = metadata.movies || [];
+              capturedIntent = metadata.intent;
+              capturedStatType = metadata.statType;
+
+              if (hasCreatedAssistantMessage && assistantMsgId) {
+                updateMessage(assistantMsgId, {
+                  movies: capturedMovies,
+                  intent: capturedIntent,
+                  statType: capturedStatType,
+                });
+              }
+            },
+            onToken: (token) => {
+              accumulatedText += token;
+              if (!hasCreatedAssistantMessage) {
+                hasCreatedAssistantMessage = true;
+                assistantMsgId = `assistant-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+                setIsStreamLoading(false);
+                addMessage({
+                  id: assistantMsgId,
+                  role: 'assistant',
+                  content: accumulatedText,
+                  movies: capturedMovies,
+                  intent: capturedIntent,
+                  statType: capturedStatType,
+                  isStreaming: true,
+                  isStreamActive: true,
+                });
+              } else {
+                updateMessage(assistantMsgId, {
+                  content: accumulatedText,
+                });
+              }
+            },
+            onDone: () => {
+              setIsStreamLoading(false);
+              if (hasCreatedAssistantMessage && assistantMsgId) {
+                updateMessage(assistantMsgId, {
+                  isStreamActive: false,
+                });
+              } else {
+                addMessage({
+                  role: 'assistant',
+                  content:
+                    'Tôi đã tìm kiếm phim theo yêu cầu nhưng không nhận được nội dung phản hồi.',
+                  movies: capturedMovies,
+                  intent: capturedIntent,
+                  statType: capturedStatType,
+                  isStreaming: true,
+                  isStreamActive: false,
+                });
+              }
+            },
+            onError: (err) => {
+              setIsStreamLoading(false);
+              setLastFailedQuestion(question);
+              if (!hasCreatedAssistantMessage) {
+                addMessage({
+                  role: 'assistant',
+                  content:
+                    err.message ||
+                    'Không thể kết nối trợ lý AI, vui lòng thử lại sau.',
+                  isError: true,
+                  isStreaming: false,
+                  isStreamActive: false,
+                });
+              } else {
+                updateMessage(assistantMsgId, {
+                  isError: true,
+                  isStreaming: false,
+                  isStreamActive: false,
+                });
+              }
+            },
+          },
+          controller.signal,
+        );
+      } else {
+        const result = await askChat({ message: question, topK: 5 });
+        setIsStreamLoading(false);
+        addMessage({
+          role: 'assistant',
+          content:
+            result?.answer ||
+            'Tôi đã tìm thấy một số bộ phim phù hợp với yêu cầu của bạn.',
+          movies: result?.movies ?? [],
+          intent: result?.intent,
+          statType: result?.statType,
+          isStreaming: true,
+          isStreamActive: false,
+        });
+      }
     } catch (error) {
+      if (controller.signal.aborted) return;
+      setIsStreamLoading(false);
       const { message } = parseAxiosError(error);
       setLastFailedQuestion(question);
-      addMessage({
-        role: 'assistant',
-        content: message || 'Không thể kết nối trợ lý AI, vui lòng thử lại sau.',
-        isError: true,
-        isStreaming: false,
-      });
+      if (!hasCreatedAssistantMessage) {
+        addMessage({
+          role: 'assistant',
+          content:
+            message || 'Không thể kết nối trợ lý AI, vui lòng thử lại sau.',
+          isError: true,
+          isStreaming: false,
+          isStreamActive: false,
+        });
+      }
     }
   };
 
@@ -249,7 +394,7 @@ export function ChatWidget() {
             variant="ghost"
             size="icon"
             onClick={clearMessages}
-            disabled={isPending}
+            disabled={isGenerating}
             aria-label="Xóa lịch sử trò chuyện"
             className="text-primary-foreground hover:bg-primary-foreground/15 hover:text-primary-foreground size-11"
           >
@@ -323,6 +468,7 @@ export function ChatWidget() {
                   <StreamingMarkdown
                     content={msg.content}
                     isStreaming={msg.isStreaming}
+                    isStreamActive={msg.isStreamActive}
                     onComplete={() => {
                       if (msg.isStreaming) {
                         updateMessage(msg.id, { isStreaming: false });
@@ -347,7 +493,7 @@ export function ChatWidget() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      disabled={isPending}
+                      disabled={isGenerating}
                       onClick={() => sendQuestion(lastFailedQuestion)}
                       className="h-9 text-xs"
                     >
@@ -378,7 +524,7 @@ export function ChatWidget() {
           );
         })}
 
-        {isPending && (
+        {isGenerating && (
           <div className="flex items-start gap-2.5" aria-label="Đang tạo câu trả lời">
             <div className="bg-muted text-muted-foreground border-border flex size-8 shrink-0 items-center justify-center rounded-full border">
               <Sparkles className="size-4" aria-hidden="true" />
@@ -390,7 +536,7 @@ export function ChatWidget() {
           </div>
         )}
 
-        {messages.length <= 1 && !isPending && (
+        {messages.length <= 1 && !isGenerating && (
           <div className="pt-2">
             <p className="text-muted-foreground mb-2 text-xs font-medium">Gợi ý câu hỏi nhanh:</p>
             <div className="flex flex-wrap gap-1.5">
@@ -424,14 +570,14 @@ export function ChatWidget() {
             onChange={(e) => setInputValue(e.target.value)}
             placeholder="Nhập câu hỏi tìm phim..."
             aria-label="Nhập câu hỏi cho trợ lý phim"
-            disabled={isPending}
+            disabled={isGenerating}
             maxLength={1000}
             className="h-11 flex-1 text-sm"
           />
           <Button
             type="submit"
             size="icon"
-            disabled={isPending || !inputValue.trim()}
+            disabled={isGenerating || !inputValue.trim()}
             aria-label="Gửi tin nhắn"
             className="size-11 shrink-0"
           >

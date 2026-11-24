@@ -1,6 +1,8 @@
+import json
 from typing import Any
 
 from fastapi import APIRouter, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from api.routes.recommendations import _get_recommend_service
@@ -42,4 +44,29 @@ async def chat_rag(
     return success(
         data=data,
         message="Trả lời câu hỏi thành công",
+    )
+
+
+@router.post("/chat/stream")
+async def chat_rag_stream(
+    body: ChatRagRequest,
+    app_request: Request,
+) -> StreamingResponse:
+    """Endpoint Chatbot RAG Server-Sent Events (SSE) streaming theo thời gian thực."""
+    logger.info("Nhan yeu cau Chat RAG Stream voi topK=%s", body.topK)
+    recommend_svc = await _get_recommend_service(app_request)
+    chat_svc = ChatRagService(recommend_service=recommend_svc)
+
+    async def sse_generator():
+        async for item in chat_svc.ask_stream(message=body.message, top_k=body.topK):
+            yield f"data: {json.dumps(item, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        sse_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )

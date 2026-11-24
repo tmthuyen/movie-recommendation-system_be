@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import type { Response as ExpressResponse } from 'express';
 import { ChatController } from './chat.controller';
 import { IChatService } from './chat.service';
 
@@ -6,6 +7,7 @@ describe('ChatController', () => {
   let controller: ChatController;
   const chatServiceMock = {
     ask: jest.fn(),
+    askStream: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -45,5 +47,17 @@ describe('ChatController', () => {
       message: 'Phim người nhện',
       topK: 5,
     });
+  });
+
+  it('POST /chat/stream gọi chatService.askStream', async () => {
+    chatServiceMock.askStream.mockResolvedValueOnce(undefined);
+    const mockRes = {} as unknown as ExpressResponse;
+
+    await controller.askStream({ message: 'Phim hành động', topK: 5 }, mockRes);
+
+    expect(chatServiceMock.askStream).toHaveBeenCalledWith(
+      { message: 'Phim hành động', topK: 5 },
+      mockRes,
+    );
   });
 });

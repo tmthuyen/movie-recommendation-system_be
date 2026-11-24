@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
+from collections.abc import AsyncGenerator
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
+import httpx
 import requests
 from dotenv import dotenv_values
 
@@ -20,8 +23,8 @@ _ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 DEFAULT_GEMINI_MODELS = (
     "gemini-flash-lite-latest",
     "gemini-flash-latest",
-    "gemini-pro-latest",
-    "gemini-2.5-flash-lite",
+    "gemini-3.8-flash",
+    "gemini-3.5-flash-lite",
 )
 
 
@@ -137,6 +140,98 @@ class ChatRagService:
             "answer": answer,
             "movies": movies,
         }
+
+    async def ask_stream(
+        self, message: str, top_k: int = 5
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        """Điều phối yêu cầu người dùng theo 4 nhánh ý định và stream dữ liệu theo chuẩn SSE:
+
+        1. Phát event 'metadata' (chứa intent, statType, danh sách phim rút trích).
+        2. Phát chuỗi event 'token' (từng token / phần chữ từ Gemini hoặc hệ thống).
+        3. Phát event 'done' khi hoàn tất.
+        """
+        clean_query = (message or "").strip()
+        if not clean_query:
+            yield {
+                "event": "metadata",
+                "intent": ChatIntent.CHITCHAT.value,
+                "statType": None,
+                "movies": [],
+            }
+            yield {
+                "event": "token",
+                "text": "Xin chào! Bạn muốn tìm phim theo thể loại, cốt truyện hay cảm xúc nào hôm nay?",
+            }
+            yield {"event": "done"}
+            return
+
+        # 1. Phân loại ý định qua Intent Gatekeeper
+        intent, stat_type = await asyncio.to_thread(self.classify_intent, clean_query)
+        logger.info(
+            "Phan loai y dinh stream cho query '%s': intent=%s, stat_type=%s",
+            clean_query,
+            intent.value,
+            stat_type.value if stat_type else None,
+        )
+
+        # 2. Xử lý theo từng nhánh
+        if intent == ChatIntent.CHITCHAT:
+            answer = self._generate_chitchat_answer(clean_query)
+            yield {
+                "event": "metadata",
+                "intent": intent.value,
+                "statType": None,
+                "movies": [],
+            }
+            async for token in self._stream_text_chunks(answer):
+                yield {"event": "token", "text": token}
+            yield {"event": "done"}
+            return
+
+        if intent == ChatIntent.OUT_OF_SCOPE:
+            answer = self._generate_out_of_scope_answer(clean_query)
+            yield {
+                "event": "metadata",
+                "intent": intent.value,
+                "statType": None,
+                "movies": [],
+            }
+            async for token in self._stream_text_chunks(answer):
+                yield {"event": "token", "text": token}
+            yield {"event": "done"}
+            return
+
+        if intent == ChatIntent.SYSTEM_STATS:
+            # Nhánh thống kê: trả về intent và statType để Backend NestJS truy vấn DB quan hệ
+            yield {
+                "event": "metadata",
+                "intent": intent.value,
+                "statType": stat_type.value if stat_type else StatType.GENERAL.value,
+                "movies": [],
+            }
+            yield {"event": "done"}
+            return
+
+        # Nhánh MOVIE_SEARCH_RAG: Tìm phim trên Qdrant + Stream câu trả lời ngữ cảnh
+        movies = await self._retrieve_movies(clean_query, top_k=top_k)
+        yield {
+            "event": "metadata",
+            "intent": intent.value,
+            "statType": None,
+            "movies": movies,
+        }
+
+        has_streamed_any_token = False
+        async for token in self._stream_gemini_answer(clean_query, movies):
+            has_streamed_any_token = True
+            yield {"event": "token", "text": token}
+
+        if not has_streamed_any_token:
+            fallback = self._build_fallback_answer(clean_query, movies)
+            async for token in self._stream_text_chunks(fallback):
+                yield {"event": "token", "text": token}
+
+        yield {"event": "done"}
 
     def classify_intent(self, query: str) -> tuple[ChatIntent, StatType | None]:
         """Phân loại câu hỏi thành 1 trong 4 nhánh:
@@ -303,6 +398,10 @@ class ChatRagService:
             r"\b(gợi ý|tìm giúp|kiếm phim|muốn xem|recom|recommend|cần tìm|phim giống|tương tự phim)\b",
             q_lower,
         ):
+            return ChatIntent.MOVIE_SEARCH_RAG, None
+
+        # Nếu câu hỏi có ngữ cảnh điện ảnh rõ ràng (có từ 'phim', 'movie', 'chiếu rạp',...) và không thuộc các nhánh trên -> MOVIE_SEARCH_RAG tức thì (<1ms)
+        if has_movie_context:
             return ChatIntent.MOVIE_SEARCH_RAG, None
 
         # Trả về None để nhường quyền cho LLM phân loại ngữ nghĩa sâu nếu câu hỏi đổi cách diễn đạt
@@ -479,9 +578,11 @@ class ChatRagService:
         context_text = self._build_context_text(movies)
         prompt = (
             "Bạn là trợ lý tư vấn phim thông minh của hệ thống gợi ý phim Moviere.\n"
-            "Hãy trả lời câu hỏi của người dùng bằng tiếng Việt tự nhiên, ngắn gọn, thân thiện "
-            "và CHỈ dựa trên danh sách phim trong phần NGỮ CẢNH dưới đây.\n"
-            "Nếu có phim phù hợp, hãy giới thiệu tên phim, thể loại và lý do ngắn gọn vì sao phim phù hợp.\n\n"
+            "Hãy trả lời câu hỏi của người dùng bằng tiếng Việt tự nhiên, súc tích, thân thiện "
+            "dựa trên danh sách phim trong phần NGỮ CẢNH dưới đây.\n"
+            "Nếu có phim phù hợp, hãy giới thiệu các bộ phim tiêu biểu (tối đa 3-4 phim) kèm thể loại và lý do ngắn gọn vì sao phim phù hợp. "
+            "Mở đầu bằng lời văn tự nhiên (ví dụ: 'Dưới đây là các bộ phim phù hợp với yêu cầu của bạn:'), "
+            "tránh tự ý chốt số lượng cứng nhắc như 'gợi ý 2 bộ phim' để luôn đồng bộ với danh sách thẻ phim hiển thị bên dưới.\n\n"
             f"--- NGỮ CẢNH PHIM TỪ HỆ THỐNG ---\n{context_text}\n\n"
             f"--- CÂU HỎI CỦA NGƯỜI DÙNG ---\n{user_message}\n\n"
             "--- CÂU TRẢ LỜI ---"
@@ -521,6 +622,89 @@ class ChatRagService:
                 logger.warning("Loi khi goi Gemini model %s: %s", model_name, exc)
 
         return self._build_fallback_answer(user_message, movies)
+
+    async def _stream_gemini_answer(
+        self, user_message: str, movies: list[dict[str, Any]]
+    ) -> AsyncGenerator[str, None]:
+        """Gọi Gemini LLM stream endpoint (?alt=sse) để nhận token theo thời gian thực."""
+        if not self._gemini_api_key:
+            return
+
+        context_text = self._build_context_text(movies)
+        prompt = (
+            "Bạn là trợ lý tư vấn phim thông minh của hệ thống gợi ý phim Moviere.\n"
+            "Hãy trả lời câu hỏi của người dùng bằng tiếng Việt tự nhiên, súc tích, thân thiện "
+            "dựa trên danh sách phim trong phần NGỮ CẢNH dưới đây.\n"
+            "Nếu có phim phù hợp, hãy giới thiệu các bộ phim tiêu biểu (tối đa 3-4 phim) kèm thể loại và lý do ngắn gọn vì sao phim phù hợp. "
+            "Mở đầu bằng lời văn tự nhiên (ví dụ: 'Dưới đây là các bộ phim phù hợp với yêu cầu của bạn:'), "
+            "tránh tự ý chốt số lượng cứng nhắc như 'gợi ý 2 bộ phim' để luôn đồng bộ với danh sách thẻ phim hiển thị bên dưới.\n\n"
+            f"--- NGỮ CẢNH PHIM TỪ HỆ THỐNG ---\n{context_text}\n\n"
+            f"--- CÂU HỎI CỦA NGƯỜI DÙNG ---\n{user_message}\n\n"
+            "--- CÂU TRẢ LỜI ---"
+        )
+
+        candidate_models: list[str] = []
+        for m in (self._gemini_model, *DEFAULT_GEMINI_MODELS):
+            if m and m not in candidate_models:
+                candidate_models.append(m)
+
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 0.4,
+                "maxOutputTokens": 512,
+            },
+        }
+
+        for model_name in candidate_models:
+            url = (
+                f"https://generativelanguage.googleapis.com/v1beta/models/"
+                f"{model_name}:streamGenerateContent?alt=sse&key={self._gemini_api_key}"
+            )
+            try:
+                async with httpx.AsyncClient(timeout=25.0) as client:
+                    async with client.stream("POST", url, json=payload) as resp:
+                        if resp.status_code != 200:
+                            logger.warning(
+                                "Gemini streaming model %s tra status %s",
+                                model_name,
+                                resp.status_code,
+                            )
+                            continue
+
+                        async for line in resp.aiter_lines():
+                            line = line.strip()
+                            if not line.startswith("data:"):
+                                continue
+                            raw_data = line[len("data:") :].strip()
+                            if not raw_data:
+                                continue
+                            try:
+                                chunk = json.loads(raw_data)
+                                candidates = chunk.get("candidates") or []
+                                if not candidates:
+                                    continue
+                                parts = (
+                                    candidates[0].get("content", {}).get("parts") or []
+                                )
+                                for part in parts:
+                                    txt = part.get("text", "")
+                                    if txt:
+                                        yield txt
+                            except Exception:
+                                continue
+                        return
+            except Exception as exc:
+                logger.warning("Loi stream tu Gemini model %s: %s", model_name, exc)
+
+    @staticmethod
+    async def _stream_text_chunks(text: str) -> AsyncGenerator[str, None]:
+        """Tách chuỗi thành các chunk ngắn và yield bất đồng bộ."""
+        words = text.split(" ")
+        for i, word in enumerate(words):
+            chunk = word if i == len(words) - 1 else word + " "
+            yield chunk
+            await asyncio.sleep(0.015)
 
     @staticmethod
     def _build_fallback_answer(user_message: str, movies: list[dict[str, Any]]) -> str:

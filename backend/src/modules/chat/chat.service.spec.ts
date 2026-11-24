@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import type { Response as ExpressResponse } from 'express';
 import { DataSource } from 'typeorm';
 import { AppException } from '@/common/custom-exception/app-exception';
 import { MoviesService } from '@/modules/movies/movies.service';
@@ -245,5 +246,62 @@ describe('ChatService', () => {
     await expect(
       service.ask({ message: 'Phim hành động' }),
     ).rejects.toBeInstanceOf(AppException);
+  });
+
+  it('askStream ghi đúng các SSE event về res khi nhận dữ liệu từ ai-service', async () => {
+    const encoder = new TextEncoder();
+    const mockChunks = [
+      encoder.encode(
+        'data: {"event": "metadata", "intent": "CHITCHAT", "movies": []}\n\n',
+      ),
+      encoder.encode('data: {"event": "token", "text": "Xin chào! "}\n\n'),
+      encoder.encode('data: {"event": "done"}\n\n'),
+    ];
+
+    let chunkIdx = 0;
+    const mockReader = {
+      read: jest.fn().mockImplementation(() => {
+        if (chunkIdx < mockChunks.length) {
+          return Promise.resolve({
+            done: false,
+            value: mockChunks[chunkIdx++],
+          });
+        }
+        return Promise.resolve({ done: true, value: undefined });
+      }),
+    };
+
+    jest.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      body: {
+        getReader: () => mockReader,
+      },
+    } as unknown as globalThis.Response);
+
+    const written: string[] = [];
+    const mockSetHeader = jest.fn();
+    const mockEnd = jest.fn();
+    const mockRes = {
+      setHeader: mockSetHeader,
+      flushHeaders: jest.fn(),
+      on: jest.fn(),
+      write: jest.fn((str: string) => {
+        written.push(str);
+        return true;
+      }),
+      end: mockEnd,
+      writableEnded: false,
+    } as unknown as ExpressResponse;
+
+    await service.askStream({ message: 'Chào bạn', topK: 5 }, mockRes);
+
+    expect(mockSetHeader).toHaveBeenCalledWith(
+      'Content-Type',
+      'text/event-stream; charset=utf-8',
+    );
+    expect(written.some(w => w.includes('metadata'))).toBe(true);
+    expect(written.some(w => w.includes('token'))).toBe(true);
+    expect(mockEnd).toHaveBeenCalled();
   });
 });

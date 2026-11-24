@@ -25,4 +25,5 @@ export interface ChatMessage {
   createdAt: string;
   isError?: boolean;
   isStreaming?: boolean;
+  isStreamActive?: boolean;
 }

@@ -9,6 +9,7 @@ import { ChatWidget } from './chat-widget';
 vi.mock('@/apis/chat.api', () => ({
   chatApi: {
     ask: vi.fn(),
+    askStream: vi.fn(),
   },
 }));
 
@@ -29,6 +30,24 @@ describe('ChatWidget', () => {
     vi.clearAllMocks();
     useChatStore.getState().closeChat();
     useChatStore.getState().clearMessages();
+
+    // Mặc định askStream gọi ask để tương thích toàn bộ test cases cũ
+    vi.mocked(chatApi.askStream).mockImplementation(async (payload, handlers) => {
+      try {
+        const res = await chatApi.ask(payload);
+        handlers.onMetadata?.({
+          movies: res.result.movies,
+          intent: res.result.intent,
+          statType: res.result.statType,
+        });
+        handlers.onToken?.(res.result.answer);
+        handlers.onDone?.();
+      } catch (err) {
+        handlers.onError?.(
+          err instanceof Error ? err : new Error('Không thể kết nối trợ lý AI.'),
+        );
+      }
+    });
   });
 
   it('hiển thị nút tròn góc dưới phải và mở khung chat khi nhấn vào', () => {
@@ -178,6 +197,88 @@ describe('ChatWidget', () => {
           'Bộ phim khoa học viễn tưởng Interstellar của Christopher Nolan.',
         ),
       ).toBeInTheDocument();
+    });
+  });
+
+  it('hỗ trợ stream từng token qua SSE và hiển thị thẻ phim khi gõ chữ hoàn tất', async () => {
+    vi.mocked(chatApi.askStream).mockImplementationOnce(
+      async (_payload, handlers) => {
+        handlers.onMetadata?.({
+          movies: [
+            {
+              id: 550,
+              title: 'Fight Club',
+              titleVi: 'Sàn Đấu Sinh Tử',
+              releaseDate: '1999-10-15',
+              voteAverage: 8.4,
+              similarityScore: 0.95,
+              rank: 1,
+              createdAt: new Date('2026-01-01T00:00:00.000Z'),
+              createdBy: 'system',
+              updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+              updatedBy: 'system',
+            },
+          ],
+        });
+        handlers.onToken?.('Chào bạn! ');
+        handlers.onToken?.('Đây là phim kinh điển.');
+        handlers.onDone?.();
+      },
+    );
+
+    renderWithQuery(<ChatWidget />);
+    fireEvent.click(screen.getByRole('button', { name: 'Mở trợ lý phim AI' }));
+
+    const input = screen.getByPlaceholderText('Nhập câu hỏi tìm phim...');
+    fireEvent.change(input, { target: { value: 'Gợi ý phim tâm lý kinh điển' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi tin nhắn' }));
+
+    // Khi đang stream hoặc gõ, text bắt đầu xuất hiện
+    await waitFor(
+      () => {
+        expect(screen.getByText(/Chào bạn!/i)).toBeInTheDocument();
+      },
+      { timeout: 3000 },
+    );
+
+    // Bấm vào tin nhắn để skip typing nếu cần
+    const textElement = screen.getByText(/Chào bạn!/i);
+    fireEvent.click(textElement);
+
+    // Sau khi typing hoàn thành 100%, thẻ phim xuất hiện
+    await waitFor(
+      () => {
+        expect(
+          screen.getByRole('link', { name: 'Sàn Đấu Sinh Tử' }),
+        ).toHaveAttribute('href', '/movies/550');
+      },
+      { timeout: 4000 },
+    );
+  });
+
+  it('xử lý lỗi rate limit 429 khi stream và hiển thị nút Thử lại', async () => {
+    vi.mocked(chatApi.askStream).mockImplementationOnce(
+      async (_payload, handlers) => {
+        handlers.onError?.(
+          new Error(
+            'Bạn đang gửi tin nhắn quá nhanh. Vui lòng đợi 1 phút trước khi hỏi tiếp để tránh spam hệ thống.',
+          ),
+        );
+      },
+    );
+
+    renderWithQuery(<ChatWidget />);
+    fireEvent.click(screen.getByRole('button', { name: 'Mở trợ lý phim AI' }));
+
+    const input = screen.getByPlaceholderText('Nhập câu hỏi tìm phim...');
+    fireEvent.change(input, { target: { value: 'Spam liên tục' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi tin nhắn' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Bạn đang gửi tin nhắn quá nhanh/i),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
     });
   });
 });

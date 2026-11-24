@@ -1,4 +1,5 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import type { Response as ExpressResponse } from 'express';
 import { DataSource } from 'typeorm';
 import { plainToInstance } from 'class-transformer';
 import { z } from 'zod';
@@ -33,10 +34,35 @@ const ChatFromAiServiceResponseSchema = z.object({
   }),
 });
 
+interface ChatStreamMetadataEvent {
+  event: 'metadata';
+  intent?: string;
+  statType?: string;
+  movies?: Array<{
+    id: number;
+    score?: number;
+    similarityScore?: number;
+    rank?: number;
+  }>;
+}
+
+interface ChatStreamTokenEvent {
+  event: 'token';
+  text: string;
+}
+
+interface ChatStreamDoneEvent {
+  event: 'done';
+}
+
+type ChatStreamEvent =
+  ChatStreamMetadataEvent | ChatStreamTokenEvent | ChatStreamDoneEvent;
+
 export const IChatService = Symbol('IChatService');
 
 export interface IChatService {
   ask(dto: ChatRequestDto): Promise<ChatRagResponseDto>;
+  askStream(dto: ChatRequestDto, res: ExpressResponse): Promise<void>;
 }
 
 @Injectable()
@@ -134,6 +160,163 @@ export class ChatService implements IChatService {
       movies: hydratedMovies,
       intent: intent ?? 'MOVIE_SEARCH_RAG',
     };
+  }
+
+  async askStream(dto: ChatRequestDto, res: ExpressResponse): Promise<void> {
+    const cleanMessage = dto.message.trim();
+    const topK = dto.topK ?? DEFAULT_CHAT_TOP_K;
+    const startedAt = Date.now();
+
+    // Thiết lập header SSE
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+
+    const abortController = new AbortController();
+    res.on('close', () => {
+      abortController.abort();
+    });
+
+    let aiRes: globalThis.Response;
+    try {
+      aiRes = await fetch(`${AI_SERVICE_URL}/chat/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: cleanMessage,
+          topK,
+        }),
+        signal: abortController.signal,
+      });
+    } catch (error) {
+      if (abortController.signal.aborted) {
+        return;
+      }
+      this.logger.error(
+        `Gọi ai-service /chat/stream thất bại: ${Date.now() - startedAt}ms`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      res.write(
+        `data: ${JSON.stringify({
+          event: 'error',
+          message: 'Không thể kết nối trợ lý AI, vui lòng thử lại sau.',
+        })}\n\n`,
+      );
+      res.end();
+      return;
+    }
+
+    if (!aiRes.ok || !aiRes.body) {
+      this.logger.error(
+        `Gọi ai-service /chat/stream trả mã lỗi: status=${aiRes.status}, ${Date.now() - startedAt}ms`,
+      );
+      res.write(
+        `data: ${JSON.stringify({
+          event: 'error',
+          message: 'Trợ lý AI đang bận, vui lòng thử lại sau.',
+        })}\n\n`,
+      );
+      res.end();
+      return;
+    }
+
+    const reader = aiRes.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const block of lines) {
+          const trimmed = block.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const jsonStr = trimmed.slice(5).trim();
+          if (!jsonStr) continue;
+
+          try {
+            const parsed = JSON.parse(jsonStr) as ChatStreamEvent;
+
+            if (parsed.event === 'metadata') {
+              const { intent, statType, movies: aiMovies } = parsed;
+
+              if (intent === 'SYSTEM_STATS') {
+                const statsResult = await this.handleSystemStats(statType);
+                res.write(
+                  `data: ${JSON.stringify({
+                    event: 'metadata',
+                    intent: 'SYSTEM_STATS',
+                    statType,
+                    movies: statsResult.movies,
+                  })}\n\n`,
+                );
+
+                // Stream nội dung thống kê theo từng từ mượt mà
+                const words = statsResult.answer.split(' ');
+                for (let i = 0; i < words.length; i++) {
+                  const chunk =
+                    i === words.length - 1 ? words[i] : words[i] + ' ';
+                  res.write(
+                    `data: ${JSON.stringify({
+                      event: 'token',
+                      text: chunk,
+                    })}\n\n`,
+                  );
+                }
+                res.write(`data: ${JSON.stringify({ event: 'done' })}\n\n`);
+                res.end();
+                return;
+              }
+
+              if (intent === 'MOVIE_SEARCH_RAG') {
+                const hydratedMovies = await this.hydrateMovies(aiMovies || []);
+                res.write(
+                  `data: ${JSON.stringify({
+                    event: 'metadata',
+                    intent: 'MOVIE_SEARCH_RAG',
+                    movies: hydratedMovies,
+                  })}\n\n`,
+                );
+              } else {
+                res.write(
+                  `data: ${JSON.stringify({
+                    event: 'metadata',
+                    intent,
+                    movies: [],
+                  })}\n\n`,
+                );
+              }
+            } else if (parsed.event === 'token') {
+              res.write(
+                `data: ${JSON.stringify({
+                  event: 'token',
+                  text: parsed.text,
+                })}\n\n`,
+              );
+            } else if (parsed.event === 'done') {
+              res.write(`data: ${JSON.stringify({ event: 'done' })}\n\n`);
+            }
+          } catch (e) {
+            this.logger.warn(`Lỗi parse SSE chunk từ ai-service: ${e}`);
+          }
+        }
+      }
+    } catch (err) {
+      if (!abortController.signal.aborted) {
+        this.logger.error(`Lỗi đọc stream từ ai-service: ${err}`);
+      }
+    } finally {
+      if (!res.writableEnded) {
+        res.end();
+      }
+    }
   }
 
   /** Xử lý truy vấn thống kê dữ liệu thực tế từ hệ thống cơ sở dữ liệu. */
