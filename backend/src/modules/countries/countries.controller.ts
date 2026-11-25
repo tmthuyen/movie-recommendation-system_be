@@ -12,10 +12,10 @@ import {
 import { CountriesService } from './countries.service';
 import { CreateCountryDto } from './dto/create-country.dto';
 import { UpdateCountryDto } from './dto/update-country.dto';
+import { CountrySearchRequestDto } from './dto/country-search-request.dto';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { Roles } from '@/common/decorators/roles.decorator';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
-import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
 
 @ApiTags('Countries')
 @Controller('countries')
@@ -42,8 +42,11 @@ export class CountriesController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Lấy danh sách quốc gia (Public)' })
-  async findAll(@Query() searchRequest: BaseSearchRequest) {
+  @ApiOperation({
+    summary:
+      'Lấy danh sách quốc gia (Public; hasMovies=true chỉ trả country có phim)',
+  })
+  async findAll(@Query() searchRequest: CountrySearchRequestDto) {
     const { data, ...pagination } =
       await this.countriesService.findAll(searchRequest);
     return {

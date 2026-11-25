@@ -3,7 +3,6 @@
 import { ArrowRight, Play, Star, Eye, Crown, Calendar, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useMemo } from 'react';
 import { SectionHeader } from '@/components/common/SectionHeader';
 import { MovieRow, MovieRowSkeleton } from '@/components/movie/movie-row';
 import { Button } from '@/components/ui/button';
@@ -11,11 +10,11 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import useMovie from '@/hooks/tankstack/useMovie';
 import useGenre from '@/hooks/tankstack/useGenre';
-import useCountry from '@/hooks/tankstack/useCountry';
 import { getMovieTitle, getPosterUrl, getReleaseYear } from '@/shared/utils/movie';
 import { useAuthStore } from '@/stores/auth.store';
 import { EmptyState } from '@/components/common/EmptyState';
 import useRecommendation from '@/hooks/tankstack/useRecommendation';
+import type { Country } from '@/shared/types/movie.types';
 
 function HeroCarouselSkeleton() {
   return (
@@ -196,96 +195,60 @@ function GenreSection() {
   );
 }
 
-const countryCommon = [
-  { id: 409, viName: 'Phim Mỹ' },
-  // { id: 216, viName: 'Trung Quốc' },
-];
+const COUNTRY_MOVIE_LIMIT = 12;
+const US_COUNTRY: Pick<Country, 'id' | 'viName'> = {
+  id: 409,
+  viName: 'Phim Mỹ',
+};
 
-function CountrySection() {
-  const { data: countries, isLoading } = useCountry.useGetCountries();
-
-  const countryWithMovies = countryCommon.map((c) => {
-    const { data: movies, isLoading: isMoviesLoading } = useMovie.useSearchMovies({
-      page: 1,
-      limit: 12,
-      countryIds: [c.id],
-      sort: 'viewCount:DESC',
-    });
-
-    return {
-      ...c,
-      movies: movies?.movies ?? [],
-      isLoading: isMoviesLoading,
-    };
+function CountryMovieSection({ country }: { country: Pick<Country, 'id' | 'viName'> }) {
+  const { data: moviesData, isLoading } = useMovie.useSearchMovies({
+    page: 1,
+    limit: COUNTRY_MOVIE_LIMIT,
+    countryIds: [country.id],
+    sort: 'viewCount:DESC',
   });
 
   if (isLoading) {
     return (
-      <section className="flex flex-col gap-4 space-y-4">
-        {countryCommon.map((item) => (
-          <div key={item.id} className="">
-            <SectionHeader title={item.viName} />
-            <div className="flex gap-2">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-9 w-20 rounded-full" />
-              ))}
-            </div>
-          </div>
-        ))}
-      </section>
+      <div className="space-y-4">
+        <SectionHeader title={country.viName} />
+        <div className="flex flex-wrap gap-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-9 w-20 rounded-full" />
+          ))}
+        </div>
+      </div>
     );
   }
 
-  if (!countries || countries.length === 0) {
+  const movies = moviesData?.movies ?? [];
+  if (movies.length === 0) {
     return null;
   }
 
   return (
+    <div className="space-y-4">
+      <SectionHeader
+        title={country.viName}
+        action={
+          <Link
+            href={`/movies?countryIds=${country.id}`}
+            className="text-primary inline-flex shrink-0 items-center gap-1 text-sm font-medium hover:underline"
+          >
+            Xem tất cả <ArrowRight className="size-4" />
+          </Link>
+        }
+      />
+      <MovieRow movies={movies} max={COUNTRY_MOVIE_LIMIT} />
+    </div>
+  );
+}
+
+function CountrySection() {
+  return (
     <section className="flex flex-col gap-4 space-y-4">
-      {countryWithMovies.map((item) => {
-        if (item.isLoading) {
-          return (
-            <div key={item.id} className="space-y-4">
-              <SectionHeader title={item.viName} />
-              <div className="flex flex-wrap gap-2">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <Skeleton key={i} className="h-9 w-20 rounded-full" />
-                ))}
-              </div>
-            </div>
-          );
-        }
-
-        // check movies
-        if (!item.movies || item.movies.length === 0) {
-          return (
-            <div key={item.id} className="space-y-4">
-              <SectionHeader title={item.viName} />
-              <EmptyState
-                title="Chưa có phim nào"
-                description="Hệ thống chưa có phim để hiển thị."
-              />
-            </div>
-          );
-        }
-
-        return (
-          <div key={item.id} className="space-y-4">
-            <SectionHeader
-              title={item.viName}
-              action={
-                <Link
-                  href={`/movies?countryIds=${item.id}`}
-                  className="text-primary inline-flex shrink-0 items-center gap-1 text-sm font-medium hover:underline"
-                >
-                  Xem tất cả <ArrowRight className="size-4" />
-                </Link>
-              }
-            />
-            <MovieRow movies={item.movies.slice(0, 12)} max={12} />
-          </div>
-        );
-      })}
+      <CountryMovieSection country={US_COUNTRY} />
     </section>
   );
 }

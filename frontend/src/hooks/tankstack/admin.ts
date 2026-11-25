@@ -30,7 +30,7 @@ export const adminCountries = createCrudHooks<
   { viName: string; enName: string; code: string; region: string }
 >({
   domain: 'admin-countries',
-  list: countryApi.getAll,
+  list: ({ page, limit }) => countryApi.getAll({ page, limit: limit }),
   create: countryApi.create,
   update: (id, data) => countryApi.update(id, data),
   remove: countryApi.remove,

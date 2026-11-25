@@ -3,11 +3,14 @@ import { Country } from '@/shared/types/movie.types';
 import { withListParams, type SearchListParams } from '@/shared/utils/list-params';
 import axiosClient from '../lib/axiosClient';
 
-/** Query params `GET /countries` — khớp `BaseSearchRequest`. */
-export type CountryQuery = SearchListParams;
+/** Query params `GET /countries` — khớp `BaseSearchRequest` + cờ public. */
+export type CountryQuery = SearchListParams & {
+  /** `true`: chỉ trả country có ít nhất một phim trong `movie_countries`. */
+  hasMovies?: boolean;
+};
 
 export const countryApi = {
-  /** Danh sách quốc gia (public). */
+  /** Danh sách quốc gia. Admin không truyền `hasMovies` để lấy full. */
   getAll: async (params: CountryQuery = {}): Promise<ApiPaginatedResponse<Country[]>> => {
     const { data } = await axiosClient.get(withListParams('/countries', params));
     return data;

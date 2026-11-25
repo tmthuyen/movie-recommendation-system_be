@@ -330,7 +330,7 @@ NEXT_PUBLIC_TINYMCE_API_KEY=<TinyMCE key>
 | GET | `/api/movies/:id` | Public | path `id` (**number**, bigint) | `movie` (kèm relations) |
 | POST | `/api/movies/:id/view` | Optional JWT | — | `{ viewCount, score, interaction: 'created'\|'updated'\|'none' }` — luôn tăng `viewCount`; user đăng nhập mới tạo/tăng `click`; WS `movie-{id}-viewCount` |
 | GET | `/api/genres` | Public | `{ page, limit, keyword }` | `genre[]` + `pagination` |
-| GET | `/api/countries` | Public | `{ page, limit, keyword }` | `country[]` + `pagination` |
+| GET | `/api/countries` | Public | `{ page, limit, keyword, hasMovies? }` | `country[]` + `pagination`, sort `viName ASC`; admin không truyền `hasMovies` để lấy full; trang user gửi `hasMovies=true` để chỉ lấy country có phim |
 | GET | `/api/peoples` | Public | `{ page, limit, keyword }` | `people[]` + `pagination` |
 | POST | `/api/ratings` | JWT | `{ rating: 0–5, movieId }` | `rating` — WS `movie-{id}-rating` (kèm `movieStats`) |
 | GET | `/api/ratings/movie/:movieId` | Public | `{ page, limit }` | `rating[]` (join user) + `pagination` |
@@ -430,7 +430,7 @@ Chi tiết quy tắc: [`FRONTEND_RULES.md` §6](./FRONTEND_RULES.md#6-motion--an
 - ⚠ **Route handler `src/app/api/*` chỉ là stub** trả JSON rỗng — không phải nơi gọi backend.
 - ✅ **`movie-filter.store.ts`** đã có state filter (keyword, genreId, countryId, sort, page, limit) + `setFilter/setPage/resetFilter`.
 - ⚠ **`GET /api/movies` chỉ hỗ trợ `page/limit/keyword`** — trang `/movies` vẫn lọc/sắp xếp **client-side** trên trang hiện tại (`movie-list.tsx:64-89`). Backend đã có `GET /api/movies/search` (filter `genreIds/countryIds/releaseYearFrom/releaseYearTo`, sort server-side) nhưng **trang danh sách chưa chuyển sang dùng** — cần xác minh/đề xuất khi muốn filter toàn bộ dữ liệu.
-- ⚠ **Lệch shape quốc gia**: backend `MovieResponseDto` trả `countries: Country[]` (`movie-response.dto.ts:82-84`), nhưng type FE `Movie` khai báo `country?: Country` (`movie.types.ts:61`) và `movie-list.tsx:80` / `movie-detail.tsx:82-85` đọc `movie.country` → filter/hiển thị quốc gia có thể không chạy đúng; **cần xác minh runtime** và thống nhất `countries` vs `country`.
+- ⚠ **Lệch shape quốc gia**: backend `MovieResponseDto` trả `countries: Country[]` (`movie-response.dto.ts:82-84`), nhưng type FE `Movie` khai báo `country?: Country` (`movie.types.ts:61`) và `movie-list.tsx:80` / `movie-detail.tsx:82-85` đọc `movie.country` → filter/hiển thị quốc gia có thể không chạy đúng; **cần xác minh runtime** và thống nhất `countries` vs `country`. Dashboard admin đã chuyển sang dùng `movie.countries` (V41); dropdown lọc phim dùng `GET /api/countries?hasMovies=true`, còn trang chủ user giữ đúng 1 section Mỹ (US) cố định.
 - ✅ **Recommendation**: `similar` + `similar/cursor` (`SimilarMoviesInfinite`), `for-you/cursor` (`/for-you` + tab "Dành cho bạn" ở chi tiết phim, ẩn với guest), `semantic-search/cursor` và `search-rerank/cursor` (`/search`) đã nối UI; tất cả dùng `useInfiniteQuery` + sentinel IntersectionObserver và xử lý `409 CURSOR_EXPIRED` (reset query + toast). Chế độ lexical của `/search` gọi `lexical-search/cursor` — backend chưa có endpoint nên UI báo "chưa khả dụng" khi 404.
 - ⚠ **`RolesGuard` không được enforce** ở hầu hết module backend — không dựa vào backend để bảo vệ trang admin; dùng `RequireRole(['ADMIN'])` ở client và cẩn trọng khi ẩn/hiện hành động quản trị.
 - ⚠ **`id` của movie/genre/country/people là number** (bigint) — route động `/movies/[id]` nhận string, phải parse sang number trước khi gọi API.

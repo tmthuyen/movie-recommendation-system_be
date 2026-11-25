@@ -38,7 +38,7 @@ export class SearchEventService {
     const { userId, keywordRaw = '', mode, resultCount } = input;
     if (!userId || resultCount <= 0) return;
 
-    const correlationId = input.correlationId || idUtil.generateUUID();
+    const correlationId = input.correlationId;
     const payload: UserSearchPayloadType = {
       userId,
       mode,

@@ -77,9 +77,25 @@ export function buildGenreDistribution(movies: Movie[], limit = 10) {
   return toTopWithOther(counts, limit);
 }
 
-/** Phân bố phim theo quốc gia. */
+/** Phân bố phim theo quốc gia (quan hệ N-N: một phim có thể thuộc nhiều quốc gia). */
 export function buildCountryDistribution(movies: Movie[], limit = 10) {
-  const counts = countValues(movies, (movie) => movie.country?.viName ?? UNKNOWN_LABEL);
+  const counts = new Map<string, number>();
+
+  movies.forEach((movie) => {
+    const countryNames = movie.countries
+      ?.map((country) => country.viName)
+      .filter((name): name is string => Boolean(name));
+
+    if (!countryNames?.length) {
+      counts.set(UNKNOWN_LABEL, (counts.get(UNKNOWN_LABEL) ?? 0) + 1);
+      return;
+    }
+
+    countryNames.forEach((name) => {
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    });
+  });
+
   return toTopWithOther(counts, limit);
 }
 

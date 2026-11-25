@@ -7,8 +7,8 @@ import {
 } from '@nestjs/common';
 import { CreateCountryDto } from './dto/create-country.dto';
 import { UpdateCountryDto } from './dto/update-country.dto';
+import { CountrySearchRequestDto } from './dto/country-search-request.dto';
 import { ICountryRepository } from './countries.repository';
-import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
 import {
   CACHE_SERVICE,
   type ICacheService,
@@ -46,11 +46,13 @@ export class CountriesService {
     return country;
   }
 
-  async findAll(request: BaseSearchRequest) {
+  async findAll(request: CountrySearchRequestDto) {
     const { page = 1, limit = 10, keyword, filters = [], sort } = request;
 
-    // Chỉ cache truy vấn mặc định; filter/sort tuỳ biến đọc thẳng DB.
+    // Chỉ cache truy vấn mặc định; filter/sort tuỳ biến hoặc `hasMovies`
+    // (phụ thuộc quan hệ movie-country) đọc thẳng DB để tránh stale.
     const isDefaultQuery =
+      !request.hasMovies &&
       (filters?.length ?? 0) === 0 &&
       (!sort || sort.join(',') === 'viName:ASC');
 

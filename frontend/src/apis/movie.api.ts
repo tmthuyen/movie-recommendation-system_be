@@ -25,7 +25,7 @@ export interface MovieAdminInput {
   status?: string;
   video?: boolean;
   genreIds?: number[];
-  countryId?: number;
+  countryIds?: number[];
   peopleIds?: number[];
 }
 

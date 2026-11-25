@@ -373,6 +373,11 @@ export class FetchMovieService implements IFetchMovieService {
   ): Promise<Country[]> {
     if (!originCountry) return [];
     const country = await this.countryRepository.findByCode(originCountry);
+    if (!country) {
+      this.logger.warn(
+        `Không tìm thấy country code=${originCountry} trong database`,
+      );
+    }
     return country ? [country] : [];
   }
 

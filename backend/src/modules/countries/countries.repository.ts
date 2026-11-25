@@ -2,14 +2,14 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Country } from './entities/country.entity';
-import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
+import { CountrySearchRequestDto } from './dto/country-search-request.dto';
 import { PaginatedResult } from '@/common/dtos/paginated-result.interface';
 import { SearchUtils } from '@/common/utils/search.util';
 
 export const ICountryRepository = Symbol('ICountryRepository');
 
 export interface ICountryRepository {
-  findAll(request: BaseSearchRequest): Promise<PaginatedResult<Country>>;
+  findAll(request: CountrySearchRequestDto): Promise<PaginatedResult<Country>>;
   findById(id: number): Promise<Country | null>;
   findByCode(code: string): Promise<Country | null>;
   create(country: Partial<Country>): Promise<Country>;
@@ -40,11 +40,19 @@ export class CountryRepository implements ICountryRepository {
     private readonly repo: Repository<Country>,
   ) {}
 
-  async findAll(request: BaseSearchRequest): Promise<PaginatedResult<Country>> {
+  async findAll(
+    request: CountrySearchRequestDto,
+  ): Promise<PaginatedResult<Country>> {
     const { page = 1, limit = 10, keyword, filters = [], sort } = request;
     const skip = (page - 1) * limit;
 
     const queryBuilder = this.repo.createQueryBuilder('country');
+
+    if (request.hasMovies) {
+      queryBuilder.andWhere(
+        'EXISTS (SELECT 1 FROM movie_countries mc WHERE mc.country_id = country.id)',
+      );
+    }
 
     const trimmedKeyword = keyword?.trim();
     if (trimmedKeyword) {

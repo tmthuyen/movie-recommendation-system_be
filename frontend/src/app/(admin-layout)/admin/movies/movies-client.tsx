@@ -25,7 +25,7 @@ type ViewMode = 'table' | 'grid';
 
 const EMPTY_MOVIES: Movie[] = [];
 const DEFAULT_SORTING = [{ id: 'releaseDate', desc: true }];
-const OPTION_LIST_PARAMS = { page: 1, limit: 100 };
+const OPTION_LIST_PARAMS = { page: 1, limit: 500 };
 
 function optionalText(value: unknown): string | undefined {
   if (value === null || value === undefined) return undefined;
@@ -82,7 +82,7 @@ export function MoviesClient() {
     () =>
       (countriesQuery.data?.items ?? []).map((country) => ({
         value: String(country.id),
-        label: country.viName,
+        label: country.viName || country.enName,
       })),
     [countriesQuery.data],
   );
@@ -180,11 +180,12 @@ export function MoviesClient() {
         wide: true,
       },
       {
-        name: 'countryId',
+        name: 'countryIds',
         label: 'Quốc gia',
-        type: 'select',
+        type: 'multiselect',
         options: countryOptions,
         placeholder: 'Chọn quốc gia',
+        wide: true,
       },
       {
         name: 'peopleIds',
@@ -243,7 +244,7 @@ export function MoviesClient() {
         overview: '',
         overviewVi: '',
         genreIds: [],
-        countryId: '',
+        countryIds: [],
         peopleIds: [],
       };
     }
@@ -263,7 +264,7 @@ export function MoviesClient() {
       overview: editing.overview ?? '',
       overviewVi: editing.overviewVi ?? '',
       genreIds: (editing.genres ?? []).map((genre) => String(genre.id)),
-      countryId: countryId !== undefined ? String(countryId) : '',
+      countryIds: (editing.countries ?? []).map((country) => String(country.id)),
       peopleIds: [],
     };
   }, [editing]);
@@ -281,7 +282,7 @@ export function MoviesClient() {
       overview: optionalText(values.overview),
       overviewVi: optionalText(values.overviewVi),
       genreIds: toNumberArray(values.genreIds),
-      countryId: values.countryId ? Number(values.countryId) : undefined,
+      countryIds: toNumberArray(values.countryIds),
       peopleIds: toNumberArray(values.peopleIds),
     };
 

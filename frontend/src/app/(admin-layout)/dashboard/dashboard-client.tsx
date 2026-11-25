@@ -159,7 +159,11 @@ function HorizontalBarChart({
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 8 }}>
-        <XAxis type="number" allowDecimals={colorMode === 'single' ? true : false} tick={{ fontSize: 12 }} />
+        <XAxis
+          type="number"
+          allowDecimals={colorMode === 'single' ? true : false}
+          tick={{ fontSize: 12 }}
+        />
         <YAxis
           type="category"
           dataKey="label"
@@ -175,7 +179,9 @@ function HorizontalBarChart({
           {data.map((entry, index) => (
             <Cell
               key={`${entry.label}-${index}`}
-              fill={colorMode === 'multi' ? CHART_COLORS[index % CHART_COLORS.length] : CHART_COLORS[1]}
+              fill={
+                colorMode === 'multi' ? CHART_COLORS[index % CHART_COLORS.length] : CHART_COLORS[1]
+              }
             />
           ))}
         </Bar>
@@ -242,7 +248,7 @@ export function DashboardClient() {
         header: 'Loại',
         className: 'w-28',
         render: (item) => (
-          <Badge variant="outline" className="border-transparent bg-muted text-muted-foreground">
+          <Badge variant="outline" className="bg-muted text-muted-foreground border-transparent">
             {item.kindLabel}
           </Badge>
         ),
@@ -265,30 +271,30 @@ export function DashboardClient() {
   /** Xuất CSV (client-side) — gồm chỉ số tổng + các bảng xếp hạng đang hiển thị. */
   const handleExport = () => {
     const rows: Array<Record<string, string | number>> = [
-      { 'Nhóm': 'Chỉ số', 'Tên': 'Tổng số phim', 'Giá trị': totals.movies },
-      { 'Nhóm': 'Chỉ số', 'Tên': 'Người dùng', 'Giá trị': totals.users },
-      { 'Nhóm': 'Chỉ số', 'Tên': 'Thể loại', 'Giá trị': totals.genres },
-      { 'Nhóm': 'Chỉ số', 'Tên': 'Tương tác', 'Giá trị': totals.interactions },
-      { 'Nhóm': 'Chỉ số', 'Tên': 'Đánh giá', 'Giá trị': totals.ratings },
-      { 'Nhóm': 'Chỉ số', 'Tên': 'Bình luận', 'Giá trị': totals.comments },
+      { Nhóm: 'Chỉ số', Tên: 'Tổng số phim', 'Giá trị': totals.movies },
+      { Nhóm: 'Chỉ số', Tên: 'Người dùng', 'Giá trị': totals.users },
+      { Nhóm: 'Chỉ số', Tên: 'Thể loại', 'Giá trị': totals.genres },
+      { Nhóm: 'Chỉ số', Tên: 'Tương tác', 'Giá trị': totals.interactions },
+      { Nhóm: 'Chỉ số', Tên: 'Đánh giá', 'Giá trị': totals.ratings },
+      { Nhóm: 'Chỉ số', Tên: 'Bình luận', 'Giá trị': totals.comments },
       ...topViewed.map((item) => ({
-        'Nhóm': 'Top phim xem nhiều',
-        'Tên': item.label,
+        Nhóm: 'Top phim xem nhiều',
+        Tên: item.label,
         'Giá trị': item.value,
       })),
       ...topActiveUsers.map((item) => ({
-        'Nhóm': 'Top người dùng hoạt động',
-        'Tên': item.label,
+        Nhóm: 'Top người dùng hoạt động',
+        Tên: item.label,
         'Giá trị': item.value,
       })),
       ...genreDistribution.map((item) => ({
-        'Nhóm': 'Phim theo thể loại',
-        'Tên': item.label,
+        Nhóm: 'Phim theo thể loại',
+        Tên: item.label,
         'Giá trị': item.value,
       })),
       ...countryDistribution.map((item) => ({
-        'Nhóm': 'Phim theo quốc gia',
-        'Tên': item.label,
+        Nhóm: 'Phim theo quốc gia',
+        Tên: item.label,
         'Giá trị': item.value,
       })),
     ];
@@ -488,6 +494,7 @@ export function DashboardClient() {
           isError={isError}
           isEmpty={countryDistribution.length === 0}
           emptyTitle="Chưa có dữ liệu quốc gia"
+          hint="Một phim thuộc nhiều quốc gia sẽ được đếm ở từng quốc gia"
         >
           <HorizontalBarChart data={countryDistribution} valueName="Số phim" />
         </ChartFrame>

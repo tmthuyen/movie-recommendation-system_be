@@ -61,6 +61,20 @@ describe('CountriesService', () => {
     await expect(service.findAll({ page: 1, limit: 10 })).resolves.toBe(page);
   });
 
+  it('findAll truyền hasMovies xuống repository', async () => {
+    const page = { data: [{ id: 1, viName: 'Việt Nam' }], page: 1 };
+    repo.findAll.mockResolvedValue(page);
+
+    await expect(
+      service.findAll({ page: 1, limit: 10, hasMovies: true }),
+    ).resolves.toBe(page);
+    expect(repo.findAll).toHaveBeenCalledWith({
+      page: 1,
+      limit: 10,
+      hasMovies: true,
+    });
+  });
+
   it('findOne ném NotFoundException khi không tồn tại', async () => {
     repo.findById.mockResolvedValue(null);
 

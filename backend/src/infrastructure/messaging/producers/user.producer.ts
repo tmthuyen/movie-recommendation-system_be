@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { EventPublisherService } from '@/infrastructure/messaging/event-publisher.service';
 import {
   MESSAGE_BUS_CONFIG,
@@ -12,9 +12,11 @@ import {
   UserSearchPayloadType,
   UserUpdatedPayloadType,
 } from '@/infrastructure/messaging/event.types';
+import { AppException } from '@/common/custom-exception/app-exception';
 
 @Injectable()
 export class UserProducer {
+  private readonly logger = new Logger(UserProducer.name);
   constructor(private readonly eventPublisher: EventPublisherService) {}
 
   // ========================
@@ -64,6 +66,24 @@ export class UserProducer {
     payload: UserSearchPayloadType,
     correlationId?: string,
   ): Promise<void> {
+    if (!payload.userId) {
+      throw new AppException(
+        400,
+        'userId không được để trống',
+        'userId không được để trống',
+        'INVALID_USER_ID',
+      );
+    }
+
+    if (!payload.keywordRaw || !payload.keywordNormalized) {
+      this.logger.warn(
+        `keywordRaw hoặc keywordNormalized trống, không phát event user.search: ${JSON.stringify(
+          payload,
+        )}`,
+      );
+      return Promise.resolve();
+    }
+
     return this.eventPublisher.publish(
       MESSAGE_BUS_CONFIG.USER_EXCHANGE,
       MESSAGE_EVENTS.USER_SEARCH,

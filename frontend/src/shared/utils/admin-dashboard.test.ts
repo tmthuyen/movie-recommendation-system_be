@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Comment } from '@/shared/types/comment.types';
 import { Interaction } from '@/shared/types/interaction.types';
-import { Movie } from '@/shared/types/movie.types';
+import { Country, Movie } from '@/shared/types/movie.types';
 import { Rating } from '@/shared/types/rating.types';
 import {
   OTHER_LABEL,
@@ -146,15 +146,21 @@ describe('buildGenreDistribution', () => {
 });
 
 describe('buildCountryDistribution', () => {
-  it('gán nhãn "Chưa xác định" cho phim thiếu quốc gia', () => {
+  const country = (viName: string) => ({ viName }) as Country;
+
+  it('đếm mỗi quốc gia trong quan hệ N-N và gán nhãn cho phim thiếu quốc gia', () => {
     const movies = [
-      movie({ id: 1, country: { viName: 'Việt Nam' } as Movie['country'] }),
-      movie({ id: 2, country: { viName: 'Việt Nam' } as Movie['country'] }),
+      movie({
+        id: 1,
+        countries: [country('Việt Nam'), country('Hàn Quốc')],
+      }),
+      movie({ id: 2, countries: [country('Việt Nam')] }),
       movie({ id: 3 }),
     ];
 
     expect(buildCountryDistribution(movies)).toEqual([
       { label: 'Việt Nam', value: 2 },
+      { label: 'Hàn Quốc', value: 1 },
       { label: UNKNOWN_LABEL, value: 1 },
     ]);
   });

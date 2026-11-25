@@ -59,6 +59,7 @@ Bảng theo dõi danh sách plan trong `docs/plans/`. Dùng để xác định `
 | 38 | V38_ai_search-history-user-vectors.md | ai | search-history-user-vectors | Search payload có userId do service publish; user_genre_vectors collection mới; Redis chỉ 2 key genre; ai-service cache ma trận RAM/file; cả click/view/like/rating/comment publish `user.genre.update` với score gốc + `type`, ai-service tự chuẩn hoá `[-1,1]` (chỉ rating âm); tắt profile/CBF, profile event cập nhật long/short-term; đặc tả vector user + trọng số ForYou ở mục 7 | ✅ Hoàn thành (2026-11-21) |
 | 39 | V39_backend_fetch_more_movie.md | backend + frontend | fetch-more-movie | Admin discover phim mới từ TMDB, load option genre/language có cache ngắn hạn, xem candidate chưa trùng DB, import thủ công hoặc mode tự động, UI admin trong `/admin/movies` với genre select đơn; không lấy cast/crew/metrics | 🟡 Phase 1–7 code/gate xong (gồm Swagger); smoke option chờ token thật; QA browser chưa chạy |
 | 40 | V40_cicd_centralized-logging-observability.md | cicd | centralized-logging-observability | Chuẩn hoá log backend/ai-service ra stdout JSON, Loki + Promtail local, Prometheus targets, linh hoạt AWS Fargate/VPS | 🟡 Đang triển khai |
+| 41 | V41_backend_country-movie-filter-dashboard.md | backend + frontend | country-movie-filter-dashboard | `GET /countries?hasMovies=true` cho user (sort viName, admin giữ full); dashboard admin đọc đúng movie.countries | ✅ Hoàn thành 2026-11-25 (BE 454 test, FE 287 test, build/type-check pass) |
 
 ## Cách xác định index khi tạo plan mới
 
@@ -76,8 +77,8 @@ Bảng theo dõi danh sách plan trong `docs/plans/`. Dùng để xác định `
 
 ## Cách tính next_index
 
-`max(index) = 40` → `next_index = 41`
+`max(index) = 41` → `next_index = 42`
 
 ## next_index
 
-`41`
+`42`

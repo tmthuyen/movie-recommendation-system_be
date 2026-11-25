@@ -1,12 +1,12 @@
 import { HttpStatus } from '@nestjs/common';
 
 export class AppException extends Error {
-  statusCode: HttpStatus;
+  statusCode: HttpStatus | number;
   detailMessage: string;
   errorCode?: string;
 
   constructor(
-    statusCode: HttpStatus,
+    statusCode: HttpStatus | number,
     message: string,
     detailMessage: string,
     errorCode: string,

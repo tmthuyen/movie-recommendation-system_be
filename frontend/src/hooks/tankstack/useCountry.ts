@@ -1,16 +1,26 @@
 import { countryApi } from '@/apis/country.api';
 import { useQuery } from '@tanstack/react-query';
 
-// get all (public)
+/**
+ * `GET /countries` cho các trang public/user.
+ *
+ * Luôn gửi `hasMovies=true` để backend chỉ trả country có ít nhất một phim
+ * trong `movie_countries`; danh sách đã sort `viName ASC` + `id ASC`.
+ * Admin dùng API/hook riêng, không truyền cờ này nên vẫn lấy full.
+ */
 export function useGetCountries(
   staleTime: number = 1000 * 60 * 5,
   gcTime: number = 1000 * 60 * 10,
 ) {
   return useQuery({
-    queryKey: ['countries'],
+    queryKey: ['countries', 'has-movies'],
     queryFn: async () => {
-      // Lấy tối đa để đủ cho dropdown lọc (backend mặc định limit = 10).
-      const response = await countryApi.getAll({ page: 1, limit: 500 });
+      // Lấy tối đa để đủ cho dropdown lọc và section theo country.
+      const response = await countryApi.getAll({
+        page: 1,
+        limit: 500,
+        hasMovies: true,
+      });
       return response.result;
     },
     staleTime: staleTime, // 5 minutes

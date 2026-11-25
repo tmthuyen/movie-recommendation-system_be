@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import type { AdminTableFeatures } from '@/components/admin/data-view/features';
 import type { AdminColumnDef } from '@/components/admin/data-view/types';
 import type { Movie } from '@/shared/types/movie.types';
-import { formatShortDate } from '@/shared/utils/formatting';
+import dateTimeUtils, { formatShortDate } from '@/shared/utils/formatting';
 import { getPosterUrl } from './movie-poster';
 
 const helper = createColumnHelper<AdminTableFeatures, Movie>();
@@ -204,6 +204,13 @@ export function createMovieColumns({
         ) : (
           emptyCell()
         );
+      },
+    }),
+    helper.accessor('createdAt', {
+      header: 'Ngày tạo',
+      cell: ({ getValue }) => {
+        const createdAt = getValue();
+        return createdAt ? <div>{dateTimeUtils.formatDateTime(createdAt)}</div> : emptyCell();
       },
     }),
     helper.display({

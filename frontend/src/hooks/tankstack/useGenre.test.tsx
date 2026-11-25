@@ -104,7 +104,7 @@ describe('useGenre', () => {
 });
 
 describe('useCountry', () => {
-  it('useGetCountries luôn lấy limit 500 cho dropdown lọc', async () => {
+  it('useGetCountries lấy country có phim, limit 500 cho trang user', async () => {
     vi.mocked(countryApi.getAll).mockResolvedValue({
       success: true,
       statusCode: 200,
@@ -116,7 +116,11 @@ describe('useCountry', () => {
     const { result } = renderHook(() => useGetCountries(), { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(countryApi.getAll).toHaveBeenCalledWith({ page: 1, limit: 500 });
+    expect(countryApi.getAll).toHaveBeenCalledWith({
+      page: 1,
+      limit: 500,
+      hasMovies: true,
+    });
     expect(result.current.data).toEqual([{ id: 1, viName: 'Việt Nam' }]);
   });
 });

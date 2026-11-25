@@ -110,7 +110,7 @@ export class MovieRepository implements IMovieRepository {
     queryBuilder.skip(skip).take(limit);
 
     const sql = queryBuilder.getSql();
-    this.logger.debug(`findAll SQL: ${sql}`, 'MovieRepository');
+    // this.logger.debug(`findAll SQL: ${sql}`, 'MovieRepository');
 
     const [data, total] = await queryBuilder.getManyAndCount();
 

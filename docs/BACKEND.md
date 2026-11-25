@@ -297,7 +297,7 @@ JWT payload: `{sub, fullName, email, scopes, sessionId, jti}`. `JwtStrategy` ki�
 | Method | Path | Auth | Request | Response `result` |
 |---|---|---|---|---|
 | POST | `/api/countries` | JWT + `@Roles` **⚠** | `CreateCountryDto` `{viName, enName, code, region}` (`subregion` có ở entity nhưng không có trong DTO tạo) | country (`201`) |
-| GET | `/api/countries` | Public | `BaseSearchRequest` `{page, limit, keyword?, filters?, sort?}` — filter/sort: `id,viName,enName,code,region,subregion,createdAt,updatedAt`; mặc định `viName ASC` + `id ASC` | country[] + `pagination` |
+| GET | `/api/countries` | Public | `CountrySearchRequestDto` `{page, limit, keyword?, filters?, sort?, hasMovies?}` — filter/sort: `id,viName,enName,code,region,subregion,createdAt,updatedAt`; mặc định `viName ASC` + `id ASC`; `hasMovies=true` chỉ trả country có ít nhất một phim (`EXISTS movie_countries`), dùng cho trang user | country[] + `pagination` |
 | GET | `/api/countries/:id` | Public | — | country |
 | PATCH | `/api/countries/:id` | JWT + `@Roles` **⚠** | Partial | country |
 | DELETE | `/api/countries/:id` | JWT + `@Roles` **⚠** | — | country |

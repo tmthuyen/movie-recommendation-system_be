@@ -87,6 +87,24 @@ describe('countryApi', () => {
     expect(result.result[0]).toMatchObject({ viName: 'Việt Nam' });
   });
 
+  it('getAll GET /countries?hasMovies=true cho trang user', async () => {
+    mocks.client.get.mockResolvedValue(envelope([{ id: 1, viName: 'Việt Nam' }]));
+
+    const result = await countryApi.getAll({
+      page: 1,
+      limit: 500,
+      hasMovies: true,
+    });
+
+    expect(mocks.client.get).toHaveBeenCalledWith(
+      `/countries?${qs.stringify(
+        { page: 1, limit: 500, hasMovies: true },
+        { arrayFormat: 'repeat' },
+      )}`,
+    );
+    expect(result.result[0]).toMatchObject({ viName: 'Việt Nam' });
+  });
+
   it('getById GET /countries/:id', async () => {
     mocks.client.get.mockResolvedValue(envelope({ id: 1 }));
 
