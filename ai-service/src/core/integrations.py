@@ -614,11 +614,7 @@ class VectorStore:
 
         # check collection_name
         if not collection_name:
-            raise CustomException(
-                "collection_name is required for upsert",
-                status_code=400,
-                error_code="BAD_REQUEST",
-            )
+            collection_name = self.settings.vector_collection
 
         if id is not None:
             await self.backend.upsert(

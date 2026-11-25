@@ -135,6 +135,7 @@ class MovieVectorService:
             id=None,
             vector=vector,
             payload=payload,
+            collection_name=self.collection_name,
         )
         logger.info(
             "upsert_movie_vector: movieId=%s text_len=%d", movie_id, len(search_text)

@@ -176,7 +176,6 @@ async def lifespan(application: FastAPI):
     # khởi tạo các event handler
     event_handler = MovieEventHandler(
         movie_vector_service=movie_vector_service,
-        recommend_service=recommend_svc,
         bm25_index=bm25_index,
     )
     interaction_handler = InteractionEventHandler(

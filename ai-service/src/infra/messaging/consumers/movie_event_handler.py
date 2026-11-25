@@ -1,28 +1,29 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from api.schemas import MovieCreated, MovieDeleted, MovieUpdated
 from services.movie_vector_service import MovieVectorService
 from utils.logger import setup_logger
+
+if TYPE_CHECKING:
+    from services.bm25_index_service import Bm25IndexService
 
 
 class MovieEventHandler:
     """
     Dispatcher xu ly cac su kien phim tu RabbitMQ.
 
-    Nhan event_type va payload thu o, validate schema,
-    roi goi RecommendService de thao tac ChromaDB tuong ung.
+    Nhan event_type va payload, validate schema,
+    roi goi truc tiep MovieVectorService va Bm25IndexService tuong ung.
     """
 
     def __init__(
         self,
         movie_vector_service: MovieVectorService,
-        recommend_service: Any | None = None,
-        bm25_index: Any | None = None,
+        bm25_index: Bm25IndexService | None = None,
     ) -> None:
         self._movie_vector_service = movie_vector_service
-        self._recommend_service = recommend_service
         self._bm25 = bm25_index
         self._logger = setup_logger(name="FastAPI-Recommendations")
 
@@ -47,7 +48,7 @@ class MovieEventHandler:
 
         # Chỉ created/updated cần title & overview; movie.deleted chỉ có movieId.
         if event_type in ("movie.created", "movie.updated"):
-            if payload.get("title", "") == "" or payload.get("overview", "") == "":
+            if not payload.get("title") or not payload.get("overview"):
                 raise Exception("Title or overview is required")
 
         if event_type == "movie.created":
@@ -65,14 +66,9 @@ class MovieEventHandler:
         """Validate schema MovieCreated -> upsert vector vao Qdrant/Chroma va Qdrant BM25."""
         event = MovieCreated(**payload)
         movie_data = self._to_movie_data(event)
-        if self._recommend_service is not None and hasattr(
-            self._recommend_service, "upsert_movie_vector"
-        ):
-            await self._recommend_service.upsert_movie_vector(movie_data)
-        else:
-            await self._movie_vector_service.upsert_movie_vector(movie_data)
-            if self._bm25 is not None:
-                await self._bm25.upsert_movie_async(movie_data)
+        await self._movie_vector_service.upsert_movie_vector(movie_data)
+        if self._bm25 is not None:
+            await self._bm25.upsert_movie_async(movie_data)
         self._logger.info(
             "movie.created: upsert vector thanh cong movieId=%s", event.movieId
         )
@@ -81,14 +77,9 @@ class MovieEventHandler:
         """Validate schema MovieUpdated -> cap nhat (ghi de) vector trong Qdrant/Chroma va Qdrant BM25."""
         event = MovieUpdated(**payload)
         movie_data = self._to_movie_data(event)
-        if self._recommend_service is not None and hasattr(
-            self._recommend_service, "upsert_movie_vector"
-        ):
-            await self._recommend_service.upsert_movie_vector(movie_data)
-        else:
-            await self._movie_vector_service.upsert_movie_vector(movie_data)
-            if self._bm25 is not None:
-                await self._bm25.upsert_movie_async(movie_data)
+        await self._movie_vector_service.upsert_movie_vector(movie_data)
+        if self._bm25 is not None:
+            await self._bm25.upsert_movie_async(movie_data)
         self._logger.info(
             "movie.updated: upsert vector thanh cong movieId=%s", event.movieId
         )
@@ -96,19 +87,13 @@ class MovieEventHandler:
     async def _on_movie_deleted(self, payload: dict[str, Any]) -> None:
         """Validate schema MovieDeleted -> xoa vector khoi Qdrant/Chroma va Qdrant BM25."""
         event = MovieDeleted(**payload)
-        deleted = False
-        if self._recommend_service is not None and hasattr(
-            self._recommend_service, "delete_movie_vector"
-        ):
-            deleted = await self._recommend_service.delete_movie_vector(event.movieId)
-        else:
-            deleted_vs = await self._movie_vector_service.delete_movie_vector(
-                event.movieId
-            )
-            deleted_bm25 = False
-            if self._bm25 is not None:
-                deleted_bm25 = await self._bm25.delete_movie_async(event.movieId)
-            deleted = bool(deleted_vs or deleted_bm25)
+        deleted_vs = await self._movie_vector_service.delete_movie_vector(
+            event.movieId
+        )
+        deleted_bm25 = False
+        if self._bm25 is not None:
+            deleted_bm25 = await self._bm25.delete_movie_async(event.movieId)
+        deleted = bool(deleted_vs or deleted_bm25)
         if deleted:
             self._logger.info(
                 "movie.deleted: xoa vector thanh cong movieId=%s", event.movieId
@@ -122,12 +107,16 @@ class MovieEventHandler:
 
     @staticmethod
     def _to_movie_data(event: MovieCreated) -> dict[str, Any]:
-        """Chuyen doi MovieCreated/MovieUpdated Pydantic model sang dict cho RecommendService."""
+        """Chuyen doi MovieCreated/MovieUpdated Pydantic model sang dict cho MovieVectorService."""
+        title = event.title or event.titleVi or ""
+        title_vi = event.titleVi if event.titleVi is not None else title
+        overview = event.overview or event.overviewVi or ""
+        overview_vi = event.overviewVi if event.overviewVi is not None else overview
         return {
             "movieId": event.movieId,
-            "title": event.title,
-            "title_vi": event.titleVi,
-            "overview": event.overview,
-            "overview_vi": event.overviewVi,
-            "genres": event.genres,
+            "title": title,
+            "title_vi": title_vi,
+            "overview": overview,
+            "overview_vi": overview_vi,
+            "genres": event.genres or [],
         }
