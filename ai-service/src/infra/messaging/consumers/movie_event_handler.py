@@ -87,9 +87,7 @@ class MovieEventHandler:
     async def _on_movie_deleted(self, payload: dict[str, Any]) -> None:
         """Validate schema MovieDeleted -> xoa vector khoi Qdrant/Chroma va Qdrant BM25."""
         event = MovieDeleted(**payload)
-        deleted_vs = await self._movie_vector_service.delete_movie_vector(
-            event.movieId
-        )
+        deleted_vs = await self._movie_vector_service.delete_movie_vector(event.movieId)
         deleted_bm25 = False
         if self._bm25 is not None:
             deleted_bm25 = await self._bm25.delete_movie_async(event.movieId)

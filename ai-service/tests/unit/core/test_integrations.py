@@ -14,6 +14,7 @@ import pytest
 from src.core.integrations import (
     ChromaVectorBackend,
     MemoryVectorBackend,
+    QdrantVectorBackend,
     TrainingScheduler,
     VectorStore,
 )
@@ -315,3 +316,103 @@ class TestTrainingScheduler:
 
     def test_close_without_scheduler_is_noop(self):
         run(self.make_scheduler().close())
+
+
+class TestQdrantVectorBackend:
+    def make_backend(self):
+        settings = SimpleNamespace(
+            vector_db_url="http://localhost:6333",
+            vector_db_api_key=None,
+            vector_collection="movies",
+            vector_size=384,
+            vector_user_long_term_collection="user_long_term_vectors",
+            vector_user_short_term_collection="user_short_term_vectors",
+            vector_user_search_collection="user_search_vectors",
+            vector_user_profile_collection="user_profile_vectors",
+        )
+        return QdrantVectorBackend(settings)
+
+    def test_normalize_point_id(self):
+        backend = self.make_backend()
+        assert backend._normalize_point_id(123) == 123
+        assert backend._normalize_point_id("456") == 456
+        uuid_str = "c9bf9e57-1685-4c89-bafb-ff5af830be8a"
+        assert backend._normalize_point_id(uuid_str) == uuid_str
+        mock_str = "user-test-1"
+        norm = backend._normalize_point_id(mock_str)
+        assert isinstance(norm, str)
+        assert len(norm) == 36  # valid uuid string
+
+    def test_start_precreates_collections(self):
+        backend = self.make_backend()
+        mock_client = AsyncMock()
+        mock_client.collection_exists.return_value = False
+        backend.client = mock_client
+
+        run(backend._ensure_collection("user_long_term_vectors"))
+        mock_client.create_collection.assert_called_once()
+        assert "user_long_term_vectors" in backend._known_collections
+
+        # Calling again uses cached set, does not call create_collection again
+        run(backend._ensure_collection("user_long_term_vectors"))
+        assert mock_client.create_collection.call_count == 1
+
+    def test_upsert_with_uuid_creates_collection_if_needed(self):
+        backend = self.make_backend()
+        mock_client = AsyncMock()
+        mock_client.collection_exists.return_value = False
+        backend.client = mock_client
+
+        uuid_str = "c9bf9e57-1685-4c89-bafb-ff5af830be8a"
+        run(
+            backend.upsert(
+                id=uuid_str,
+                vector=[0.1] * 384,
+                payload={"user_id": uuid_str},
+                collection_name="user_long_term_vectors",
+            )
+        )
+
+        mock_client.create_collection.assert_called_once()
+        mock_client.upsert.assert_called_once()
+        call_kwargs = mock_client.upsert.call_args[1]
+        assert call_kwargs["collection_name"] == "user_long_term_vectors"
+        points = call_kwargs["points"]
+        assert len(points) == 1
+        assert points[0].id == uuid_str
+
+    def test_get_by_id_with_uuid(self):
+        backend = self.make_backend()
+        mock_client = AsyncMock()
+        mock_client.collection_exists.return_value = True
+        uuid_str = "c9bf9e57-1685-4c89-bafb-ff5af830be8a"
+        rec = SimpleNamespace(
+            id=uuid_str, vector=[0.5] * 384, payload={"user_id": uuid_str}
+        )
+        mock_client.retrieve.return_value = [rec]
+        backend.client = mock_client
+
+        result = run(
+            backend.get_by_id(
+                id=uuid_str,
+                collection_name="user_long_term_vectors",
+            )
+        )
+        assert result is not None
+        assert result["id"] == uuid_str
+        assert result["payload"]["user_id"] == uuid_str
+
+    def test_query_supports_uuid_results(self):
+        backend = self.make_backend()
+        mock_client = AsyncMock()
+        mock_client.collection_exists.return_value = True
+        uuid_str = "c9bf9e57-1685-4c89-bafb-ff5af830be8a"
+        hit1 = SimpleNamespace(id=198082, score=0.9, payload={"title": "Avengers"})
+        hit2 = SimpleNamespace(id=uuid_str, score=0.8, payload={"user_id": uuid_str})
+        mock_client.query_points.return_value = SimpleNamespace(points=[hit1, hit2])
+        backend.client = mock_client
+
+        results = run(backend.query([0.1] * 384, top_k=2))
+        assert len(results) == 2
+        assert results[0]["id"] == 198082
+        assert results[1]["id"] == uuid_str

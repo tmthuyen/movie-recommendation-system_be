@@ -1,5 +1,6 @@
 import asyncio
 import json
+import uuid
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -33,7 +34,7 @@ class VectorBackend(ABC):
     @abstractmethod
     async def upsert(
         self,
-        id: int,
+        id: int | str,
         vector: list[float],
         payload: dict[str, Any],
         collection_name: str | None = None,
@@ -53,7 +54,7 @@ class VectorBackend(ABC):
 
     @abstractmethod
     async def get_by_id(
-        self, id: int, collection_name: str | None = None
+        self, id: int | str, collection_name: str | None = None
     ) -> dict | None:
 
         if not id or not collection_name:
@@ -99,14 +100,14 @@ class MemoryVectorBackend(VectorBackend):
     """In-memory brute-force cosine — for dev / unit tests only."""
 
     def __init__(self) -> None:
-        self.items: dict[int, dict[str, Any]] = {}
+        self.items: dict[int | str, dict[str, Any]] = {}
 
     async def start(self) -> None:
         return None
 
     async def upsert(
         self,
-        id: int,
+        id: int | str,
         vector: list[float],
         payload: dict[str, Any],
         collection_name: str | None = None,
@@ -150,7 +151,7 @@ class MemoryVectorBackend(VectorBackend):
 
     async def get_by_id(
         self,
-        id: int,
+        id: int | str,
         collection_name: str | None = None,
     ) -> dict | None:
 
@@ -221,33 +222,84 @@ class QdrantVectorBackend(VectorBackend):
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.client: AsyncQdrantClient | None = None
+        self._known_collections: set[str] = set()
+
+    @staticmethod
+    def _normalize_point_id(raw_id: str | int) -> int | str:
+        if isinstance(raw_id, int):
+            return raw_id
+        s = str(raw_id).strip()
+        if s.isdigit():
+            return int(s)
+        try:
+            return str(uuid.UUID(s))
+        except ValueError:
+            return str(uuid.uuid5(uuid.NAMESPACE_DNS, s))
+
+    async def _ensure_collection(self, collection_name: str) -> None:
+        if self.client is None:
+            raise RuntimeError("Qdrant vector backend has not started")
+        if collection_name in self._known_collections:
+            return
+        if not await self.client.collection_exists(collection_name):
+            await self.client.create_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(
+                    size=self.settings.vector_size,
+                    distance=Distance.COSINE,
+                ),
+            )
+        self._known_collections.add(collection_name)
 
     async def start(self) -> None:
         self.client = AsyncQdrantClient(
             url=self.settings.vector_db_url,
             api_key=self.settings.vector_db_api_key,
         )
-        if not await self.client.collection_exists(self.settings.vector_collection):
-            await self.client.create_collection(
-                collection_name=self.settings.vector_collection,
-                vectors_config=VectorParams(
-                    size=self.settings.vector_size,
-                    distance=Distance.COSINE,
-                ),
-            )
+        self._known_collections.clear()
+        collections_to_init = [
+            self.settings.vector_collection,
+            getattr(
+                self.settings,
+                "vector_user_long_term_collection",
+                "user_long_term_vectors",
+            ),
+            getattr(
+                self.settings,
+                "vector_user_short_term_collection",
+                "user_short_term_vectors",
+            ),
+            getattr(
+                self.settings, "vector_user_search_collection", "user_search_vectors"
+            ),
+            getattr(
+                self.settings, "vector_user_profile_collection", "user_profile_vectors"
+            ),
+        ]
+        for coll in collections_to_init:
+            if coll:
+                try:
+                    await self._ensure_collection(coll)
+                except Exception as exc:
+                    logger.warning(
+                        "Could not initialize Qdrant collection %s: %s", coll, exc
+                    )
 
     async def upsert(
         self,
-        id: int,
+        id: int | str,
         vector: list[float],
         payload: dict[str, Any],
         collection_name: str | None = None,
     ) -> None:
         if self.client is None:
             raise RuntimeError("Qdrant vector backend has not started")
+        coll = collection_name or self.settings.vector_collection
+        await self._ensure_collection(coll)
+        point_id = self._normalize_point_id(id)
         await self.client.upsert(
-            collection_name=collection_name or self.settings.vector_collection,
-            points=[PointStruct(id=id, vector=vector, payload=payload)],
+            collection_name=coll,
+            points=[PointStruct(id=point_id, vector=vector, payload=payload)],
         )
 
     async def query(
@@ -260,6 +312,8 @@ class QdrantVectorBackend(VectorBackend):
         if self.client is None:
             raise RuntimeError("Qdrant vector backend has not started")
         coll = collection_name or self.settings.vector_collection
+        if not await self.client.collection_exists(coll):
+            return []
         if hasattr(self.client, "query_points"):
             res = await self.client.query_points(
                 collection_name=coll,
@@ -274,12 +328,16 @@ class QdrantVectorBackend(VectorBackend):
                 limit=top_k,
             )
         return [
-            {"id": int(h.id), "score": float(h.score), "payload": h.payload or {}}
+            {
+                "id": int(h.id) if str(h.id).isdigit() else str(h.id),
+                "score": float(h.score),
+                "payload": h.payload or {},
+            }
             for h in hits
         ]
 
     async def get_by_id(
-        self, id: int, collection_name: str | None = None
+        self, id: int | str, collection_name: str | None = None
     ) -> dict[str, Any] | None:
         if not id:
             raise CustomException(
@@ -290,10 +348,13 @@ class QdrantVectorBackend(VectorBackend):
         if self.client is None:
             raise RuntimeError("Qdrant vector backend has not started")
         coll = collection_name or self.settings.vector_collection
+        if not await self.client.collection_exists(coll):
+            return None
+        point_id = self._normalize_point_id(id)
         try:
             records = await self.client.retrieve(
                 collection_name=coll,
-                ids=[int(id)],
+                ids=[point_id],
                 with_vectors=True,
                 with_payload=True,
             )
@@ -303,8 +364,9 @@ class QdrantVectorBackend(VectorBackend):
             vec = rec.vector
             if isinstance(vec, dict):
                 vec = list(vec.values())[0]
+            rec_id = int(rec.id) if str(rec.id).isdigit() else str(rec.id)
             return {
-                "id": int(rec.id),
+                "id": rec_id,
                 "vector": vec,
                 "payload": rec.payload or {},
             }
@@ -321,9 +383,16 @@ class QdrantVectorBackend(VectorBackend):
         """
         if self.client is None:
             raise RuntimeError("Qdrant vector backend has not started")
+        if not collection_name:
+            raise ValueError("collection_name is required for delete_by_id")
+        if not id:
+            raise ValueError("id is required for delete_by_id")
+        if not await self.client.collection_exists(collection_name):
+            return
+        point_id = self._normalize_point_id(id)
         await self.client.delete(
             collection_name=collection_name,
-            points_selector=PointIdsList(points=[int(id)]),
+            points_selector=PointIdsList(points=[point_id]),
         )
 
     async def count(self, collection_name: str | None = None) -> int:
