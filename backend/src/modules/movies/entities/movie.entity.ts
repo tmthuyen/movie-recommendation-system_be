@@ -28,17 +28,16 @@ export class Movie extends BaseAuditEntity {
   })
   id: number;
 
-  @Index('IDX_MOVIES_TMDB_ID')
-  @Column({ name: 'tmdb_id', type: 'bigint', nullable: true, unique: true })
+  @Index('IDX_MOVIES_TMDB_ID', { unique: true })
+  @Column({ name: 'tmdb_id', type: 'bigint', nullable: true })
   tmdbId: number;
 
-  @Index('IDX_MOVIES_IMDB_ID')
+  @Index('IDX_MOVIES_IMDB_ID', { unique: true })
   @Column({
     name: 'imdb_id',
     type: 'varchar',
     length: 50,
     nullable: true,
-    unique: true,
   })
   imdbId: string;
 

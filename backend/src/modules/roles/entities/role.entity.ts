@@ -14,7 +14,7 @@ export class Role extends BaseAuditEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Index({ unique: true })
+  @Index('UQ_ROLES_CODE', { unique: true })
   @Column({ nullable: false })
   code: string;
 

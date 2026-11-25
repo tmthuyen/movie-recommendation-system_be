@@ -14,7 +14,7 @@ export class Country extends BaseAuditEntity {
   id: number;
 
   // idx_country_vi_name
-  @Index('idx_country_vi_name')
+  @Index('IDX_COUNTRIES_VI_NAME', { unique: true })
   @Column({
     name: 'vi_name',
     type: 'varchar',
@@ -22,21 +22,20 @@ export class Country extends BaseAuditEntity {
   })
   viName: string;
 
+  @Index('IDX_COUNTRIES_EN_NAME', { unique: true })
   @Column({
     name: 'en_name',
     type: 'varchar',
     length: 50,
-    unique: true,
     nullable: true,
   })
   enName: string;
 
-  @Index('idx_country_code', { unique: true })
+  @Index('IDX_COUNTRIES_CODE', { unique: true })
   @Column({
     name: 'code',
     type: 'varchar',
     length: 2,
-    unique: true,
     nullable: true,
   })
   code: string;

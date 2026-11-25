@@ -28,7 +28,7 @@ export const InteractionScoreMap: Record<InteractionType, number> = {
 };
 @Entity('interactions')
 // Không unique: một user có thể comment/click/rating nhiều lần cho cùng một phim.
-@Index(['user', 'movie', 'type'])
+@Index('IDX_INTERACTIONS_USER_MOVIE_TYPE', ['user', 'movie', 'type'])
 export class Interaction extends BaseAuditEntity {
   @PrimaryGeneratedColumn()
   id: number;

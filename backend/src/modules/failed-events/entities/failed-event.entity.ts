@@ -1,5 +1,5 @@
 import { BaseAuditEntity } from '@/common/audits/baseaudit.entity';
-import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
 
 export enum FailedEventStatus {
   PENDING = 'PENDING',
@@ -21,7 +21,8 @@ export class FailedEvent extends BaseAuditEntity {
   @Column({ name: 'routing_key', type: 'varchar' })
   routingKey: string;
 
-  @Column({ name: 'event_id', type: 'varchar', nullable: true, unique: true })
+  @Index('UQ_FAILED_EVENTS_EVENT_ID', { unique: true })
+  @Column({ name: 'event_id', type: 'varchar', nullable: true })
   eventId?: string;
 
   @Column({ name: 'event_type', type: 'varchar', nullable: true })

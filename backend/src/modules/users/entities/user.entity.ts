@@ -28,7 +28,7 @@ export class User extends BaseAuditEntity {
   @Column({ type: 'varchar', default: UserStatus.UNVERIFIED })
   status: UserStatus;
 
-  @Index({ unique: true })
+  @Index('UQ_USERS_EMAIL', { unique: true })
   @Column({ nullable: false })
   email: string;
 
