@@ -42,12 +42,12 @@ COPY . .
 ARG TORCH_VERSION=2.6.0
 
 RUN pip install --no-cache-dir .
-    # "torch==${TORCH_VERSION}+cpu" \
-    # --index-url https://download.pytorch.org/whl/cpu
+    "torch==${TORCH_VERSION}+cpu" \
+    --index-url https://download.pytorch.org/whl/cpu
 
-# RUN printf 'torch==%s+cpu\n' "$TORCH_VERSION" > /tmp/torch-constraints.txt \
-#     && pip install --no-cache-dir \
-#        -c /tmp/torch-constraints.txt .
+RUN printf 'torch==%s+cpu\n' "$TORCH_VERSION" > /tmp/torch-constraints.txt \
+    && pip install --no-cache-dir \
+       -c /tmp/torch-constraints.txt .
 
 
 # =========================================================

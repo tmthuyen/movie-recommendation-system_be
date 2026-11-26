@@ -191,7 +191,7 @@ Base URL: `http://localhost:8082/api/recommendations`. Swagger: `/docs`.
 
 - **HTTP**: backend `GET /api/recommendations/similar/:id` gọi `${AI_SERVICE_URL}/similar/{id}?topK=...` (mặc định `http://localhost:8082/api/recommendations`) rồi map với DB (`backend/src/modules/recommendations/recommendations.service.ts:15-16,41-107`).
 - **RabbitMQ**: backend publish `movie.created/updated/deleted`, `user.*`, `interaction.event`, `training.batch`; ai-service consume và cập nhật vector/ALS (xem `docs/BACKEND.md` mục RabbitMQ).
-- **Kong**: `/api/recommendations` → `:8082` (`gateway/kong.yml`); frontend hiện gọi thẳng backend `:8081`.
+- **Nginx**: `/api/recommendations` → `:8082` (`gateway/nginx.conf`); route cũ `/api/ai` được rewrite sang `/api/recommendations`. `gateway/kong.yml` vẫn giữ để rollback. Frontend hiện gọi thẳng backend `:8081`.
 
 ## 9. Chạy service & kiểm thử
 

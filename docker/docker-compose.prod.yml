@@ -92,16 +92,29 @@ services:
           memory: 2G
 
   # ==========================================================
-  # KONG - PUBLIC ENTRY POINT
+  # NGINX - PUBLIC ENTRY POINT (Kong giữ lại để rollback)
   # ==========================================================
-  kong:
+  # kong:
+  #   restart: always
+  #   ports:
+  #     - '80:8000'
+  #   security_opt:
+  #     - no-new-privileges:true
+
+  nginx:
     restart: always
 
     ports:
-      - '80:8000'
+      - '80:80'
 
-    # HTTPS cần bổ sung chứng chỉ TLS và listener 8443
+    # HTTPS cần bổ sung chứng chỉ TLS và listener 443
     # trước khi mở cổng 443.
+
+    security_opt:
+      - no-new-privileges:true
+
+  nginx-exporter:
+    restart: always
 
     security_opt:
       - no-new-privileges:true

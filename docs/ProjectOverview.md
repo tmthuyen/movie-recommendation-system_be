@@ -69,7 +69,7 @@ Hai service backend ↔ ai-service **giao tiếp bất đồng bộ qua RabbitMQ
 - ⚠ Trang `/movies` vẫn lọc/sắp xếp client-side; lệch shape `country` vs `countries`. Chi tiết: [FRONTEND.md](./FRONTEND.md).
 
 **Hạ tầng**
-- PostgreSQL (TypeORM `synchronize: true`, không migration), Redis, RabbitMQ (DLQ), ChromaDB, Kong gateway (`:8000`), Prometheus/OpenTelemetry. Dockerfile ai-service chưa dùng được.
+- PostgreSQL (TypeORM `synchronize: true`, không migration), Redis, RabbitMQ (DLQ), ChromaDB, Nginx gateway (`:8000` dev / `:80` prod; giữ `gateway/kong.yml` để rollback), Prometheus/OpenTelemetry. Dockerfile ai-service chưa dùng được.
 
 ---
 
@@ -121,7 +121,7 @@ Hai service backend ↔ ai-service **giao tiếp bất đồng bộ qua RabbitMQ
 | RabbitMQ      | ✅ dùng         | `movie.exchange`, `user.exchange`, `interaction.exchange` + DLQ |
 | Redis         | ✅ dùng         | backend: session/blacklist/rate-limit; ai-service: `RedisStore` |
 | Vector DB     | ✅ ChromaDB     | ai-service persist `./data/chroma_db`; hỗ trợ qdrant/redis/memory qua env |
-| Gateway       | ✅ Kong `:8000` | `/api` → `:8081`, `/api/recommendations` → `:8082`   |
+| Gateway       | ✅ Nginx `:8000` / `:80` | `/api` → `:8081`, `/api/recommendations` → `:8082`, `/socket.io/` → `:8081` |
 | Observability | ✅ OpenTelemetry + Prometheus | backend Winston/OTel; ai-service `/api/metrics` |
 | Docker        | ⚠ một phần      | `ai-service/Dockerfile` đang comment toàn bộ — chưa build được |
 
@@ -171,7 +171,7 @@ Mapping bắt buộc: `movies.tmdb_id` (backend) ↔ `tmdb_id` (ai-service index
   - DLQ: `recommendation.queue.dlq` + `interaction.queue.dlq` → backend consumer ghi bảng `failed_events`.
 - **HTTP**:
   - backend → ai-service: `GET {AI_SERVICE_URL}/similar/:id` (module recommendations; mặc định `http://localhost:8082/api/recommendations`).
-  - frontend → backend: `http://localhost:8081/api` (axiosClient), chưa dùng Kong gateway.
+  - frontend → backend: `http://localhost:8081/api` (axiosClient), chưa dùng Nginx gateway.
 - Chi tiết đầy đủ ở [BACKEND.md](./BACKEND.md) mục RabbitMQ và [AI-SERVICE.md](./AI-SERVICE.md).
 
 ---

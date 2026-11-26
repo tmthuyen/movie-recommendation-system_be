@@ -511,12 +511,12 @@ Redis keys liên quan: `auth:session:{sessionId}`, `auth:blacklist:{jti}`, `auth
 |---|---|---|
 | backend (NestJS) | **8081** | REST `/api/*`, Swagger `/api`, Socket.IO cùng cổng |
 | ai-service (FastAPI) | **8082** | prefix `/api/recommendations` |
-| Kong gateway | **8000** | `/api` → 8081, `/api/recommendations` → 8082 (`gateway/kong.yml`) |
+| Nginx gateway | **8000** (dev) / **80** (prod) | `/api` → 8081, `/api/recommendations` → 8082, `/socket.io/` → 8081 (`gateway/nginx.conf`) |
 | frontend (Next.js) | **3002** | `NEXT_PUBLIC_API_BASE_URL=http://localhost:8081/api` (gọi thẳng backend) |
 | PostgreSQL / Redis / RabbitMQ | env (`DB_PORT`, `REDIS_PORT`, 5672) | |
 
 **CORS backend** (`main.ts`): origin = `FRONTEND_ORIGINS` (env, phân tách `,` — gồm `http://localhost:3000`, `3001`, `3002`), `credentials: true`.
-**CORS Kong**: origins `http://localhost:5173`, `http://localhost:3002`, methods GET/POST/PUT/PATCH/DELETE/OPTIONS, header `Authorization`, `credentials: true`, gắn `X-Request-ID` (uuid).
+**CORS Nginx**: origins `http://localhost:5173`, `http://localhost:3002`, methods GET/POST/PUT/PATCH/DELETE/OPTIONS, headers `Accept, Authorization, Content-Type, X-Request-ID, traceparent, tracestate`, `credentials: true`, expose và gắn `X-Request-ID` (`$request_id`). `gateway/kong.yml` vẫn giữ để rollback.
 
 **Rate limit** (Redis, `RateLimitGuard` đăng ký global qua `APP_GUARD`):
 
@@ -528,7 +528,7 @@ Redis keys liên quan: `auth:session:{sessionId}`, `auth:blacklist:{jti}`, `auth
 | `POST /api/auth/refresh` | token-bucket / IP | 10/phút |
 | `POST /api/auth/forgot-password` | sliding-window | 3/phút |
 | `POST /api/auth/reset-password` | sliding-window | 3/phút |
-| Kong (toàn cục gateway) | local policy | 120 request/phút |
+| Nginx (toàn cục gateway) | `limit_req` local | 120 request/phút/IP (burst 20) |
 
 Vượt limit → HTTP **429 Too Many Requests** với message của decorator (hoặc `"Quá nhiều request, vui lòng thử lại sau"`).
 

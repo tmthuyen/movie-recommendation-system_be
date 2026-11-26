@@ -15,7 +15,7 @@
   - `GET /api/recommendations/similar/:id/cursor` — load-more phim tương tự bằng cursor; FE dùng `getSimilarMoviesCursor` + `useGetSimilarMoviesInfinite` (`useInfiniteQuery`) và UI `SimilarMoviesInfinite` (infinite scroll).
   - `GET /api/recommendations/semantic-search` và `GET /api/recommendations/hybrid-search` — **stub** ở backend (trả `{status, message, data: []}`), FE đã có api/hook nhưng chưa dùng thực tế.
   - Backend ↔ ai-service giao tiếp **2 kênh**: RabbitMQ (event) + HTTP (module recommendations).
-- Hạ tầng có **Kong gateway (`gateway/kong.yml`, `:8000`)**: `/api` → `8081`, `/api/recommendations` → `8082`; **hiện frontend gọi thẳng backend `:8081`**, chưa dùng gateway và chưa có client gọi trực tiếp ai-service `:8082`.
+- Hạ tầng có **Nginx gateway (`gateway/nginx.conf`, `:8000` dev / `:80` prod)**: `/api` → `8081`, `/api/recommendations` → `8082`, `/socket.io/` → `8081`; `gateway/kong.yml` vẫn giữ để rollback. **Hiện frontend gọi thẳng backend `:8081`**, chưa dùng gateway và chưa có client gọi trực tiếp ai-service `:8082`.
 - Port dev: **3002** — script `npm run dev` chạy `next dev -p 3002`; backend đã cho phép CORS với `http://localhost:3002`.
 - Ngôn ngữ giao diện: **tiếng Việt**; có dark mode (class-based qua `next-themes`).
 - **Onboarding sở thích (V15, cập nhật V42)**: `PreferenceOnboardingGate` mount trong `src/app/(main)/layout.tsx`; hiện dialog cho user đã đăng nhập khi `preferenceData.genre` chưa có genre hợp lệ `{id,name}`. Lưu qua `PUT /api/users/me` (không gọi API mới). Nút “Bỏ qua” không lưu `localStorage`: nếu vẫn chưa có preference thì reload/login lại vẫn hiện lại dialog. UI profile dùng chung format `{id,name}[]`.
@@ -262,7 +262,7 @@ NEXT_PUBLIC_GOOGLE_CLIENT_ID=<Google OAuth client id>
 NEXT_PUBLIC_TINYMCE_API_KEY=<TinyMCE key>
 ```
 
-- `axiosClient` lấy `NEXT_PUBLIC_API_BASE_URL`; fallback mặc định trong code là `http://localhost:8000/api` (trùng port **Kong gateway** nếu gateway đang chạy — nếu không chạy gateway thì phải đặt env đúng `http://localhost:8081/api`).
+- `axiosClient` lấy `NEXT_PUBLIC_API_BASE_URL`; fallback mặc định trong code là `http://localhost:8000/api` (trùng port **Nginx gateway** nếu gateway đang chạy — nếu không chạy gateway thì phải đặt env đúng `http://localhost:8081/api`).
 - Không được hardcode URL backend ở bất kỳ đâu khác.
 
 ### `src/lib/axiosClient.ts` — làm gì

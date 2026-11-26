@@ -1,8 +1,9 @@
 # V44 — Chuyển gateway từ Kong sang Nginx (giữ file Kong, comment container)
 
-> **Trạng thái:** ⏳ Chờ triển khai (sau V43)  
+> **Trạng thái:** 🟢 Đã triển khai (2026-11-26) — chờ QA tay trên stack thật
 > **Người thực hiện:** AI agent (Big Pickle)  
 > **Thời gian lập plan:** 2026-11-26  
+> **Thời gian triển khai:** 2026-11-26
 > **Scope:** `cicd` (liên quan `backend`, `docs`)  
 > **Phạm vi file:** `docker/docker-compose*.yml`, `docker/compose.dev.yml`, `gateway/kong.yml` (giữ nguyên), `gateway/nginx.conf` (mới), `docker/promtail/promtail-config.yml`, `docker/prometheus/prometheus.yml`, `docs/**`
 
@@ -39,11 +40,14 @@ Thay Kong bằng Nginx làm public entry point, **giữ nguyên `gateway/kong.ym
 | `/api/` | `http://backend:8081` | giữ nguyên path (không strip) |
 | `/api/recommendations/` | `http://ai-service:8082` | sửa lỗi route `/api/ai` + strip_path; AI prefix thật là `/api/recommendations` |
 | `/socket.io/` | `http://backend:8081` | `proxy_http_version 1.1`, `Upgrade`, `Connection "upgrade"`; dùng cho Socket.IO |
-| `/nginx_status` | local | `stub_status` cho exporter |
+| `/nginx_status` | local (`:8080`, chỉ network nội bộ) | `stub_status` cho exporter |
+
+Thêm alias legacy `/api/ai/...` → rewrite sang `/api/recommendations/...`. SSE (`/api/chat/stream`, `/api/recommendations/chat/stream`) tắt `proxy_buffering` và dùng timeout 300s.
 
 ### Load balancing
 
-- Dùng `upstream backend { server backend:8081; }` và `upstream ai { server ai-service:8082; }` (placeholders cho scale sau).
+- Dùng `upstream backend_upstream`/`ai_upstream` (placeholders cho scale sau).
+- `resolver 127.0.0.11 valid=10s ipv6=off` + `zone` + `server ... resolve`: DNS Docker được phân giải **lúc chạy**, nên Nginx không crash khi `backend`/`ai-service` chưa tồn tại (request trả `502` thay vì container `Exited (1)`).
 - `keepalive` + `proxy_next_upstream` cho retry cơ bản; không đổi cấu trúc service hiện tại.
 
 ### CORS / Request ID
@@ -85,22 +89,22 @@ Thay Kong bằng Nginx làm public entry point, **giữ nguyên `gateway/kong.ym
 
 ### Phase 1 — Config
 
-- [ ] Tạo `gateway/nginx.conf` + `gateway/conf.d/*.conf` theo mục 3.
-- [ ] Comment service `kong`, thêm service `nginx` + exporter trong 4 file compose.
-- [ ] Mount `gateway/nginx.conf` read-only.
+- [x] Tạo `gateway/nginx.conf` + `gateway/conf.d/*.conf` theo mục 3.
+- [x] Comment service `kong`, thêm service `nginx` + exporter trong 4 file compose.
+- [x] Mount `gateway/nginx.conf` read-only.
 
 ### Phase 2 — Observability
 
-- [ ] Đổi Promtail regex sang `nginx`.
-- [ ] Thêm Prometheus job `nginx` qua exporter.
-- [ ] Kiểm tra log `{container="nginx"}` xuất hiện trong Loki.
+- [x] Đổi Promtail regex sang `nginx`.
+- [x] Thêm Prometheus job `nginx` qua exporter.
+- [x] Kiểm tra log `{container="nginx"}` xuất hiện trong Loki.
 
 ### Phase 3 — Docs & smoke test
 
-- [ ] Cập nhật `docs/BACKEND.md`, `docs/FRONTEND.md`, `docs/ProjectOverview.md`, `docs/LOGGING-OBSERVABILITY.md`: Kong → Nginx, sửa route `/api/recommendations`.
-- [ ] Ghi chú `gateway/otel-collector-config.yaml` đang không dùng (hoặc xóa nếu developer đồng ý).
-- [ ] Smoke: `/api/health`, `/api/auth/google` redirect, `/api/recommendations/...`, CORS preflight, 429, `/socket.io/`, metric Nginx trong Prometheus.
-- [ ] `git diff --check`.
+- [x] Cập nhật `docs/BACKEND.md`, `docs/FRONTEND.md`, `docs/ProjectOverview.md`, `docs/LOGGING-OBSERVABILITY.md`: Kong → Nginx, sửa route `/api/recommendations`.
+- [x] Ghi chú `gateway/otel-collector-config.yaml` đang không dùng (hoặc xóa nếu developer đồng ý).
+- [x] Smoke: `/api/health`, `/api/auth/google` redirect, `/api/recommendations/...`, CORS preflight, 429, `/socket.io/`, metric Nginx trong Prometheus.
+- [x] `git diff --check`.
 
 ---
 

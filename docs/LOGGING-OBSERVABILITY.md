@@ -37,7 +37,7 @@ backend / ai-service stdout/stderr
 Các service đã có trong `docker/docker-compose.yml`:
 
 - `loki` — lưu log, volume `loki_data`, retention 30 ngày (`docker/loki/loki-config.yml`).
-- `promtail` — đọc container `backend`, `ai-service`, `kong` (`docker/promtail/promtail-config.yml`).
+- `promtail` — đọc container `backend`, `ai-service`, `nginx` (`docker/promtail/promtail-config.yml`).
 - `grafana` — datasource Prometheus + Loki + Jaeger (`docker/grafana/provisioning/datasources/datasources.yml`).
 
 Chạy local:
@@ -59,9 +59,11 @@ Grafana: `http://localhost:3000` → Explore → Loki:
 {container="backend"}
 {container="ai-service"}
 {service="movie-backend"} |= "error"
+{container="nginx"}
+{service="nginx"}
 ```
 
-Prometheus scrape `backend:8081/api/metrics` và `ai-service:8082/api/metrics` (không dùng `host.docker.internal`).
+Prometheus scrape `backend:8081/api/metrics`, `ai-service:8082/api/metrics` và `nginx-exporter:9113` (metric gateway từ `/nginx_status`, không dùng `host.docker.internal`).
 
 ## 4. AWS ECS Fargate
 

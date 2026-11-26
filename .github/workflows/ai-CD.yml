@@ -129,38 +129,54 @@ jobs:
           IMAGE_REF: ${{ steps.metadata.outputs.image_ref }}
         run: echo "Image pushed - $IMAGE_REF"
 
-  # # ============================================================
-  # # FUTURE DEPLOYMENT: VPS / CLOUD VM / AWS EC2 VIA SSH
-  # # DISABLED: explicitly change 'false' when infrastructure exists.
-  # # VPS must already have Compose, runtime environment and registry login.
-  # # Production compose must reference AI_SERVICE_IMAGE as its image.
-  # # ============================================================
-  # deploy-vps:
-  #   name: Deploy to VPS / Cloud VM (disabled)
-  #   if: ${{ false }}
-  #   needs: build-and-push
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Setup SSH
-  #       env:
-  #         SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
-  #         SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
-  #       run: |
-  #         install -m 700 -d ~/.ssh
-  #         printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
-  #         printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-  #         chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+  # ============================================================
+  # DEPLOYMENT: VPS / CLOUD VM via SSH
+  # Requires secrets: DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_PRIVATE_KEY,
+  #                   DEPLOY_SSH_KNOWN_HOSTS
+  # VPS must already have Docker Compose, .env.production and registry login.
+  # ============================================================
+  deploy-vps:
+    name: Deploy to VPS - AI Service
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' &&
+       (github.ref == 'refs/heads/main' ||
+        github.ref == 'refs/heads/production'))
+    needs: build-and-push
+    runs-on: ubuntu-latest
 
-  #     - name: Deploy published image
-  #       env:
-  #         DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-  #         DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-  #         IMAGE_REF: ${{ needs.build-and-push.outputs.image_ref }}
-  #       shell: bash
-  #       run: |
-  #         # On the remote machine, runtime env is already managed by you.
-  #         ssh -i ~/.ssh/id_ed25519 "${DEPLOY_USER}@${DEPLOY_HOST}" \
-  #           "AI_SERVICE_IMAGE='${IMAGE_REF}' docker compose -f /opt/movie/docker/compose.prod.yml pull ai-service && AI_SERVICE_IMAGE='${IMAGE_REF}' docker compose -f /opt/movie/docker/compose.prod.yml up -d --no-deps ai-service"
+    steps:
+      - name: Setup SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Pull latest image and restart ai-service via Compose
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/moviere-drs' }}
+          IMAGE_REF: ${{ needs.build-and-push.outputs.image_ref }}
+        shell: bash
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "${DEPLOY_USER}@${DEPLOY_HOST}" "bash -s" <<EOF
+          set -euo pipefail
+          cd "${DEPLOY_PATH}"
+          export AI_SERVICE_IMAGE="${IMAGE_REF}"
+
+          docker compose \
+            --env-file .env.production \
+            -p movie-app-prod \
+            -f docker/docker-compose.yml \
+            -f docker/compose.prod.yml \
+            --profile tools \
+            up -d --no-deps --pull always ai-service
+          EOF
 
   # # ============================================================
   # # FUTURE DEPLOYMENT: AWS ECS
