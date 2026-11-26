@@ -34,20 +34,32 @@ RUN python -m venv /opt/venv
 
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy only requirements to cache dependencies
+# # Copy only requirements to cache dependencies
+# COPY pyproject.toml ./
+# COPY . .
+
+# # Install dependencies
+# ARG TORCH_VERSION=2.6.0
+
+# RUN pip install --no-cache-dir \
+#     "torch==${TORCH_VERSION}+cpu" \
+#     --index-url https://download.pytorch.org/whl/cpu
+
+# RUN printf 'torch==%s+cpu\n' "$TORCH_VERSION" > /tmp/torch-constraints.txt \
+#     && pip install --no-cache-dir \
+#        -c /tmp/torch-constraints.txt .
+
 COPY pyproject.toml ./
-COPY . .
 
-# Install dependencies
 ARG TORCH_VERSION=2.6.0
-
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir \
     "torch==${TORCH_VERSION}+cpu" \
-    --index-url https://download.pytorch.org/whl/cpu
+    --index-url https://download.pytorch.org/whl/cpu \
+    && printf 'torch==%s+cpu\n' "$TORCH_VERSION" > /tmp/torch-constraints.txt \
+    && pip install --no-cache-dir -c /tmp/torch-constraints.txt .
 
-RUN printf 'torch==%s+cpu\n' "$TORCH_VERSION" > /tmp/torch-constraints.txt \
-    && pip install --no-cache-dir \
-       -c /tmp/torch-constraints.txt .
+COPY . .
+RUN pip install --no-cache-dir --no-deps .
 
 
 # =========================================================
