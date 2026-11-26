@@ -12,6 +12,7 @@ import type { IRedisService } from '@/infrastructure/redis/redis.service';
 import { UserProducer } from '@/infrastructure/messaging/producers/user.producer';
 import { IMailService } from '@/infrastructure/mail/mail.service';
 import { User, UserStatus } from '@/modules/users/entities/user.entity';
+import { UserProvider } from '@/modules/users/entities/user-provider.entity';
 
 jest.mock('bcrypt', () => ({
   compare: jest.fn(),
@@ -46,7 +47,10 @@ describe('AuthService', () => {
   let userProducer: Record<string, jest.Mock>;
   let configService: { get: jest.Mock };
   let mailService: Record<string, jest.Mock>;
-  let dataSource: { transaction: jest.Mock };
+  let dataSource: {
+    manager: Record<string, jest.Mock>;
+    transaction: jest.Mock;
+  };
 
   beforeEach(() => {
     usersService = {
@@ -77,12 +81,20 @@ describe('AuthService', () => {
     userProducer = {
       publishEmailVerificationRequested: jest.fn(),
       publishEmailVerified: jest.fn(),
+      publishUserCreated: jest.fn(),
     };
     configService = { get: jest.fn().mockReturnValue(undefined) };
     mailService = {
       sendMail: jest.fn(),
     };
-    dataSource = { transaction: jest.fn() };
+    dataSource = {
+      manager: {
+        findOne: jest.fn().mockResolvedValue(null),
+        save: jest.fn(),
+        remove: jest.fn(),
+      },
+      transaction: jest.fn(),
+    };
 
     service = new AuthService(
       dataSource as unknown as DataSource,
@@ -184,6 +196,143 @@ describe('AuthService', () => {
       const deviceIdArg = sessionService.createSession.mock.calls[0][3];
       expect(typeof deviceIdArg).toBe('string');
       expect(deviceIdArg.length).toBeGreaterThan(10);
+    });
+  });
+
+  describe('loginWithGoogle', () => {
+    const profile = {
+      googleId: 'google-1',
+      email: 'a@example.com',
+      fullName: 'Nguyen Van A',
+      avatar: 'http://avatar',
+    };
+    const device = {
+      deviceId: 'device-1',
+      ipAddress: '127.0.0.1',
+      userAgent: 'jest',
+    };
+    const sessionResult = {
+      accessToken: 'signed-access-token',
+      session: { sessionId: 's1', refreshToken: 'refresh-token-1' },
+    };
+
+    it('provider tồn tại → login theo provider.userId, không tra email', async () => {
+      dataSource.manager.findOne.mockResolvedValue({ userId: '1' });
+      usersService.findByIdWithRoles.mockResolvedValue(activeUser());
+
+      await expect(service.loginWithGoogle(profile, device)).resolves.toEqual(
+        sessionResult,
+      );
+      expect(usersService.findByIdWithRoles).toHaveBeenCalledWith('1');
+      expect(usersService.findByEmail).not.toHaveBeenCalled();
+      expect(dataSource.manager.save).not.toHaveBeenCalled();
+    });
+
+    it.each([UserStatus.BLOCKED, UserStatus.INACTIVE])(
+      'provider tồn tại + user %s → lỗi, không tạo session',
+      async status => {
+        dataSource.manager.findOne.mockResolvedValue({ userId: '1' });
+        usersService.findByIdWithRoles.mockResolvedValue(
+          activeUser({ status }),
+        );
+
+        await expect(service.loginWithGoogle(profile, device)).rejects.toThrow(
+          'Tài khoản bị khóa hoặc không tồn tại',
+        );
+        expect(sessionService.createSession).not.toHaveBeenCalled();
+      },
+    );
+
+    it('provider trỏ user có email khác → conflict', async () => {
+      dataSource.manager.findOne.mockResolvedValue({ userId: '1' });
+      usersService.findByIdWithRoles.mockResolvedValue(
+        activeUser({ email: 'other@example.com' }),
+      );
+
+      await expect(service.loginWithGoogle(profile, device)).rejects.toThrow(
+        'Google provider đang liên kết với tài khoản khác',
+      );
+      expect(sessionService.createSession).not.toHaveBeenCalled();
+    });
+
+    it('provider tồn tại nhưng user không còn → xoá provider, fallback email', async () => {
+      dataSource.manager.findOne.mockResolvedValue({ userId: 'missing' });
+      usersService.findByIdWithRoles.mockResolvedValue(null);
+      usersService.findByEmail.mockResolvedValue(activeUser());
+
+      await expect(service.loginWithGoogle(profile, device)).resolves.toEqual(
+        sessionResult,
+      );
+      expect(dataSource.manager.remove).toHaveBeenCalledWith({
+        userId: 'missing',
+      });
+      expect(dataSource.manager.save).toHaveBeenCalledWith(UserProvider, {
+        userId: 1,
+        provider: 'google',
+        providerId: 'google-1',
+      });
+    });
+
+    it('không có provider + email ACTIVE → link provider, không tạo user', async () => {
+      usersService.findByEmail.mockResolvedValue(activeUser());
+
+      await expect(service.loginWithGoogle(profile, device)).resolves.toEqual(
+        sessionResult,
+      );
+      expect(dataSource.manager.save).toHaveBeenCalledWith(UserProvider, {
+        userId: 1,
+        provider: 'google',
+        providerId: 'google-1',
+      });
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+    });
+
+    it.each([UserStatus.BLOCKED, UserStatus.INACTIVE])(
+      'không có provider + email %s → lỗi, không lưu provider',
+      async status => {
+        usersService.findByEmail.mockResolvedValue(activeUser({ status }));
+
+        await expect(service.loginWithGoogle(profile, device)).rejects.toThrow(
+          'Tài khoản bị khóa hoặc không tồn tại',
+        );
+        expect(dataSource.manager.save).not.toHaveBeenCalled();
+        expect(dataSource.transaction).not.toHaveBeenCalled();
+      },
+    );
+
+    it('không có provider + email chưa tồn tại → tạo user, provider và publish event', async () => {
+      const manager = {
+        findOne: jest.fn().mockResolvedValue({ code: 'user' }),
+        create: jest.fn().mockReturnValue(activeUser()),
+        save: jest
+          .fn()
+          .mockResolvedValueOnce(activeUser())
+          .mockResolvedValueOnce(undefined),
+      };
+      dataSource.transaction.mockImplementation(cb => cb(manager));
+
+      await expect(service.loginWithGoogle(profile, device)).resolves.toEqual(
+        sessionResult,
+      );
+      expect(dataSource.transaction).toHaveBeenCalled();
+      expect(manager.create).toHaveBeenCalledWith(
+        User,
+        expect.objectContaining({
+          email: profile.email,
+          fullName: profile.fullName,
+          avatarUrl: profile.avatar,
+          status: UserStatus.ACTIVE,
+          isVerified: true,
+        }),
+      );
+      expect(manager.save).toHaveBeenCalledTimes(2);
+      expect(userProducer.publishUserCreated).toHaveBeenCalledWith({
+        userId: 1,
+        email: 'a@example.com',
+        fullName: 'Nguyen Van A',
+        status: UserStatus.ACTIVE,
+        preferenceData: {},
+      });
     });
   });
 

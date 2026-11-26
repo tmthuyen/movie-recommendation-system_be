@@ -115,38 +115,56 @@ export class AuthService {
     },
     deviceInfo: DeviceInfoDto,
   ) {
+    const existingProvider = await this.dataSource.manager.findOne(
+      UserProvider,
+      {
+        where: { provider: 'google', providerId: googleProfile.googleId },
+      },
+    );
+
+    if (existingProvider) {
+      const providerUser = await this.usersService.findByIdWithRoles(
+        existingProvider.userId,
+      );
+
+      if (!providerUser) {
+        await this.dataSource.manager.remove(existingProvider);
+        this.logger.warn(
+          `[Login GG] Removed stale provider for googleId: ${googleProfile.googleId}`,
+        );
+      } else {
+        this.assertActiveUser(providerUser);
+        if (providerUser.email !== googleProfile.email) {
+          throw new UnauthorizedException(
+            'Google provider đang liên kết với tài khoản khác',
+          );
+        }
+        this.logger.log(
+          `[Login GG] Existing provider found for googleId: ${googleProfile.googleId}, logging in.`,
+        );
+        return this.login(providerUser, deviceInfo);
+      }
+    }
+
     const existingUser = await this.usersService.findByEmail(
       googleProfile.email,
     );
 
     if (existingUser) {
+      this.assertActiveUser(existingUser);
+      await this.dataSource.manager.save(UserProvider, {
+        userId: existingUser.id,
+        provider: 'google',
+        providerId: googleProfile.googleId,
+      });
       this.logger.log(
-        `[Login GG] Existing user found for email: ${googleProfile.email}, logging in.`,
+        `[Login GG] Linked provider to existing user: ${googleProfile.email}`,
       );
       return this.login(existingUser, deviceInfo);
     }
 
-    // Create new user with default role 'user'
-
-    // transaction to create user and assign role
     const savedUser = await this.dataSource.transaction(
       async transactionalEntityManager => {
-        // check exits provider but not linked to user
-        const existingProvider = await transactionalEntityManager.findOne(
-          UserProvider,
-          {
-            where: { provider: 'google', providerId: googleProfile.googleId },
-          },
-        );
-
-        // remove existing provider if exists
-        if (existingProvider) {
-          await transactionalEntityManager.remove(existingProvider);
-          this.logger.warn(
-            `[Login GG] Removed existing provider for googleId: ${googleProfile.googleId}`,
-          );
-        }
-
         const defaultRole = await transactionalEntityManager.findOne(Role, {
           where: { code: 'user' },
         });
@@ -162,7 +180,6 @@ export class AuthService {
         const user = transactionalEntityManager.create(User, userData);
         const savedUser = await transactionalEntityManager.save(user);
 
-        // save to user provider
         await transactionalEntityManager.save(UserProvider, {
           userId: savedUser.id,
           provider: 'google',
@@ -186,6 +203,15 @@ export class AuthService {
     });
 
     return this.login(savedUser, deviceInfo);
+  }
+
+  private assertActiveUser(user: User): void {
+    if (
+      user.status === UserStatus.BLOCKED ||
+      user.status === UserStatus.INACTIVE
+    ) {
+      throw new UnauthorizedException('Tài khoản bị khóa hoặc không tồn tại');
+    }
   }
 
   // 3. Đăng ký tài khoản
