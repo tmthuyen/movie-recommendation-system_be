@@ -39,20 +39,14 @@ from core.tokenizer import UndertheseaTokenizer  # noqa: E402
 from data.data_loader import build_search_text, compute_corpus_fingerprint  # noqa: E402
 from services.bm25_index_service import build_bm25_index, is_index_stale  # noqa: E402
 
-# Cùng điều kiện "phim hợp lệ" với backend MoviesService.searchFromDb.
+# Lấy toàn bộ danh mục phim hợp lệ trong PostgreSQL (Phương án B: bao phủ toàn bộ kho phim)
 MOVIES_QUERY = """
 SELECT m.id, m.title, m.title_vi, m.overview, m.overview_vi,
        COALESCE(string_agg(g.name, ' ' ORDER BY g.name), '') AS genres
 FROM movies m
 LEFT JOIN movie_genres mg ON mg.movie_id = m.id
 LEFT JOIN genres g ON g.id = mg.genre_id
-WHERE m.title IS NOT NULL
-  AND m.title_vi IS NOT NULL
-  AND m.release_date IS NOT NULL
-  AND m.overview IS NOT NULL
-  AND m.overview_vi IS NOT NULL
-  AND m.poster_path IS NOT NULL
-  AND m.backdrop_path IS NOT NULL
+WHERE (m.title IS NOT NULL OR m.title_vi IS NOT NULL)
 GROUP BY m.id
 ORDER BY m.id
 """
@@ -108,9 +102,7 @@ def main() -> int:
     args = parser.parse_args()
 
     settings = get_settings()
-    output_dir = (
-        Path(args.output_dir) if args.output_dir else settings.bm25_model_path
-    )
+    output_dir = Path(args.output_dir) if args.output_dir else settings.bm25_model_path
 
     t0 = time.time()
     corpus, ids = load_corpus()
@@ -143,4 +135,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
