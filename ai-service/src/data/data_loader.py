@@ -81,16 +81,27 @@ def _as_text(value: Any) -> str:
 def build_search_text(row: Union[pd.Series, dict]) -> str:
     """
     Hàm tạo search_text chuẩn hóa duy nhất dùng chung cho toàn bộ hệ thống:
-    - title: ưu tiên title_vi, nếu thiếu fallback sang title (tiếng Anh) rồi title_en
-    - overview: ưu tiên overview_vi, nếu thiếu fallback sang overview
-    - genres: trích xuất tên thể loại sạch từ JSON list hoặc list
+    - Song ngữ Anh - Việt:
+      + title: kết hợp title_vi và title (tiếng Anh) nếu khác nhau
+      + overview: kết hợp cả overview_vi và overview
+      + genres: trích xuất tên thể loại sạch từ JSON list hoặc list
     """
-    title = (
-        _as_text(row.get("title_vi"))
-        or _as_text(row.get("title"))
-        or _as_text(row.get("title_en"))
-    )
-    overview = _as_text(row.get("overview_vi")) or _as_text(row.get("overview"))
+    title_vi = _as_text(row.get("title_vi"))
+    title_en = _as_text(row.get("title")) or _as_text(row.get("title_en"))
+    if title_vi and title_en and title_vi.strip().lower() != title_en.strip().lower():
+        title = f"{title_vi} ({title_en})"
+    else:
+        title = title_vi or title_en
+
+    overview_vi = _as_text(row.get("overview_vi"))
+    overview_en = _as_text(row.get("overview"))
+    overviews = []
+    if overview_vi:
+        overviews.append(overview_vi)
+    if overview_en and overview_en.strip().lower() != overview_vi.strip().lower():
+        overviews.append(overview_en)
+    overview = " ".join(overviews)
+
     genres = extract_genre_names(row.get("genres", ""))
     text = f"{title} {overview} {genres}"
     return " ".join(text.split())
@@ -141,12 +152,16 @@ class MovieDataLoader:
 
         # Chỉ giữ lại các phim có text hợp lệ (> 20 ký tự chuẩn)
         df = df[df["search_text"].str.len() > 20].copy()
-        id_col = (
-            "movieId"
-            if "movieId" in df.columns and df["movieId"].notna().any()
-            else "id"
-        )
-        df[id_col] = df[id_col].apply(safe_int)
+        # Fallback movieId sang id nếu trống hoặc <= 0 để giữ toàn bộ danh mục phim
+        if "id" in df.columns:
+            df["id"] = df["id"].apply(safe_int)
+        if "movieId" in df.columns:
+            df["movieId"] = df["movieId"].apply(safe_int)
+            if "id" in df.columns:
+                df.loc[df["movieId"] <= 0, "movieId"] = df.loc[df["movieId"] <= 0, "id"]
+            id_col = "movieId"
+        else:
+            id_col = "id"
         df = df[df[id_col] > 0].drop_duplicates(subset=[id_col]).reset_index(drop=True)
         if "movieId" not in df.columns or df["movieId"].isna().any():
             df["movieId"] = df[id_col]

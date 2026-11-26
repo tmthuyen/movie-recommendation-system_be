@@ -36,6 +36,8 @@ if hasattr(sys.stdout, "reconfigure"):
 
 import numpy as np
 import pandas as pd
+import psycopg2
+from dotenv import dotenv_values
 
 # ── allow imports from ai-service/src when run from project root ───────────
 _THIS_DIR = Path(__file__).resolve().parent  # ai-service/scripts/
@@ -54,6 +56,40 @@ COLLECTION_NAME = os.getenv("COLLECTION_NAME", "movies")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "256"))
 FORCE_REBUILD = os.getenv("FORCE_REBUILD", "0") == "1"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Database Helpers
+# ──────────────────────────────────────────────────────────────────────────────
+_AI_ROOT = _THIS_DIR.parent
+
+MOVIES_QUERY = """
+SELECT m.id, m.tmdb_id, m.title, m.title_vi, m.overview, m.overview_vi,
+       m.original_language, m.release_date, m.vote_average, m.vote_count,
+       m.poster_path,
+       COALESCE(string_agg(g.name, ' ' ORDER BY g.name), '') AS genres
+FROM movies m
+LEFT JOIN movie_genres mg ON mg.movie_id = m.id
+LEFT JOIN genres g ON g.id = mg.genre_id
+WHERE (m.title IS NOT NULL OR m.title_vi IS NOT NULL)
+  AND (m.overview IS NOT NULL OR m.overview_vi IS NOT NULL)
+GROUP BY m.id
+ORDER BY m.id;
+"""
+
+
+def connect_db():
+    env = dotenv_values(_AI_ROOT / ".env")
+    url = env.get("DATABASE_URL")
+    if url:
+        return psycopg2.connect(url)
+    return psycopg2.connect(
+        host=env.get("DB_HOST", "127.0.0.1"),
+        port=int(env.get("DB_PORT", 5432)),
+        user=env.get("DB_USERNAME", "postgres"),
+        password=env.get("DB_PASSWORD", "123456"),
+        dbname=env.get("DB_NAME", "nestjs_db"),
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -168,14 +204,21 @@ def verify_vector_db(
     # Nếu manifest chưa có VÀ không có embedding_model: thiếu bằng chứng quan trọng để xác minh
     if not manifest_path.exists():
         if embedding_model is None:
-            return False, "Thiếu manifest file và không có embedding_model để kiểm chứng ChromaDB"
+            return (
+                False,
+                "Thiếu manifest file và không có embedding_model để kiểm chứng ChromaDB",
+            )
         m_data = {}
     else:
         try:
             with open(manifest_path, "r", encoding="utf-8") as f:
                 m_data = json.load(f)
 
-            if m_data.get("collection_name") and col_name and m_data.get("collection_name") != col_name:
+            if (
+                m_data.get("collection_name")
+                and col_name
+                and m_data.get("collection_name") != col_name
+            ):
                 return (
                     False,
                     f"Tên collection không khớp (DB là '{col_name}' vs manifest '{m_data.get('collection_name')}')",
@@ -220,7 +263,10 @@ def verify_vector_db(
         elif "e5-small" in model_name.lower() or "minilm" in model_name.lower():
             expected_dim = 384
         else:
-            return False, "Không xác định được chiều vector kỳ vọng (thiếu embedding_model và embedding_dim trong manifest)"
+            return (
+                False,
+                "Không xác định được chiều vector kỳ vọng (thiếu embedding_model và embedding_dim trong manifest)",
+            )
 
     if m_data.get("embedding_dim") and int(m_data["embedding_dim"]) != expected_dim:
         return (
@@ -309,11 +355,17 @@ def verify_vector_db(
 
         if isinstance(emb_in_db, np.ndarray):
             if emb_in_db.size == 0:
-                return False, f"Embedding cho movieId {expected_mid} rỗng trong ChromaDB"
+                return (
+                    False,
+                    f"Embedding cho movieId {expected_mid} rỗng trong ChromaDB",
+                )
             vec_db = emb_in_db.astype(np.float32).flatten()
         else:
             if len(emb_in_db) == 0:
-                return False, f"Embedding cho movieId {expected_mid} rỗng trong ChromaDB"
+                return (
+                    False,
+                    f"Embedding cho movieId {expected_mid} rỗng trong ChromaDB",
+                )
             vec_db = np.array(emb_in_db, dtype=np.float32).flatten()
 
         if vec_db.shape[0] != expected_dim:
@@ -329,7 +381,10 @@ def verify_vector_db(
         # 4. Kiểm tra chuẩn hóa L2 của vector trong DB.
         norm = float(np.linalg.norm(vec_db))
         if not np.isfinite(norm):
-            return False, f"Norm embedding trong DB không hữu hạn tại movieId {expected_mid}"
+            return (
+                False,
+                f"Norm embedding trong DB không hữu hạn tại movieId {expected_mid}",
+            )
         if abs(norm - 1.0) > 1e-3:
             return (
                 False,
@@ -339,9 +394,7 @@ def verify_vector_db(
         # 5. Nếu có embedding_model, kiểm tra cosine similarity thực tế với text hiện tại
         if embedding_model is not None:
             sample_text = format_document_text_for_model(expected_doc, model_name)
-            vec_model = embedding_model.encode(
-                sample_text, normalize_embeddings=True
-            )
+            vec_model = embedding_model.encode(sample_text, normalize_embeddings=True)
             vec_model = np.asarray(vec_model, dtype=np.float32).flatten()
             if vec_model.shape != vec_db.shape:
                 return False, (
@@ -349,15 +402,27 @@ def verify_vector_db(
                     f"{vec_db.size} tại movieId {expected_mid})"
                 )
             if not np.isfinite(vec_model).all():
-                return False, f"Embedding từ model chứa NaN/Inf tại movieId {expected_mid}"
+                return (
+                    False,
+                    f"Embedding từ model chứa NaN/Inf tại movieId {expected_mid}",
+                )
             model_norm = float(np.linalg.norm(vec_model))
             if not np.isfinite(model_norm):
-                return False, f"Norm embedding từ model không hữu hạn tại movieId {expected_mid}"
+                return (
+                    False,
+                    f"Norm embedding từ model không hữu hạn tại movieId {expected_mid}",
+                )
             if abs(model_norm - 1.0) > 1e-3:
-                return False, f"Embedding từ model chưa được chuẩn hóa L2 tại movieId {expected_mid}"
+                return (
+                    False,
+                    f"Embedding từ model chưa được chuẩn hóa L2 tại movieId {expected_mid}",
+                )
             cosine_sim = float(np.dot(vec_db, vec_model))
             if not np.isfinite(cosine_sim):
-                return False, f"Cosine similarity không hữu hạn tại movieId {expected_mid}"
+                return (
+                    False,
+                    f"Cosine similarity không hữu hạn tại movieId {expected_mid}",
+                )
             if cosine_sim < 0.999:
                 return False, (
                     f"Vector trong DB không khớp với model '{model_name}' và search_text "
@@ -368,7 +433,7 @@ def verify_vector_db(
     if not manifest_path.exists() and embedding_model is not None:
         save_collection_manifest(
             manifest_path=manifest_path,
-            collection_name=col_name or getattr(collection, 'name', ''),
+            collection_name=col_name or getattr(collection, "name", ""),
             model_name=model_name,
             embedding_dim=expected_dim,
             num_records=expected_count,
@@ -394,15 +459,15 @@ def verify_vector_db(
 def build_metadata(row: pd.Series) -> dict:
     """Extract scalar fields that are safe to store as ChromaDB metadata."""
     return {
-        "movie_id": safe_int(row.get("movieId")),
-        "tmdb_id": safe_int(row.get("tmdbId") or row.get("id")),
+        "movie_id": safe_int(row.get("movieId") or row.get("id")),
+        "tmdb_id": safe_int(row.get("tmdb_id") or row.get("tmdbId") or row.get("id")),
         "title": str(row.get("title") or ""),
         "title_vi": str(row.get("title_vi") or ""),
         "original_language": str(row.get("original_language") or ""),
         "release_date": str(row.get("release_date") or ""),
         "vote_average": safe_float(row.get("vote_average")),
         "vote_count": safe_int(row.get("vote_count")),
-        "popularity": safe_float(row.get("popularity")),
+        "popularity": safe_float(row.get("popularity", 0.0)),
         "poster_path": str(row.get("poster_path") or ""),
         "genres": extract_genre_names(str(row.get("genres", ""))),
     }
@@ -416,14 +481,42 @@ def build_metadata(row: pd.Series) -> dict:
 def parse_args():
     import argparse
 
-    parser = argparse.ArgumentParser(description="Encode movies and insert into ChromaDB")
-    parser.add_argument("--csv", type=Path, default=CSV_PATH, help="Path to all_movies_fully_translated.csv")
-    parser.add_argument("--chroma-dir", type=Path, default=CHROMA_DIR, help="Directory for ChromaDB")
-    parser.add_argument("--collection", type=str, default=COLLECTION_NAME, help="Collection name in ChromaDB")
-    parser.add_argument("--model", type=str, default=EMBEDDING_MODEL, help="SentenceTransformer model name")
-    parser.add_argument("--batch-size", type=int, default=BATCH_SIZE, help="Rows per batch")
-    parser.add_argument("--force", action="store_true", default=FORCE_REBUILD, help="Force drop and rebuild")
-    parser.add_argument("--verify-only", action="store_true", help="Verify existing collection and exit")
+    parser = argparse.ArgumentParser(
+        description="Encode movies and insert into ChromaDB"
+    )
+    parser.add_argument(
+        "--csv",
+        type=Path,
+        default=CSV_PATH,
+        help="Path to all_movies_fully_translated.csv",
+    )
+    parser.add_argument(
+        "--chroma-dir", type=Path, default=CHROMA_DIR, help="Directory for ChromaDB"
+    )
+    parser.add_argument(
+        "--collection",
+        type=str,
+        default=COLLECTION_NAME,
+        help="Collection name in ChromaDB",
+    )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=EMBEDDING_MODEL,
+        help="SentenceTransformer model name",
+    )
+    parser.add_argument(
+        "--batch-size", type=int, default=BATCH_SIZE, help="Rows per batch"
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        default=FORCE_REBUILD,
+        help="Force drop and rebuild",
+    )
+    parser.add_argument(
+        "--verify-only", action="store_true", help="Verify existing collection and exit"
+    )
     return parser.parse_args()
 
 
@@ -451,13 +544,25 @@ def main() -> None:
     print(f"  Force rebuild: {force_rebuild}")
     print("=" * 65)
 
-    # ── 1. Load CSV ───────────────────────────────────────────────────────
-    if not csv_path.exists():
-        sys.exit(f"[ERROR] CSV not found: {csv_path}")
+    # ── 1. Load Data (Ưu tiên từ PostgreSQL để khớp 100% ID và danh mục) ────
+    df = None
+    try:
+        conn = connect_db()
+        print(f"\n[1/5] Loading movies from PostgreSQL database …")
+        df = pd.read_sql_query(MOVIES_QUERY, conn)
+        conn.close()
+        print(f"      Rows loaded from DB: {len(df):,}")
+    except Exception as e:
+        print(
+            f"      [WARN] Không thể kết nối PostgreSQL ({e}), fallback sang CSV: {csv_path}"
+        )
 
-    print(f"\n[1/5] Loading CSV …")
-    df = pd.read_csv(csv_path, low_memory=False)
-    print(f"      Rows loaded : {len(df):,}")
+    if df is None:
+        if not csv_path.exists():
+            sys.exit(f"[ERROR] CSV not found: {csv_path}")
+        print(f"\n[1/5] Loading CSV …")
+        df = pd.read_csv(csv_path, low_memory=False)
+        print(f"      Rows loaded : {len(df):,}")
 
     # ── 2. Build search_text & filter ─────────────────────────────────────
     print("[2/5] Building search_text …")
@@ -466,16 +571,18 @@ def main() -> None:
     df = df[df["search_text"].str.len() > 20].copy()
     print(f"      Kept {len(df):,} / {before:,} movies (search_text > 20 chars)")
 
-    # Use movieId as primary key; fall back to tmdbId / id
-    if "movieId" in df.columns and df["movieId"].notna().any():
-        id_col = "movieId"
-    elif "tmdbId" in df.columns:
-        id_col = "tmdbId"
-    else:
+    # Use id as primary key (PostgreSQL movies.id); fall back to movieId / tmdbId
+    if "id" in df.columns:
         id_col = "id"
+    elif "movieId" in df.columns:
+        id_col = "movieId"
+    else:
+        id_col = "tmdbId"
 
     df[id_col] = df[id_col].apply(safe_int)
     df = df[df[id_col] > 0].drop_duplicates(subset=[id_col]).reset_index(drop=True)
+    if "movieId" not in df.columns:
+        df["movieId"] = df[id_col]
     print(f"      Unique IDs  : {len(df):,}  (column: '{id_col}')")
 
     corpus = df["search_text"].tolist()
