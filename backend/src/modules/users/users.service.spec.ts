@@ -302,6 +302,20 @@ describe('UsersService', () => {
       );
     });
 
+    it('giữ nguyên genre object {id,name} khi publish user.updated.profile', async () => {
+      const genre = { id: 28, name: 'Hành động' };
+      repo.findByIdWithRoles.mockResolvedValue(makeUser());
+
+      await service.update('user-1', {
+        preferenceData: { genre: [genre] },
+      } as never);
+
+      expect(producer.publishUserUpdated).toHaveBeenCalledWith({
+        userId: 'user-1',
+        preferenceData: { genre: [genre] },
+      });
+    });
+
     it('không ghi plaintext password vào log', async () => {
       repo.findByIdWithRoles.mockResolvedValue(makeUser());
 

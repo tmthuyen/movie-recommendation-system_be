@@ -48,6 +48,7 @@ import {
 import { GenreStatsCacheService } from './infrastructure/cache/genre-stats-cache.service';
 import { GenreMatrixRefreshCron } from './infrastructure/cache/genre-matrix.cron';
 import { ChatModule } from './modules/chat/chat.module';
+import { UserProvider } from '@/modules/users/entities/user-provider.entity';
 @Module({
   imports: [
     // Configuration
@@ -75,6 +76,7 @@ import { ChatModule } from './modules/chat/chat.module';
         entities: [
           Role,
           User,
+          UserProvider,
           Movie,
           People,
           MoviePeople,

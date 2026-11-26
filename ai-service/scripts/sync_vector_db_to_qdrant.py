@@ -13,6 +13,14 @@ Cách chạy:
 
     # 3. Kiểm tra collection sau khi nạp:
     python scripts/sync_vector_db_to_qdrant.py --verify-only
+    python scripts/sync_vector_db_to_qdrant.py --collection user_long_term_vectors --verify-only
+    python scripts/sync_vector_db_to_qdrant.py --collection user_long_term_vectors --recreate
+
+    user_long_term_vectors,
+    user_short_term_vectors,
+    user_search_vectors,
+    user_profile_vectors,
+    user_genre_vectors
 """
 
 from __future__ import annotations
@@ -124,9 +132,9 @@ def main() -> int:
 
     print(f"Đang kết nối ChromaDB tại {chroma_dir}...")
     chroma_client = chromadb.PersistentClient(path=str(chroma_dir))
-    chroma_col = chroma_client.get_collection(name="movies")
+    chroma_col = chroma_client.get_collection(name=collection_name)
     total_chroma = chroma_col.count()
-    print(f"ChromaDB có tổng cộng {total_chroma:,} phim.")
+    print(f"ChromaDB có tổng cộng {total_chroma:,} dòng.")
 
     # 2. Khởi tạo / cấu hình collection trên Qdrant
     if args.recreate and client.collection_exists(collection_name):
@@ -162,23 +170,39 @@ def main() -> int:
         embeddings = data.get("embeddings", [])
         metadatas = data.get("metadatas", [])
 
+        print(embeddings)
+
+        # neu la user genre vector thi cho [0.0] * 384
+        if collection_name == "user_genre_vectors":
+            print(
+                f"[INFO] Collection '{collection_name}' là user_genre_ve, nạp vector mặc định [0.0]*384."
+            )
+            embeddings = [[0.0] * 384 for _ in range(len(ids))]
+
         if not ids:
+            print(f"[WARNING] Không còn dữ liệu để nạp, offset={offset}.")
             break
 
         points = []
         for str_id, emb, meta in zip(ids, embeddings, metadatas):
             try:
-                mid = int(str_id)
+                # mid = int(str_id)
+                # neeus la int thi int neu la str thi str
+                if isinstance(str_id, str) and str_id.isdigit():
+                    id = int(str_id)
+                else:
+                    id = str_id
+
             except (ValueError, TypeError):
                 continue
 
             # Đảm bảo format metadata chuẩn
             meta_clean = dict(meta) if meta else {}
-            meta_clean["movie_id"] = mid
+            meta_clean["id"] = id
 
             points.append(
                 models.PointStruct(
-                    id=mid,
+                    id=id,
                     vector=emb.tolist() if hasattr(emb, "tolist") else emb,
                     payload=meta_clean,
                 )
@@ -195,7 +219,9 @@ def main() -> int:
     print()
     elapsed = time.time() - t0
     final_count = client.count(collection_name, exact=True).count
-    print(f"Hoàn thành! Đã nạp {final_count:,} phim vào Qdrant '{collection_name}' trong {elapsed:.1f}s.")
+    print(
+        f"Hoàn thành! Đã nạp {final_count:,} phim vào Qdrant '{collection_name}' trong {elapsed:.1f}s."
+    )
     return 0
 
 

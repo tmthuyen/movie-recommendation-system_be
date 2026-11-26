@@ -231,7 +231,7 @@ JWT payload: `{sub, fullName, email, scopes, sessionId, jti}`. `JwtStrategy` ki�
 | Method | Path | Auth | Request | Response `result` | Ghi chú |
 |---|---|---|---|---|---|
 | GET | `/api/users/me` | JWT | — | user (không `password`) | |
-| PUT | `/api/users/me` | JWT | `UpdateProfileDto` `{fullName?, avatarUrl?, phoneNumber?, birthDate?, gender?, preferenceData?}` | user | `preferenceData` là `jsonb` (sở thích: thể loại, đạo diễn...) |
+| PUT | `/api/users/me` | JWT | `UpdateProfileDto` `{fullName?, avatarUrl?, phoneNumber?, birthDate?, gender?, preferenceData?}` | user | `preferenceData` là `jsonb`; `genre` lưu `[{id, name}]` (object JSON, không filter string) |
 | POST | `/api/users` | JWT + `@Roles(ADMIN, SUPERADMIN)` **⚠ không enforce** | `CreateUserDto` `{email, fullName, avatarUrl?, phoneNumber?, password, confirmPassword, roleIds[]}` | user | `201`; publish `user.created` |
 | GET | `/api/users` | JWT + `@Roles` **⚠** | `BaseSearchRequest` `{page=1, limit=10, keyword?, filters?, sort?}` — keyword ILIKE `fullName`/`email`/`phoneNumber` | user[] + `pagination` | filter: `id,email,fullName,phoneNumber,status,isVerified,gender,birthDate,createdAt,updatedAt,roleId,roleCode`; sort: `id,email,fullName,status,isVerified,birthDate,createdAt,updatedAt`; join `roles` |
 | GET | `/api/users/:id` | JWT + `@Roles` **⚠** | path `id` (uuid) | user | |
@@ -456,7 +456,7 @@ Backend là **producer** cho các exchange topic và **consumer cho user/auth bu
 | `movie.exchange` | `movie.updated` | `PATCH /api/movies/:id` (khi đổi field AI) | như trên | ai-service |
 | `movie.exchange` | `movie.deleted` | `DELETE /api/movies/:id` | `{movieId}` | ai-service |
 | `user.exchange` | `user.created` | `UsersService.create` | `{userId, email, fullName, status, preferenceData}` | ai-service + `user.queue` |
-| `user.exchange` | `user.updated.profile` | `UsersService.update` | `{userId, preferenceData}` | ai-service + `user.queue` |
+| `user.exchange` | `user.updated.profile` | `UsersService.update` | `{userId, preferenceData}` — `genre` là `[{id, name}]`; consumer đọc như JSON, không validate schema `string[]` cũ | ai-service + `user.queue` |
 | `user.exchange` | `user.deleted` | `UsersService.remove` | `{userId}` | ai-service |
 | `user.exchange` | `user.search` | `SearchEventService` được gọi từ `MoviesService.search` / `RecommendationsService.semanticSearch` / `searchLexicalSemanticRerank` (có JWT, có kết quả) | `{userId, mode, keywordRaw, keywordNormalized}` — `mode = 'semantic' \| 'hybrid' \| 'db'`; chỉ `occurredAt`/`correlationId` ở envelope | ai-service (`user.queue`) |
 | `user.exchange` | `user.genre.update` | `POST /api/movies/:id/view`, `POST /api/interactions` (like), `POST /api/ratings`, `POST /api/comments` khi payload có `genres` | `{type, genres: [{id, name}], score}` với score gốc: click `1`, comment `4`, like `5`, rating `0..5`; ai-service tự chuẩn hoá theo `type`; `userId` ở envelope | ai-service (`user.queue`) |

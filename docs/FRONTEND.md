@@ -18,7 +18,7 @@
 - Hạ tầng có **Kong gateway (`gateway/kong.yml`, `:8000`)**: `/api` → `8081`, `/api/recommendations` → `8082`; **hiện frontend gọi thẳng backend `:8081`**, chưa dùng gateway và chưa có client gọi trực tiếp ai-service `:8082`.
 - Port dev: **3002** — script `npm run dev` chạy `next dev -p 3002`; backend đã cho phép CORS với `http://localhost:3002`.
 - Ngôn ngữ giao diện: **tiếng Việt**; có dark mode (class-based qua `next-themes`).
-- **Onboarding sở thích (V15)**: `PreferenceOnboardingGate` mount trong `src/app/(main)/layout.tsx:4,11`; hiện dialog chọn thể loại cho user đã đăng nhập chưa có `preferenceData.genre`, lưu qua `PUT /api/users/me`, có nút bỏ qua lưu `localStorage` theo user (`preference-onboarding-gate.tsx:24-89`).
+- **Onboarding sở thích (V15, cập nhật V42)**: `PreferenceOnboardingGate` mount trong `src/app/(main)/layout.tsx`; hiện dialog cho user đã đăng nhập khi `preferenceData.genre` chưa có genre hợp lệ `{id,name}`. Lưu qua `PUT /api/users/me` (không gọi API mới). Nút “Bỏ qua” không lưu `localStorage`: nếu vẫn chưa có preference thì reload/login lại vẫn hiện lại dialog. UI profile dùng chung format `{id,name}[]`.
 
 ## Techstacks
 

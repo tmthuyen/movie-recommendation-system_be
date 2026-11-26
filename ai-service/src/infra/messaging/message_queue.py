@@ -8,6 +8,7 @@ from aio_pika import ExchangeType, IncomingMessage
 from aio_pika.abc import AbstractRobustChannel, AbstractRobustConnection
 
 from core.config import Settings
+from core.custom_exception import CustomException
 from infra.messaging.consumers.movie_event_handler import MovieEventHandler
 from infra.messaging.event_constant import MessageEventBus, MessageEventType
 from utils.logger import setup_logger
@@ -281,6 +282,18 @@ class MessageQueue:
             )
             await self._handler.handle(event_type, payload)
             await message.ack()
+
+        # custom exception
+        # trả thẳng DLQ không cần retry
+        # except CustomException as exc:
+        #     self._logger.error(
+        #         "CustomException event=%s retry_count=%s; dead-letter to DLQ: %s",
+        #         event_type,
+        #         completed_retries,
+        #         exc,
+        #     )
+        #     if not message.processed:
+        #         await message.reject(requeue=False)
 
         except Exception:
             # Each processing queue has its own DLX destination. A rejection

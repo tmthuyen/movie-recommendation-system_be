@@ -75,13 +75,13 @@ class TestMovieEventValidation:
     @pytest.mark.parametrize(
         "payload",
         [
-            {**CREATED_PAYLOAD, "title": ""},
-            {**CREATED_PAYLOAD, "overview": ""},
+            {**CREATED_PAYLOAD, "title": "", "titleVi": ""},
+            {**CREATED_PAYLOAD, "overview": "", "overviewVi": ""},
         ],
     )
     def test_missing_title_or_overview_raises(self, payload):
         handler, service = make_handler()
-        with pytest.raises(Exception, match="Title or overview is required"):
+        with pytest.raises(Exception, match="không hợp lệ"):
             run(handler.handle("movie.created", payload))
         service.upsert_movie_vector.assert_not_awaited()
 

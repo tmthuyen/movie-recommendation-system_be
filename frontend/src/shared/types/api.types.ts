@@ -76,7 +76,7 @@ export interface User extends BaseDto {
   phoneNumber?: string;
   avatarUrl?: string;
   gender?: string;
-  preferenceData?: Record<string, string[]>;
+  preferenceData?: Record<string, unknown>;
   birthDate?: Date;
   address?: string;
   roles: Role[];
@@ -96,7 +96,7 @@ export interface UpdateProfileDto {
   phoneNumber?: string;
   birthDate?: Date;
   gender?: string;
-  preferenceData?: Record<string, string[]>;
+  preferenceData?: Record<string, unknown>;
 }
 
 // update password

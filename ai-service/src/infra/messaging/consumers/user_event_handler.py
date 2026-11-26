@@ -10,7 +10,6 @@ from infra.messaging.event_schemas import (
     DomainEvent,
     UserCreatedPayload,
     UserDeletedPayload,
-    UserUpdatedPayload,
 )
 from services.genre_vector_service import GenreVectorService
 from services.user_vector_service import UserVectorService
@@ -82,10 +81,12 @@ class UserEventHandler:
 
         if event_type == MessageEventType.USER_CREATED:
             validated_payload = UserCreatedPayload.model_validate(payload_obj)
-            await self._on_user_profile_changed(validated_payload)
+            await self._on_user_profile_changed(validated_payload.model_dump())
         elif event_type == MessageEventType.USER_UPDATED_PROFILE:
-            validated_payload = UserUpdatedPayload.model_validate(payload_obj)
-            await self._on_user_profile_changed(validated_payload)
+            # preferenceData là jsonb; không validate bằng schema cũ (chỉ nhận string[]).
+            await self._on_user_profile_changed(
+                payload_obj if isinstance(payload_obj, dict) else {}
+            )
         elif event_type == MessageEventType.USER_DELETED:
             validated_payload = UserDeletedPayload.model_validate(payload_obj)
             await self._on_user_deleted(validated_payload)
@@ -94,26 +95,42 @@ class UserEventHandler:
 
     # ── Handlers ──────────────────────────────────────────────────────────────
 
-    async def _on_user_profile_changed(self, payload: UserUpdatedPayload) -> None:
-        """Cập nhật long-term và short-term từ preference của user.
+    async def _on_user_profile_changed(self, payload: dict[str, Any]) -> None:
+        """Cập nhật long/short-term và payload genre từ preference của user.
 
-        Không còn ghi `user_profile_vectors`; preference được embed một lần rồi
-        trộn EMA vào hai collection long-term/short-term. Nếu event không có
-        preference thì giữ nguyên vector đã học thay vì xoá.
+        `preferenceData` được đọc như JSON tuỳ ý: `name` dùng để embed,
+        `id` dùng để set `genre_scores[id] = 1.0`. Không đụng vector dense của
+        collection genre.
 
         Returns:
             None; lỗi encode/upsert được phép lan ra để queue retry.
         """
-        user_text = self._to_user_text(payload)
+        user_id = str(payload.get("userId") or "")
+        if not user_id:
+            logger.warning("User profile event thiếu userId, bỏ qua")
+            return
+
+        preference_data = payload.get("preferenceData")
+        preference_data = preference_data if isinstance(preference_data, dict) else {}
+
+        genres = self._extract_genre_refs(preference_data.get("genre"))
+        if genres and self._genre_vector_service is not None:
+            await self._genre_vector_service.set_preferred_genres(
+                user_id=user_id,
+                genres=genres,
+            )
+            logger.info("Updated genre payload from profile UserId=%s", user_id)
+
+        user_text = self._to_user_text(preference_data)
         if not user_text:
             logger.info(
                 "User profile has no preferences; keep existing vectors UserId=%s",
-                payload.userId,
+                user_id,
             )
             return
 
         await self._user_vector_service.update_named_user_vectors_with_text(
-            user_id=payload.userId,
+            user_id=user_id,
             text=user_text,
             collection_names=(
                 settings.vector_user_long_term_collection,
@@ -123,7 +140,7 @@ class UserEventHandler:
         )
         logger.info(
             "Updated long-term/short-term vectors from profile UserId=%s",
-            payload.userId,
+            user_id,
         )
 
     async def _on_user_deleted(self, payload: UserDeletedPayload) -> None:
@@ -143,11 +160,40 @@ class UserEventHandler:
     # ── Helper ────────────────────────────────────────────────────────────────
 
     @staticmethod
-    def _to_user_text(event: UserUpdatedPayload) -> str:
-        """Convert structured preferences into deterministic embedding text."""
+    def _to_user_text(preference_data: dict[str, Any]) -> str:
+        """Convert structured preferences (string hoặc {id,name}) sang text embed."""
         texts: list[str] = []
-        for key, value in event.preferenceData.items():
-            if value:
-                texts.append(f"{key}: {', '.join(value)}")
+        for key, values in preference_data.items():
+            if not isinstance(values, list):
+                continue
+            names: list[str] = []
+            for value in values:
+                if isinstance(value, dict):
+                    name = value.get("name")
+                    if isinstance(name, str) and name:
+                        names.append(name)
+                elif isinstance(value, str) and value:
+                    names.append(value)
+            if names:
+                texts.append(f"{key}: {', '.join(names)}")
 
         return "| ".join(texts)
+
+    @staticmethod
+    def _extract_genre_refs(raw: Any) -> list[dict[str, Any]]:
+        """Lấy danh sách `{id,name}` hợp lệ từ `preferenceData.genre`."""
+        if not isinstance(raw, list):
+            return []
+        result: list[dict[str, Any]] = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            try:
+                genre_id = int(item.get("id"))
+            except (TypeError, ValueError):
+                continue
+            name = item.get("name")
+            if genre_id <= 0 or not isinstance(name, str) or not name:
+                continue
+            result.append({"id": genre_id, "name": name})
+        return result

@@ -7,7 +7,6 @@ import {
   EventEnvelopeSchema,
   userCreatedPayloadSchema,
   userDeletedPayloadSchema,
-  userUpdatedPayloadSchema,
 } from '@/infrastructure/messaging/event.types';
 import {
   MESSAGE_EVENTS,
@@ -42,10 +41,11 @@ export class UserHandler {
         return;
       }
       case MESSAGE_EVENTS.USER_UPDATED_PROFILE: {
-        const payload = validateWithZodSchema(
-          userUpdatedPayloadSchema,
-          event.payload,
-        );
+        // Payload preferenceData là jsonb tuỳ ý; KHÔNG validate cứng bằng zod schema cũ.
+        const payload = event.payload as {
+          userId: string;
+          preferenceData?: Record<string, unknown>;
+        };
         this.logger.log(
           `[UserHandler] user.updated.profile received: userId=${payload.userId}, eventId=${event.eventId}`,
         );

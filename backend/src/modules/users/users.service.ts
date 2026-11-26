@@ -20,25 +20,14 @@ import {
   STORAGE_SERVICE,
 } from '@/infrastructure/storage/storage.service';
 
+/**
+ * `preferenceData` là jsonb tuỳ ý. Giữ nguyên object gửi lên (có thể chứa
+ * `{id,name}`), không lọc theo string như trước.
+ */
 function getPreferenceData(
   preferenceData: User['preferenceData'] | null | undefined,
 ): Record<string, string[]> {
-  if (!preferenceData) {
-    return {};
-  }
-
-  return Object.entries(preferenceData).reduce<Record<string, string[]>>(
-    (result, [key, value]) => {
-      if (
-        Array.isArray(value) &&
-        value.every(item => typeof item === 'string')
-      ) {
-        result[key] = value;
-      }
-      return result;
-    },
-    {},
-  );
+  return (preferenceData ?? {}) as Record<string, string[]>;
 }
 
 @Injectable()

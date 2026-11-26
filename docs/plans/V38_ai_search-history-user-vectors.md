@@ -306,8 +306,9 @@ Trong đó:
 
 #### `user_genre_vectors`
 
-- Chỉ ghi bởi event `user.genre.update`.
-- ai-service chuẩn hoá score theo `type`: rating `clamp((rating-3)/2, -1, 1)`, các loại khác `clamp(score/5, 0, 1)`.
+- Ghi bởi event `user.genre.update` (interaction) và, từ V42, bởi `user.updated.profile` khi user chọn genre trong preferenceData.
+- Với `user.updated.profile` (V42): set trực tiếp `genre_scores[id] = 1.0` cho genre có `{id,name}`, không cộng `ALPHA`, không đụng dense vector; giữ nguyên các id khác do interaction tạo ra.
+- ai-service chuẩn hoá score theo `type` cho riêng `user.genre.update`: rating `clamp((rating-3)/2, -1, 1)`, các loại khác `clamp(score/5, 0, 1)`.
 - Với mỗi `genreId` trong payload:
   - `w[g] = clamp(w[g] + 0.05 * score_norm / max(1, |genres|), -1, 1)`.
 - Payload lưu metadata `genre_scores` JSON `{genreId: weight}`; vector chỉ giữ nguyên/placeholder nên không có ràng buộc dimension.

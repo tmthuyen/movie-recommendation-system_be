@@ -107,11 +107,13 @@ export class MoviesService {
   }
 
   private mapDtoToEntity(dto: any) {
-    const { genreIds, countryId, peopleIds, ...rest } = dto;
+    const { genreIds, countryIds, peopleIds, ...rest } = dto;
     const entity: any = { ...rest };
     if (genreIds) entity.genres = genreIds.map((id: number) => ({ id }));
     // Entity dùng quan hệ ManyToMany `countries` (bảng movie_countries).
-    if (countryId) entity.countries = [{ id: countryId }];
+    if (countryIds) {
+      entity.countries = countryIds.map((id: number) => ({ id }));
+    }
     if (peopleIds)
       entity.moviePeoples = peopleIds.map((id: number) => ({ people: { id } }));
     return entity;

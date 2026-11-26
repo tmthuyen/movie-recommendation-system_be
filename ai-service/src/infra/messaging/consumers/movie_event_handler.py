@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from api.schemas import MovieCreated, MovieDeleted, MovieUpdated
+from core.custom_exception import CustomException
 from services.movie_vector_service import MovieVectorService
 from utils.logger import setup_logger
 
@@ -46,10 +47,20 @@ class MovieEventHandler:
             Re-raise moi loi khac de MessageQueue quyet dinh retry hay DLQ.
         """
 
-        # Chỉ created/updated cần title & overview; movie.deleted chỉ có movieId.
+        # Chỉ created/updated cần text; movie.deleted chỉ có movieId.
+        # kiểm trả: nếu cả title/titleVi hoặc overview/overviewVi đều trống thì raise Exception để DLQ.
         if event_type in ("movie.created", "movie.updated"):
-            if not payload.get("title") or not payload.get("overview"):
-                raise Exception("Title or overview is required")
+            if (not payload.get("title") and not payload.get("titleVi")) or (
+                not payload.get("overview") and not payload.get("overviewVi")
+            ):
+                self._logger.error(
+                    f"movie={payload.get('movieId')} không hợp lệ, title/titleVi hoặc overview/overviewVi không được trống"
+                )
+                raise CustomException(
+                    f"movie={payload.get('movieId')} không hợp lệ, title/titleVi hoặc overview/overviewVi không được trống",
+                    status_code=400,
+                    error_code="INVALID_PAYLOAD",
+                )
 
         if event_type == "movie.created":
             await self._on_movie_created(payload)

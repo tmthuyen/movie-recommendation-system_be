@@ -46,6 +46,27 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+type PreferenceGenre = Pick<Genre, 'id' | 'name'>;
+
+/** Chuẩn hoá cả legacy `string[]` và object `{id,name}` về dạng lưu mới. */
+function toPreferenceGenres(value: unknown, genres: Genre[]): PreferenceGenre[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): PreferenceGenre[] => {
+    if (item !== null && typeof item === 'object') {
+      const candidate = item as { id?: unknown; name?: unknown };
+      if (typeof candidate.id === 'number' && typeof candidate.name === 'string') {
+        return [{ id: candidate.id, name: candidate.name }];
+      }
+      return [];
+    }
+    if (typeof item === 'string') {
+      const genre = genres.find((entry) => entry.name === item);
+      return genre ? [{ id: genre.id, name: genre.name }] : [];
+    }
+    return [];
+  });
+}
+
 const updateProfileSchema = z.object({
   fullName: z
     .string()
@@ -71,7 +92,7 @@ const updateProfileSchema = z.object({
       return phoneRegex.test(value);
     }, 'Số điện thoại không hợp lệ'),
   avatarUrl: z.string().optional(),
-  preferenceData: z.array(z.string()).optional(),
+  preferenceData: z.array(z.object({ id: z.number(), name: z.string() })).optional(),
   address: z.string().optional(),
 });
 
@@ -108,7 +129,7 @@ interface InputMultiSelectDemoProps {
       birthDate?: string | undefined;
       phoneNumber?: string;
       avatarUrl?: string | undefined;
-      preferenceData?: string[] | undefined;
+      preferenceData?: PreferenceGenre[] | undefined;
       address?: string | undefined;
     },
     'preferenceData'
@@ -131,48 +152,34 @@ const displayText = {
   close: 'Đóng',
   search: 'Tìm kiếm',
 };
-export const InputMultiSelectDemo = ({ field, fieldState, genres }: InputMultiSelectDemoProps) => {
-  const selectIds = genres
-    .filter((genre) => {
-      if (!field.value || field.value.length === 0) return false;
-      return field.value.some((selectedGenre) => selectedGenre === genre.name);
-    })
-    .map((genre) => String(genre.id));
+export const InputMultiSelectDemo = ({ field, genres }: InputMultiSelectDemoProps) => {
+  const selectIds = (field.value ?? []).map((genre) => String(genre.id));
   const genreOptions = genres.map((genre) => ({
     value: String(genre.id),
     label: genre.name,
   }));
 
-  const mapValueToName = (selectedValues: string[] | undefined) => {
+  const mapValueToGenreRef = (selectedValues: string[] | undefined): PreferenceGenre[] => {
     if (!selectedValues || selectedValues.length === 0) return [];
-    return selectedValues.map((value) => {
-      const genre: Genre | undefined = genres.find((g) => String(g.id) === value);
-      return genre ? genre.name : '';
+    return selectedValues.flatMap((value) => {
+      const genre: Genre | undefined = genres.find((entry) => String(entry.id) === value);
+      return genre ? [{ id: genre.id, name: genre.name }] : [];
     });
   };
 
   return (
     <div className="space-y-6">
-      {/* <Input
-        value={field.value?.join(', ')} // Display the selected genre names
-        id="preferenceData"
-        readOnly
-        aria-invalid={fieldState.invalid}
-        placeholder="Thể loại yêu thích"
-      /> */}
-
       {/* display genre names */}
       <div className="flex flex-wrap gap-2">
-        {field.value &&
-          field.value.map((name, index) => (
-            <span
-              key={index}
-              className="border-primary text-primary bg-primary/20 rounded-md border px-2 py-1 text-sm"
-            >
-              {name}
-            </span>
-          ))}
-        {field.value && field.value.length === 0 && (
+        {field.value?.map((genre) => (
+          <span
+            key={genre.id}
+            className="border-primary text-primary bg-primary/20 rounded-md border px-2 py-1 text-sm"
+          >
+            {genre.name}
+          </span>
+        ))}
+        {(!field.value || field.value.length === 0) && (
           <span className="text-sm text-gray-400">Chưa chọn thể loại yêu thích</span>
         )}
       </div>
@@ -181,8 +188,7 @@ export const InputMultiSelectDemo = ({ field, fieldState, genres }: InputMultiSe
         options={genreOptions}
         value={selectIds}
         onValueChange={(newValues) => {
-          field.onChange(mapValueToName(newValues)); // Update the form state with the selected genres
-          // console.log('Selected genre IDs:', field.value);
+          field.onChange(mapValueToGenreRef(newValues));
         }}
         displayTextProps={displayText}
       >
@@ -198,7 +204,11 @@ export default function UserProfileForm() {
   const pathname = usePathname();
 
   // mutation & query
-  const { data: genres, isLoading: isGenresLoading, error: genresError } = useGenre.useGetAll();
+  const {
+    data: genres,
+    isLoading: isGenresLoading,
+    error: genresError,
+  } = useGenre.useGetAll({ limit: 50 });
   const sendVerificationEmailMutation = useAuthApi.useSendVerificationEmail();
   const updateMeMutation = useUser.useUpdateMe();
   const updateAvatarMutation = useUser.useUpdateAvatar();
@@ -253,7 +263,7 @@ export default function UserProfileForm() {
       email: user?.email || undefined,
       gender: user?.gender,
       birthDate: user?.birthDate ? new Date(user.birthDate).toISOString().split('T')[0] : undefined,
-      preferenceData: user?.preferenceData ? user?.preferenceData?.genre : [],
+      preferenceData: toPreferenceGenres(user?.preferenceData?.genre, genres ?? []),
       address: user?.address || undefined,
       avatarUrl: user?.avatarUrl || undefined,
       phoneNumber: user?.phoneNumber || '',
@@ -266,6 +276,17 @@ export default function UserProfileForm() {
     handleSubmit,
     formState: { isValid, isSubmitting },
   } = updateProfileForm;
+
+  // Genres có thể về sau lúc form khởi tạo; chuẩn hoá legacy string[] ngay khi có danh sách.
+  const normalizedPreferenceRef = useRef(false);
+  useEffect(() => {
+    if (normalizedPreferenceRef.current || !genres || genres.length === 0) return;
+    updateProfileForm.setValue(
+      'preferenceData',
+      toPreferenceGenres(user?.preferenceData?.genre, genres),
+    );
+    normalizedPreferenceRef.current = true;
+  }, [genres, user?.preferenceData?.genre, updateProfileForm]);
 
   const onSubmit = async (data: z.infer<typeof updateProfileSchema>) => {
     setError(null);

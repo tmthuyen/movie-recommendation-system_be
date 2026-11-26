@@ -60,6 +60,7 @@ Bảng theo dõi danh sách plan trong `docs/plans/`. Dùng để xác định `
 | 39 | V39_backend_fetch_more_movie.md | backend + frontend | fetch-more-movie | Admin discover phim mới từ TMDB, load option genre/language có cache ngắn hạn, xem candidate chưa trùng DB, import thủ công hoặc mode tự động, UI admin trong `/admin/movies` với genre select đơn; không lấy cast/crew/metrics | 🟡 Phase 1–7 code/gate xong (gồm Swagger); smoke option chờ token thật; QA browser chưa chạy |
 | 40 | V40_cicd_centralized-logging-observability.md | cicd | centralized-logging-observability | Chuẩn hoá log backend/ai-service ra stdout JSON, Loki + Promtail local, Prometheus targets, linh hoạt AWS Fargate/VPS | 🟡 Đang triển khai |
 | 41 | V41_backend_country-movie-filter-dashboard.md | backend + frontend | country-movie-filter-dashboard | `GET /countries?hasMovies=true` cho user (sort viName, admin giữ full); dashboard admin đọc đúng movie.countries | ✅ Hoàn thành 2026-11-25 (BE 454 test, FE 287 test, build/type-check pass) |
+| 42 | V42_backend_user-preference-genre-weight.md | backend + frontend + ai | user-preference-genre-weight | `preferenceData.genre` lưu `{id,name}`; onboarding hiện lại khi chưa có preference; vẫn 1 event `user.updated.profile`; ai-service set `genre_scores[id] = 1.0` cho long/short + sparse genre payload | ✅ Code/gate xong 2026-11-26 (BE 457 test, FE 289 test; AI pytest 526 pass/8 fail caplog cũ); QA tay chờ stack thật |
 
 ## Cách xác định index khi tạo plan mới
 
@@ -77,8 +78,8 @@ Bảng theo dõi danh sách plan trong `docs/plans/`. Dùng để xác định `
 
 ## Cách tính next_index
 
-`max(index) = 41` → `next_index = 42`
+`max(index) = 42` → `next_index = 43`
 
 ## next_index
 
-`42`
+`43`

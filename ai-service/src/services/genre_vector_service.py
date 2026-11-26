@@ -241,9 +241,51 @@ class GenreVectorService:
         try:
             logger.info(f"Updated genre weights for user=%s: %s", user_id, weights)
             await self._user_vector_service.save_genre_payload(
+                user_id=user_id,
+                scores=weights,
+                collection_name=settings.vector_user_genre_collection,
+            )
+        except Exception as exc:
+            logger.warning("Không ghi được payload thể loại user=%s: %s", user_id, exc)
+            return False
+        return True
+
+    async def set_preferred_genres(
+        self,
+        user_id: str,
+        genres: list[dict[str, Any]],
+    ) -> bool:
+        """Set trọng số genre user chủ động chọn trong preferenceData = 1.0.
+
+        Khác `update_from_event()` (cộng dồn theo ALPHA), hàm này ghi đè trực
+        tiếp từng genre id về `GENRE_WEIGHT_MAX`. Chỉ ghi payload metadata
+        `genre_scores`, không tạo/cập nhật dense vector.
+
+        Returns:
+            True khi đã ghi payload, False khi bỏ qua hoặc ghi thất bại.
+        """
+        genre_ids = self._extract_genre_ids(genres)
+        if not genre_ids:
+            logger.info("Không có thể loại hợp lệ trong preference UserId=%s", user_id)
+            return False
+
+        try:
+            weights = await self._user_vector_service.find_genre_payload(
+                user_id, settings.vector_user_genre_collection
+            )
+        except Exception as exc:
+            logger.warning("Không đọc được payload thể loại user=%s: %s", user_id, exc)
+            return False
+
+        for genre_id in genre_ids:
+            weights[genre_id] = GENRE_WEIGHT_MAX
+
+        try:
+            await self._user_vector_service.save_genre_payload(
                 user_id,
                 weights,
                 settings.vector_user_genre_collection,
+                updated_from="user.profile",
             )
         except Exception as exc:
             logger.warning("Không ghi được payload thể loại user=%s: %s", user_id, exc)

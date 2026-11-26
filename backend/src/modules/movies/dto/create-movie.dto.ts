@@ -115,10 +115,15 @@ export class CreateMovieDto {
   @IsNumber({}, { each: true })
   genreIds?: number[];
 
-  @ApiProperty({ example: 1, description: 'ID của quốc gia', required: false })
+  @ApiProperty({
+    example: [1, 2, 3],
+    description: 'Mảng các ID quốc gia',
+    required: false,
+  })
   @IsOptional()
-  @IsNumber()
-  countryId?: number;
+  @IsArray()
+  @IsNumber({}, { each: true })
+  countryIds?: number[];
 
   @ApiProperty({
     example: [1, 2, 3],

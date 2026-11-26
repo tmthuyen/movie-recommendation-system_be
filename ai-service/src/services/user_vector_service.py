@@ -172,20 +172,16 @@ class UserVectorService:
     ) -> None:
         """Ghi payload `{genreId: score}` vào metadata collection.
 
-        Giữ nguyên vector cũ nếu record đã tồn tại; record mới truyền vector
-        `None` để backend tự dùng placeholder cố định. Vector không được dùng
-        để tính điểm genre.
+        Collection này chỉ lưu payload để tính điểm gợi ý; vector truyền thẳng
+        từ service là placeholder kỹ thuật, không phải embedding và không dùng
+        để chấm điểm genre.
 
         Returns:
             None.
         """
-        current = await self._vector_store.get_by_id(
-            movie_id=None, id=user_id, collection_name=collection_name
-        )
-        vector = current.get("vector") if current else None
         await self.upsert_named_user_vector(
             user_id=user_id,
-            vector=vector,
+            vector=[0.0] * settings.vector_size,
             collection_name=collection_name,
             updated_from=updated_from,
             metadata={

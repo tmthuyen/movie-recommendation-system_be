@@ -58,8 +58,8 @@ class Settings(BaseSettings):
 
     # CF latent factor (iALS): ĐÃ BỎ VECTOR NÀY
     # KHÔNG SỬ DỤNG 2 vector này
-    vector_user_cf_collection: str = "user_cf_vectors"
-    vector_movie_cf_collection: str = "movie_cf_vectors"
+    # vector_user_cf_collection: str = "user_cf_vectors"
+    # vector_movie_cf_collection: str = "movie_cf_vectors"
 
     # semantic profile: content-based filtering
     vector_user_profile_collection: str = "user_profile_vectors"

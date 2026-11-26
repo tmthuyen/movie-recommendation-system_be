@@ -15,6 +15,7 @@ export interface IGenreRepository {
   create(genre: Partial<Genre>): Promise<Genre>;
   update(id: number, genre: Partial<Genre>): Promise<Genre | null>;
   remove(id: number): Promise<boolean>;
+  hasMovies(genreId: number): Promise<boolean>;
 }
 
 const GENRE_FIELD_MAP: Record<string, string> = {
@@ -107,5 +108,15 @@ export class GenreRepository implements IGenreRepository {
   async remove(id: number): Promise<boolean> {
     const result = await this.repo.delete(id);
     return Boolean(result.affected && result.affected > 0);
+  }
+
+  async hasMovies(genreId: number): Promise<boolean> {
+    const count = await this.repo
+      .createQueryBuilder('genre')
+      .leftJoin('genre.movies', 'movie')
+      .where('genre.id = :genreId', { genreId })
+      .andWhere('movie.id IS NOT NULL')
+      .getCount();
+    return count > 0;
   }
 }

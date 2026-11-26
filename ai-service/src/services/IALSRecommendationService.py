@@ -1,10 +1,6 @@
-from pathlib import Path
-from typing import Any
-
 import implicit
 import numpy as np
 import pandas as pd
-import pyarrow.parquet as pq
 import torch
 
 # Use implicit library for ALS

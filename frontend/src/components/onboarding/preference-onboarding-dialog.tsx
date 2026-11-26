@@ -13,15 +13,18 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import useGenre from '@/hooks/tankstack/useGenre';
+import type { Genre } from '@/shared/types/api.types';
 
 import { X } from 'lucide-react';
+
+type PreferenceGenre = Pick<Genre, 'id' | 'name'>;
 
 interface PreferenceOnboardingDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  selectedGenres: string[];
-  onSelectGenre: (genreName: string) => void;
-  onRemoveGenre: (genreName: string) => void;
+  selectedGenres: PreferenceGenre[];
+  onSelectGenre: (genre: PreferenceGenre) => void;
+  onRemoveGenre: (genreId: number) => void;
   onSave: () => Promise<void>;
   onSkip: () => void;
   isSaving?: boolean;
@@ -37,7 +40,7 @@ export function PreferenceOnboardingDialog({
   onSkip,
   isSaving = false,
 }: PreferenceOnboardingDialogProps) {
-  const { data: genres = [], isLoading: isGenresLoading } = useGenre.useGetAll();
+  const { data: genres = [], isLoading: isGenresLoading } = useGenre.useGetAll({ limit: 50 });
   const [saving, setSaving] = useState(isSaving);
 
   // Sync saving state with isSaving prop
@@ -72,18 +75,18 @@ export function PreferenceOnboardingDialog({
             <div className="space-y-2">
               <p className="text-sm font-medium">Đã chọn ({selectedGenres.length})</p>
               <div className="flex flex-wrap gap-2">
-                {selectedGenres.map((genreName) => (
+                {selectedGenres.map((genre) => (
                   <Badge
-                    key={genreName}
+                    key={genre.id}
                     variant="default"
                     className="flex items-center gap-1 px-3 py-1"
                   >
-                    {genreName}
+                    {genre.name}
                     <button
                       type="button"
-                      onClick={() => onRemoveGenre(genreName)}
-                      className="hover:bg-primary-foreground/20 ml-1 rounded-full p-0.5"
-                      aria-label={`Xóa ${genreName}`}
+                      onClick={() => onRemoveGenre(genre.id)}
+                      className="hover:bg-primary-foreground/20 ml-1 cursor-pointer rounded-full p-0.5"
+                      aria-label={`Xóa ${genre.name}`}
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -105,13 +108,13 @@ export function PreferenceOnboardingDialog({
             ) : (
               <div className="flex flex-wrap gap-2">
                 {genres.map((genre) => {
-                  const isSelected = selectedGenres.includes(genre.name);
+                  const isSelected = selectedGenres.some((selected) => selected.id === genre.id);
                   return (
                     <button
                       key={genre.id}
                       type="button"
-                      onClick={() => onSelectGenre(genre.name)}
-                      className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                      onClick={() => onSelectGenre({ id: genre.id, name: genre.name })}
+                      className={`inline-flex cursor-pointer items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
                         isSelected
                           ? 'bg-primary text-primary-foreground border-primary'
                           : 'bg-background hover:bg-accent hover:text-accent-foreground border-border'

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.config import Settings
+from core.integrations import VectorStore
 from utils import setup_logger
 
 logger = setup_logger(name="FastAPI-Recommendations")
@@ -27,7 +29,9 @@ async def build_vector_db_health(vector_store: Any, settings: Any) -> dict[str, 
     }
 
 
-async def log_vector_db_health(vector_store: Any, settings: Any) -> dict[str, Any]:
+async def log_vector_db_health(
+    vector_store: VectorStore, settings: Settings
+) -> dict[str, Any]:
     """Log vector DB location/counts and warn about empty collections."""
     health = await build_vector_db_health(vector_store, settings)
 
@@ -51,11 +55,15 @@ async def log_vector_db_health(vector_store: Any, settings: Any) -> dict[str, An
             movies_collection,
         )
 
-    hybrid_collections = (
-        getattr(settings, "vector_user_cf_collection", "user_cf_vectors"),
-        getattr(settings, "vector_movie_cf_collection", "movie_cf_vectors"),
-    )
-    for name in hybrid_collections:
+    all_collections = [
+        settings.vector_collection,
+        settings.vector_user_genre_collection,
+        settings.vector_user_long_term_collection,
+        settings.vector_user_short_term_collection,
+        settings.vector_user_search_collection,
+        settings.vector_user_profile_collection,
+    ]
+    for name in all_collections:
         if counts.get(name) == 0:
             logger.warning(
                 "Collection '%s' is empty: hybrid recommendations will lack data.",

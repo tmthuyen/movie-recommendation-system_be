@@ -415,39 +415,6 @@ export default function HomePage() {
       <CountrySection />
 
       <section className="space-y-4">
-        <SectionHeader
-          title="Top bình luận (Chưa hoàn thiện)"
-          description="Những bình luận được yêu thích nhất"
-          action={
-            <Link
-              href="/movies"
-              className="text-primary inline-flex shrink-0 items-center gap-1 text-sm font-medium hover:underline"
-            >
-              Khám phá thêm <ArrowRight className="size-4" />
-            </Link>
-          }
-        />
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Card key={i} className="p-4">
-              <div className="flex items-start gap-3">
-                <Skeleton className="size-10 rounded-full" />
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-4 w-1/3" />
-                  <Skeleton className="h-3 w-full" />
-                  <Skeleton className="h-3 w-3/4" />
-                  <div className="flex items-center gap-4">
-                    <Skeleton className="h-3 w-12" />
-                    <Skeleton className="h-3 w-16" />
-                  </div>
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
-      </section>
-
-      <section className="space-y-4">
         <SectionHeader title="Sắp ra mắt" description="Những bộ phim sắp được công chiếu" />
         <MovieRow movies={newest.slice(0, 12)} max={12} />
       </section>

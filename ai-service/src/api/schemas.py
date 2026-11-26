@@ -130,10 +130,10 @@ class DomainEvent(BaseModel):
 
 class MovieCreated(BaseModel):
     movieId: int
-    title: str
-    titleVi: str
-    overview: str
-    overviewVi: str
+    title: str | None
+    titleVi: str | None
+    overview: str | None
+    overviewVi: str | None
     genres: list[str]
 
 

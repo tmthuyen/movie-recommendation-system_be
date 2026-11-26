@@ -1,4 +1,10 @@
-import { Injectable, Inject, NotFoundException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  NotFoundException,
+  Logger,
+  BadRequestException,
+} from '@nestjs/common';
 import { CreateGenreDto } from './dto/create-genre.dto';
 import { UpdateGenreDto } from './dto/update-genre.dto';
 import { IGenreRepository } from './genres.repository';
@@ -72,6 +78,13 @@ export class GenresService {
 
   async remove(id: number) {
     const genre = await this.findOne(id); // Check exists
+    // check if genre is used in any movie before deleting
+    const isUsed = await this.repo.hasMovies(genre.id);
+    if (isUsed) {
+      throw new BadRequestException(
+        `Genre with ID ${id} is used in a movie and cannot be deleted`,
+      );
+    }
     await this.repo.remove(genre.id);
     await this.cache.incr(CacheKeys.genre.listVersion());
     return { success: true };

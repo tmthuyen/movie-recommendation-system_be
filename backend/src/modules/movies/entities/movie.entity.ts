@@ -2,10 +2,8 @@ import {
   Column,
   Entity,
   Index,
-  JoinColumn,
   JoinTable,
   ManyToMany,
-  ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
 } from 'typeorm';
@@ -18,6 +16,7 @@ import { BaseAuditEntity } from '@/common/audits/baseaudit.entity';
 import { Interaction } from '@/modules/interactions/entities/interaction.entity';
 
 @Entity('movies')
+@Index('IDX_MOVIES_CREATED_AT', ['createdAt'])
 export class Movie extends BaseAuditEntity {
   /** Note about bigint type: bigint column type, used in SQL databases, doesn't fit into the regular number type and maps property to a string instead.
    * TypeORM url: https://typeorm.io/docs/entity/entities/

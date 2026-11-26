@@ -13,6 +13,7 @@ describe('GenresService', () => {
       create: jest.fn(),
       findAll: jest.fn(),
       findById: jest.fn(),
+      hasMovies: jest.fn().mockResolvedValue(false),
       update: jest.fn(),
       remove: jest.fn(),
     };

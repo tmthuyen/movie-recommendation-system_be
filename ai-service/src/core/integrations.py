@@ -275,6 +275,9 @@ class QdrantVectorBackend(VectorBackend):
             getattr(
                 self.settings, "vector_user_profile_collection", "user_profile_vectors"
             ),
+            getattr(
+                self.settings, "vector_user_genre_collection", "user_genre_vectors"
+            ),
         ]
         for coll in collections_to_init:
             if coll:
@@ -297,6 +300,8 @@ class QdrantVectorBackend(VectorBackend):
         coll = collection_name or self.settings.vector_collection
         await self._ensure_collection(coll)
         point_id = self._normalize_point_id(id)
+
+        print(f"Payload to upsert: {payload}")  # Debugging line
         await self.client.upsert(
             collection_name=coll,
             points=[PointStruct(id=point_id, vector=vector, payload=payload)],
@@ -461,8 +466,6 @@ class ChromaVectorBackend(VectorBackend):
         self._get_collection(self.settings.vector_collection)
 
         # Pre-initialize hybrid collections
-        self._get_collection(self.settings.vector_user_cf_collection)
-        self._get_collection(self.settings.vector_movie_cf_collection)
         self._get_collection(self.settings.vector_user_profile_collection)
         self._get_collection(
             getattr(self.settings, "vector_user_genre_collection", "user_genre_vectors")
