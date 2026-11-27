@@ -52,6 +52,26 @@ async def _get_recommend_service(request: Request) -> RecommendService:
     return svc
 
 
+@router.get("/lexical-search", response_model=PaginatedResponse[list[dict]])
+async def lexical_search(
+    app_request: Request,
+    keyword: str = Query(
+        ..., min_length=1, max_length=500, description="Tu khoa tim kiem BM25"
+    ),
+    topK: int = Query(default=50, ge=1, le=100, description="So luong phim can tra ve"),
+) -> PaginatedResponse[list[dict]]:
+    """Tim kiem phim bang BM25 Sparse Vector tren Qdrant."""
+    svc = await _get_recommend_service(app_request)
+    data = await svc.lexical_search(query=keyword, top_k=topK)
+    return paginated(
+        data=data,
+        total=len(data),
+        page=1,
+        limit=topK,
+        message=f"Tim kiem BM25 thanh cong cho tu khoa '{keyword}'",
+    )
+
+
 @router.get("/semantic-search", response_model=PaginatedResponse[list[dict]])
 async def semantic_search(
     app_request: Request,

@@ -93,12 +93,24 @@ export interface IRecommendationsService {
     query: SearchCursorQueryDto,
     context?: SearchEventContext,
   ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>>;
+  lexicalSearchByCursor(
+    query: SearchCursorQueryDto,
+    context?: SearchEventContext,
+  ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>>;
+  lexicalSearchByCursor(
+    query: SearchCursorQueryDto,
+    context?: SearchEventContext,
+  ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>>;
   searchLexicalSemanticRerank(
     keyword: string,
     topK?: number,
     context?: SearchEventContext,
   ): Promise<ResultWithPagination<SimilarMovieResponseDto>>;
   searchLexicalSemanticRerankByCursor(
+    query: SearchCursorQueryDto,
+    context?: SearchEventContext,
+  ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>>;
+  lexicalSearchByCursor(
     query: SearchCursorQueryDto,
     context?: SearchEventContext,
   ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>>;
@@ -349,6 +361,70 @@ export class RecommendationsService implements IRecommendationsService {
         context,
         query.keyword,
         'semantic',
+        result.length,
+      );
+    }
+
+    return {
+      result,
+      pagination: {
+        limit,
+        total,
+        hasMore,
+        nextCursor: hasMore ? lastRank : null,
+      },
+    };
+  }
+
+  async lexicalSearchByCursor(
+    query: SearchCursorQueryDto,
+    context?: SearchEventContext,
+  ): Promise<ResultWithCursorPagination<SimilarMovieResponseDto>> {
+    this.logger.log(
+      `Lexical search (cursor): keyword="${query.keyword}", limit=${query.limit}, cursor=${query.cursor ?? 0}`,
+    );
+
+    const { keyword, cursor } = query;
+
+    if (!keyword || !keyword.trim()) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'Thiếu từ khoá tìm kiếm.',
+        'keyword is required.',
+        'VALIDATION_ERROR',
+      );
+    }
+
+    const limit = clampCursorLimit(
+      query.limit,
+      DEFAULT_CURSOR_LIMIT,
+      MAX_CURSOR_LIMIT,
+    );
+    const afterRank = Math.max(0, Number(cursor) || 0);
+    const version = await this.cache.getCounter(
+      CacheKeys.recommendation.globalVersion(),
+    );
+    const key = CacheKeys.recommendation.lexical(keyword, this.window, version);
+    const { items, total } = await this.readWindow(
+      key,
+      () => this.loadLexicalFromAi(keyword),
+      afterRank,
+      limit,
+    );
+
+    const lastRank =
+      items.length > 0 ? items[items.length - 1].rank : afterRank;
+    const hasMore = lastRank < total;
+
+    const result = await this.hydrateWithCacheFirst(
+      items,
+      SimilarMovieResponseDto,
+    );
+    if (!query.cursor) {
+      await this.publishSearchIfEligible(
+        context,
+        query.keyword,
+        'lexical',
         result.length,
       );
     }
@@ -679,6 +755,32 @@ export class RecommendationsService implements IRecommendationsService {
     );
   }
 
+  private async loadLexicalFromAi(
+    keyword: string,
+  ): Promise<RecommendationItem[]> {
+    const raw = await this.callAiService(
+      `/lexical-search?keyword=${encodeURIComponent(keyword)}&topK=${this.window}`,
+      SimilarFromAiServiceResponseSchema,
+    );
+
+    const maxScore = Math.max(
+      ...raw.result.map(i => i.score ?? i.similarityScore ?? 0),
+      1,
+    );
+
+    return this.toSnapshot(
+      raw.result.map(item => {
+        const rawScore = item.score ?? item.similarityScore ?? 0;
+        const normalized = maxScore > 1 ? rawScore / maxScore : rawScore;
+        const clamped = Math.min(Math.max(Number(normalized) || 0, 0), 1);
+        return {
+          id: item.id,
+          score: Math.round(clamped * 10000) / 10000,
+        };
+      }),
+    );
+  }
+
   private async loadForYouFromAi(
     accessToken: string,
   ): Promise<RecommendationItem[]> {
@@ -910,7 +1012,7 @@ export class RecommendationsService implements IRecommendationsService {
     };
   }
 
-  /** Tìm ứng viên Lexical từ PostgreSQL rồi gửi sang AI-Service rerank với Semantic. */
+  /** Gửi keyword sang AI-Service để tự động chạy BM25 (Qdrant) kết hợp Semantic (Sentence-BERT) và Rerank (RRF). */
   private async loadLexicalRerankSnapshotFromAi(
     keyword: string,
     window: number,

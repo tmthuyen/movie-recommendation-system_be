@@ -149,7 +149,8 @@ export class RecommendationsController {
   @Get('/search-rerank')
   @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({
-    summary: 'Tìm kiếm kết hợp Lexical (PostgreSQL) + Semantic Rerank (AI)',
+    summary:
+      'Tìm kiếm kết hợp Lexical (BM25 Qdrant) + Semantic (Sentence-BERT) Rerank (RRF)',
   })
   async searchLexicalSemanticRerank(
     @Query('keyword') keyword: string,
@@ -245,6 +246,49 @@ export class RecommendationsController {
       success: true,
       statusCode: 200,
       message: 'Danh sách phim theo ngữ nghĩa đã được lấy thành công.',
+      result: res.result,
+      pagination: res.pagination,
+    };
+  }
+
+  // /api/recommendations/lexical-search/cursor?keyword=...&limit=12&cursor=12
+  @Get('/lexical-search/cursor')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({
+    summary: 'Load-more tìm kiếm từ khóa BM25 bằng cursor',
+    description:
+      'Cursor là rank cuối cùng của trang trước. Trang đầu bỏ trống cursor.',
+  })
+  async lexicalSearchByCursor(
+    @Query() cursorQuery: SearchCursorQueryDto,
+    @Req() req?: SearchRequest,
+  ) {
+    const { keyword, cursor, limit } = cursorQuery;
+    if (!keyword) {
+      throw new AppException(
+        HttpStatus.BAD_REQUEST,
+        'Thiếu từ khoá tìm kiếm.',
+        'keyword is required.',
+        'VALIDATION_ERROR',
+      );
+    }
+
+    const res = await this.recommendationsService.lexicalSearchByCursor(
+      {
+        cursor,
+        keyword,
+        limit: limit === undefined ? undefined : Number(limit),
+      },
+      {
+        ...this.toSearchContext(req),
+        isFirstPage: !cursor,
+      },
+    );
+
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Danh sách phim theo từ khóa đã được lấy thành công.',
       result: res.result,
       pagination: res.pagination,
     };
