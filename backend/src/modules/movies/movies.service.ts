@@ -1,10 +1,10 @@
 import { Injectable, Inject, NotFoundException, Logger } from '@nestjs/common';
 import { CreateMovieDto } from './dto/create-movie.dto';
 import { UpdateMovieDto } from './dto/update-movie.dto';
-import { IMovieRepository } from './movies.repository';
+import { IMovieRepository, type MovieRelationIds } from './movies.repository';
 import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
 import { MovieProducer } from '@/infrastructure/messaging/producers/movie.producer';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityTarget, In } from 'typeorm';
 import { EventsGateway } from '@/modules/events/events.gateway';
 import {
   Interaction,
@@ -106,41 +106,125 @@ export class MoviesService {
     });
   }
 
+  private uniqueIds(ids?: number[]): number[] {
+    if (!Array.isArray(ids)) return [];
+    return [...new Set(ids.map(id => Number(id)).filter(Number.isFinite))];
+  }
+
   private mapDtoToEntity(dto: any) {
     const { genreIds, countryIds, peopleIds, ...rest } = dto;
     const entity: any = { ...rest };
-    if (genreIds) entity.genres = genreIds.map((id: number) => ({ id }));
-    // Entity dùng quan hệ ManyToMany `countries` (bảng movie_countries).
-    if (countryIds) {
-      entity.countries = countryIds.map((id: number) => ({ id }));
-    }
-    if (peopleIds)
-      entity.moviePeoples = peopleIds.map((id: number) => ({ people: { id } }));
+
+    // undefined = giữ nguyên quan hệ; [] = xoá toàn bộ quan hệ.
+    // Quan hệ không nằm trong entity nữa — repository.applyRelations thay thế join table.
     return entity;
   }
 
+  /** Tách mảng ID đã dedupe/sort; không truyền field nào = giữ nguyên quan hệ đó. */
+  private extractRelationIds(dto: {
+    genreIds?: number[];
+    countryIds?: number[];
+    peopleIds?: number[];
+  }): MovieRelationIds {
+    const toIds = (ids?: number[]) =>
+      this.uniqueIds(ids).sort((left, right) => left - right);
+    const relations: MovieRelationIds = {};
+
+    if (Array.isArray(dto?.genreIds)) relations.genreIds = toIds(dto.genreIds);
+    if (Array.isArray(dto?.countryIds)) {
+      relations.countryIds = toIds(dto.countryIds);
+    }
+    if (Array.isArray(dto?.peopleIds)) {
+      relations.peopleIds = toIds(dto.peopleIds);
+    }
+    return relations;
+  }
+
+  private getCurrentRelationIds(movie: Movie): MovieRelationIds & {
+    genreIds: number[];
+    countryIds: number[];
+    peopleIds: number[];
+  } {
+    return {
+      genreIds: this.uniqueIds(
+        movie.genres?.map(genre => Number(genre.id)),
+      ).sort((left, right) => left - right),
+      countryIds: this.uniqueIds(
+        movie.countries?.map(country => Number(country.id)),
+      ).sort((left, right) => left - right),
+      peopleIds: this.uniqueIds(
+        movie.moviePeoples?.map(moviePeople => Number(moviePeople.people?.id)),
+      ).sort((left, right) => left - right),
+    };
+  }
+
+  /** So sánh ảnh AI trước/sau commit: scalar + 3 mảng ID đã sort. */
+  private hasAiChanges(before: Movie, after: Movie): boolean {
+    const scalarFields = [
+      'title',
+      'titleVi',
+      'overview',
+      'overviewVi',
+    ] as const;
+    if (scalarFields.some(field => before[field] !== after[field])) {
+      return true;
+    }
+
+    const beforeIds = this.getCurrentRelationIds(before);
+    const afterIds = this.getCurrentRelationIds(after);
+    return (
+      !this.sameIds(beforeIds.genreIds, afterIds.genreIds) ||
+      !this.sameIds(beforeIds.countryIds, afterIds.countryIds) ||
+      !this.sameIds(beforeIds.peopleIds, afterIds.peopleIds)
+    );
+  }
+
+  private async validateIdList(
+    ids: number[] | undefined,
+    entity: EntityTarget<{ id: number }>,
+    label: string,
+  ): Promise<void> {
+    const uniqueIds = this.uniqueIds(ids);
+    if (uniqueIds.length === 0) return;
+
+    const existing = await this.dataSource.getRepository(entity).find({
+      where: { id: In(uniqueIds) },
+      select: { id: true },
+    });
+    const existingIds = new Set(existing.map(item => Number(item.id)));
+    const missing = uniqueIds.filter(id => !existingIds.has(id));
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `${label} không tồn tại: ${missing.join(', ')}`,
+      );
+    }
+  }
+
   private async validateRelations(dto: any) {
-    const { genreIds, countryId, peopleIds } = dto;
-    if (genreIds && genreIds.length > 0) {
-      const count = await this.dataSource.getRepository(Genre).count({
-        where: genreIds.map((id: number) => ({ id })),
-      });
-      if (count !== genreIds.length)
-        throw new BadRequestException('Một hoặc nhiều thể loại không tồn tại');
-    }
-    if (countryId) {
-      const exists = await this.dataSource
-        .getRepository(Country)
-        .findOne({ where: { id: countryId } });
-      if (!exists) throw new BadRequestException('Quốc gia không tồn tại');
-    }
-    if (peopleIds && peopleIds.length > 0) {
-      const count = await this.dataSource.getRepository(People).count({
-        where: peopleIds.map((id: number) => ({ id })),
-      });
-      if (count !== peopleIds.length)
-        throw new BadRequestException('Một hoặc nhiều nhân vật không tồn tại');
-    }
+    await this.validateIdList(dto?.genreIds, Genre, 'Một hoặc nhiều thể loại');
+    await this.validateIdList(
+      dto?.countryIds,
+      Country,
+      'Một hoặc nhiều quốc gia',
+    );
+    await this.validateIdList(
+      dto?.peopleIds,
+      People,
+      'Một hoặc nhiều nhân vật',
+    );
+  }
+
+  private sameIds(next: number[], current: number[]): boolean {
+    const normalize = (ids: number[]) =>
+      this.uniqueIds(ids)
+        .map(Number)
+        .sort((left, right) => left - right);
+    const left = normalize(next);
+    const right = normalize(current);
+    return (
+      left.length === right.length &&
+      left.every((id, index) => id === right[index])
+    );
   }
 
   async testMovieCreated(createMovieDto: CreateMovieDto) {
@@ -192,7 +276,8 @@ export class MoviesService {
   async create(createMovieDto: CreateMovieDto) {
     await this.validateRelations(createMovieDto);
     const entity = this.mapDtoToEntity(createMovieDto) as Partial<Movie>;
-    const saved = await this.repo.create(entity);
+    const relations = this.extractRelationIds(createMovieDto);
+    const saved = await this.repo.createWithRelations(entity, relations);
 
     // Fetch full movie with relations for queue
     const fullMovie = await this.repo.findById(saved.id);
@@ -212,6 +297,10 @@ export class MoviesService {
 
     // Làm mới version danh sách phim.
     await this.cache.incr(CacheKeys.movie.listVersion());
+
+    this.logger.log(
+      `Tạo phim thành công: movieId=${saved.id}, fields=[${Object.keys(createMovieDto).join(',')}]`,
+    );
 
     return saved;
   }
@@ -279,47 +368,37 @@ export class MoviesService {
     const movie = await this.findOneFresh(id); // Kiểm tra tồn tại (đọc DB)
     await this.validateRelations(updateMovieDto);
     const entity = this.mapDtoToEntity(updateMovieDto);
-
-    // Check if relevant fields changed
-    const aiFields = [
-      'title',
-      'titleVi',
-      'overview',
-      'overviewVi',
-      'genreIds',
-      'peopleIds',
-    ];
-    let hasChanges = false;
-    for (const field of aiFields) {
-      if (
-        updateMovieDto[field as keyof UpdateMovieDto] !== undefined &&
-        updateMovieDto[field as keyof UpdateMovieDto] !==
-          movie[field as keyof typeof movie]
-      ) {
-        hasChanges = true;
-        break;
-      }
+    const relations = this.extractRelationIds(updateMovieDto);
+    const updated = await this.repo.updateWithRelations(
+      movie.id,
+      entity,
+      relations,
+    );
+    if (!updated) {
+      throw new NotFoundException(`Không tìm thấy phim với ID ${id}`);
     }
-    const updated = await this.repo.update(movie.id, entity);
 
-    if (hasChanges && updated) {
-      const fullMovie = await this.repo.findById(updated.id);
-      if (fullMovie) {
-        const payload: MovieUpdatedPayload = {
-          movieId: fullMovie.id,
-          title: fullMovie.title,
-          titleVi: fullMovie.titleVi,
-          overview: fullMovie.overview,
-          overviewVi: fullMovie.overviewVi,
-          genres: fullMovie.genres?.map(g => g.name) || [],
-        };
-        await this.movieProducer.publishMovieUpdated(payload);
-      }
+    // Sau commit reload đủ quan hệ rồi mới so sánh trước/sau để phát event AI.
+    const fullMovie = await this.repo.findById(updated.id);
+    if (fullMovie && this.hasAiChanges(movie, fullMovie)) {
+      const payload: MovieUpdatedPayload = {
+        movieId: fullMovie.id,
+        title: fullMovie.title,
+        titleVi: fullMovie.titleVi,
+        overview: fullMovie.overview,
+        overviewVi: fullMovie.overviewVi,
+        genres: fullMovie.genres?.map(g => g.name) || [],
+      };
+      await this.movieProducer.publishMovieUpdated(payload);
     }
 
     await this.invalidateAfterMovieChange(id);
 
-    return updated;
+    this.logger.log(
+      `Cập nhật phim: movieId=${id}, fields=[${Object.keys(updateMovieDto).join(',')}]`,
+    );
+
+    return fullMovie ?? updated;
   }
 
   async remove(id: number) {
@@ -329,6 +408,8 @@ export class MoviesService {
     await this.movieProducer.publishMovieDeleted({ movieId: id });
 
     await this.invalidateAfterMovieChange(id);
+
+    this.logger.log(`Xoá phim: movieId=${id}`);
 
     return { success: true };
   }
@@ -719,5 +800,53 @@ export class MoviesService {
     }
 
     return [...cached, ...fresh];
+  }
+
+  /** Lấy all movie trong database và publish sự kiện tạo movie mới để đưa vào vector db và bm25 */
+  async publishAllMoviesToQueue(maxRows: number | undefined): Promise<void> {
+    this.logger.log('Publishing all movies to queue...');
+
+    // theo từng batch và sleep 5s
+    // batch size 500
+    const batchSize = 500;
+    let offset = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const movies = await this.repo.findAll({
+        page: offset,
+        limit: batchSize,
+      });
+
+      if (movies.data.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      for (const movie of movies.data) {
+        if (movie) {
+          const payload: MovieUpdatedPayload = {
+            movieId: movie.id,
+            title: movie.title,
+            titleVi: movie.titleVi,
+            overview: movie.overview,
+            overviewVi: movie.overviewVi,
+            genres: movie.genres?.map(g => g.name) || [],
+          };
+          await this.movieProducer.publishMovieUpdated(payload);
+        }
+      }
+
+      offset += batchSize;
+      this.logger.log(`Published ${offset} movies to queue...`);
+      this.logger.log(`Sleeping for 5 seconds...`);
+
+      await new Promise(resolve => setTimeout(resolve, 5000)); // Sleep 5s
+
+      if (maxRows && offset >= maxRows) {
+        this.logger.log(`Reached maxRows limit of ${maxRows}. Stopping.`);
+        break;
+      }
+    }
   }
 }

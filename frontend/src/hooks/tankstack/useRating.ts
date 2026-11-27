@@ -44,6 +44,8 @@ export function useCreateRating(movieId: number) {
       // Đồng bộ voteAverage/voteCount ở card/chi tiết
       queryClient.invalidateQueries({ queryKey: ['movie', movieId] });
       queryClient.invalidateQueries({ queryKey: ['movies'] });
+      // Lịch sử tương tác cá nhân (tab Đánh giá)
+      queryClient.invalidateQueries({ queryKey: ['my-activities'] });
     },
     onError: (error) => {
       const parsedError = parseAxiosError(error);

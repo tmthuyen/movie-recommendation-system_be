@@ -2,10 +2,11 @@
 
 import { LayoutGrid, List } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { type MovieAdminInput } from '@/apis/movie.api';
+import { AdminPageHeader } from '@/components/admin/admin-page-header';
 import { AdminDeleteDialog } from '@/components/admin/data-view/admin-delete-dialog';
 import { AdminFormDialog } from '@/components/admin/data-view/admin-form-dialog';
 import type {
+  AdminFormDirtyFields,
   AdminFormField,
   AdminFormValues,
 } from '@/components/admin/data-view/admin-form-schema';
@@ -16,6 +17,7 @@ import { useServerTable } from '@/hooks/use-server-table';
 import { parseAxiosError } from '@/lib/axiosClient';
 import type { Movie } from '@/shared/types/movie.types';
 import { createMovieFilterFields } from './movie-filter-fields';
+import { buildMoviePayload } from './movie-form-payload';
 import { MovieDetailDialog } from './movie-detail-dialog';
 import { MovieGrid } from './movie-grid';
 import { createMovieColumns } from './movies-columns';
@@ -27,18 +29,6 @@ const EMPTY_MOVIES: Movie[] = [];
 const DEFAULT_SORTING = [{ id: 'releaseDate', desc: true }];
 const OPTION_LIST_PARAMS = { page: 1, limit: 500 };
 
-function optionalText(value: unknown): string | undefined {
-  if (value === null || value === undefined) return undefined;
-  const text = String(value).trim();
-  return text ? text : undefined;
-}
-
-function toNumberArray(value: unknown): number[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const numbers = value.map(Number).filter((item) => Number.isFinite(item));
-  return numbers.length > 0 ? numbers : undefined;
-}
-
 function displayTitle(movie: Movie): string {
   return movie.titleVi || movie.title || `#${movie.id}`;
 }
@@ -48,7 +38,15 @@ function toDateInput(value?: string): string {
   return value.slice(0, 10);
 }
 
-export function MoviesClient() {
+interface MoviesClientProps {
+  title?: string;
+  description?: string;
+}
+
+export function MoviesClient({
+  title = 'Phim',
+  description = 'Quản lý phim',
+}: MoviesClientProps = {}) {
   const table = useServerTable({
     initialPageSize: 10,
     initialSorting: DEFAULT_SORTING,
@@ -249,8 +247,9 @@ export function MoviesClient() {
       };
     }
 
-    const countries = editing.countries ?? [];
-    const countryId = countries[0]?.id ?? editing.country?.id;
+    const peopleIds = (editing.moviePeoples ?? [])
+      .map((moviePerson) => moviePerson.people?.id)
+      .filter((id): id is number => typeof id === 'number' && Number.isFinite(id));
 
     return {
       title: editing.title ?? '',
@@ -265,30 +264,16 @@ export function MoviesClient() {
       overviewVi: editing.overviewVi ?? '',
       genreIds: (editing.genres ?? []).map((genre) => String(genre.id)),
       countryIds: (editing.countries ?? []).map((country) => String(country.id)),
-      peopleIds: [],
+      peopleIds: peopleIds.map(String),
     };
   }, [editing]);
 
-  const handleSubmit = async (values: AdminFormValues) => {
-    const input: MovieAdminInput = {
-      title: String(values.title ?? '').trim(),
-      titleVi: optionalText(values.titleVi),
-      status: optionalText(values.status),
-      releaseDate: optionalText(values.releaseDate),
-      originCountry: optionalText(values.originCountry),
-      originalLanguage: optionalText(values.originalLanguage),
-      posterPath: optionalText(values.posterPath),
-      backdropPath: optionalText(values.backdropPath),
-      overview: optionalText(values.overview),
-      overviewVi: optionalText(values.overviewVi),
-      genreIds: toNumberArray(values.genreIds),
-      countryIds: toNumberArray(values.countryIds),
-      peopleIds: toNumberArray(values.peopleIds),
-    };
-
+  const handleSubmit = async (values: AdminFormValues, dirtyFields: AdminFormDirtyFields) => {
     if (editing) {
+      const input = buildMoviePayload(values, dirtyFields, true);
       await updateMovie.mutateAsync({ id: editing.id, data: input });
     } else {
+      const input = buildMoviePayload(values, dirtyFields, false);
       await createMovie.mutateAsync(input);
     }
     setFormOpen(false);
@@ -337,102 +322,109 @@ export function MoviesClient() {
   );
 
   return (
-    <AdminTablePage
-      table={table}
-      columns={columns}
-      data={movies}
-      total={total}
-      isLoading={moviesQuery.isLoading}
-      isFetching={moviesQuery.isFetching}
-      error={moviesQuery.error}
-      onRetry={() => void moviesQuery.refetch()}
-      searchPlaceholder="Tìm theo tên phim…"
-      searchLabel="Tìm kiếm phim"
-      filterFields={filterFields}
-      entityLabel="phim"
-      emptyDescription="Thêm phim đầu tiên để bắt đầu quản lý thư viện."
-      addLabel="Thêm phim"
-      onAdd={openCreate}
-      toolbarActions={
-        <>
-          <TmdbScannerDialog />
-          {viewToggle}
-        </>
-      }
-      body={
-        viewMode === 'grid' ? (
-          <MovieGrid
-            movies={movies}
-            isLoading={moviesQuery.isLoading}
-            error={moviesQuery.error}
-            onRetry={() => void moviesQuery.refetch()}
-            hasQuery={hasQuery}
-            onClearQuery={() => {
-              table.setKeywordInput('');
-              table.clearFilters();
-            }}
-            onEdit={openEdit}
-            onDelete={(movie) => setDeleteTarget(movie)}
-            onViewDetail={(movie) => setDetailTarget(movie)}
-            onAdd={openCreate}
-            addLabel="Thêm phim"
-          />
-        ) : undefined
-      }
-    >
-      <AdminFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        title={editing ? 'Sửa phim' : 'Thêm phim'}
-        description={
-          editing
-            ? `Cập nhật thông tin phim “${displayTitle(editing)}”.`
-            : 'Tạo phim mới trong thư viện.'
-        }
-        fields={formFields}
-        defaultValues={defaultValues}
-        onSubmit={handleSubmit}
-        submitting={createMovie.isPending || updateMovie.isPending}
-        submitLabel={editing ? 'Lưu thay đổi' : 'Thêm phim'}
-        mapServerError={(error) => {
-          const parsed = parseAxiosError(error);
-          if (parsed.statusCode === 409) {
-            return { field: 'title', message: 'Phim này đã tồn tại' };
-          }
-          return null;
-        }}
-      />
-
-      <MovieDetailDialog
-        movie={detailTarget}
-        open={detailTarget !== null}
-        onOpenChange={(next) => {
-          if (!next) setDetailTarget(null);
-        }}
-        onEdit={(movie) => {
-          setDetailTarget(null);
-          openEdit(movie);
-        }}
-      />
-
-      <AdminDeleteDialog
-        open={deleteTarget !== null}
-        onOpenChange={(next) => {
-          if (!next) setDeleteTarget(null);
-        }}
-        title="Xóa phim?"
-        description={
+    <div className="flex h-full w-full flex-col gap-4">
+      <AdminPageHeader title={title} description={description} queryRoots={[['admin-movies']]} />
+      <AdminTablePage
+        table={table}
+        columns={columns}
+        data={movies}
+        total={total}
+        isLoading={moviesQuery.isLoading}
+        isFetching={moviesQuery.isFetching}
+        error={moviesQuery.error}
+        onRetry={() => void moviesQuery.refetch()}
+        searchPlaceholder="Tìm theo tên phim…"
+        searchLabel="Tìm kiếm phim"
+        filterFields={filterFields}
+        entityLabel="phim"
+        emptyDescription="Thêm phim đầu tiên để bắt đầu quản lý thư viện."
+        addLabel="Thêm phim"
+        onAdd={openCreate}
+        toolbarActions={
           <>
-            Phim{' '}
-            <span className="text-foreground font-medium">
-              {deleteTarget ? displayTitle(deleteTarget) : 'này'}
-            </span>{' '}
-            sẽ bị xóa vĩnh viễn khỏi thư viện. Hành động này không thể hoàn tác.
+            <TmdbScannerDialog />
+            {viewToggle}
           </>
         }
-        onConfirm={handleDelete}
-        deleting={deleteMovie.isPending}
-      />
-    </AdminTablePage>
+        body={
+          viewMode === 'grid' ? (
+            <MovieGrid
+              movies={movies}
+              isLoading={moviesQuery.isLoading}
+              error={moviesQuery.error}
+              onRetry={() => void moviesQuery.refetch()}
+              hasQuery={hasQuery}
+              onClearQuery={() => {
+                table.setKeywordInput('');
+                table.clearFilters();
+              }}
+              onEdit={openEdit}
+              onDelete={(movie) => setDeleteTarget(movie)}
+              onViewDetail={(movie) => setDetailTarget(movie)}
+              onAdd={openCreate}
+              addLabel="Thêm phim"
+            />
+          ) : undefined
+        }
+      >
+        <AdminFormDialog
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          title={editing ? 'Sửa phim' : 'Thêm phim'}
+          description={
+            editing
+              ? `Cập nhật thông tin phim “${displayTitle(editing)}”.`
+              : 'Tạo phim mới trong thư viện.'
+          }
+          fields={formFields}
+          defaultValues={defaultValues}
+          onSubmit={handleSubmit}
+          submitting={createMovie.isPending || updateMovie.isPending}
+          submitLabel={editing ? 'Lưu thay đổi' : 'Thêm phim'}
+          mapServerError={(error) => {
+            const parsed = parseAxiosError(error);
+            if (parsed.statusCode === 409) {
+              return { field: 'title', message: 'Phim này đã tồn tại' };
+            }
+            // 400: validateRelations báo ID thể loại/quốc gia/người dùng không tồn tại.
+            if (parsed.statusCode === 400) {
+              return { field: 'root', message: parsed.message };
+            }
+            return null;
+          }}
+        />
+
+        <MovieDetailDialog
+          movie={detailTarget}
+          open={detailTarget !== null}
+          onOpenChange={(next) => {
+            if (!next) setDetailTarget(null);
+          }}
+          onEdit={(movie) => {
+            setDetailTarget(null);
+            openEdit(movie);
+          }}
+        />
+
+        <AdminDeleteDialog
+          open={deleteTarget !== null}
+          onOpenChange={(next) => {
+            if (!next) setDeleteTarget(null);
+          }}
+          title="Xóa phim?"
+          description={
+            <>
+              Phim{' '}
+              <span className="text-foreground font-medium">
+                {deleteTarget ? displayTitle(deleteTarget) : 'này'}
+              </span>{' '}
+              sẽ bị xóa vĩnh viễn khỏi thư viện. Hành động này không thể hoàn tác.
+            </>
+          }
+          onConfirm={handleDelete}
+          deleting={deleteMovie.isPending}
+        />
+      </AdminTablePage>
+    </div>
   );
 }

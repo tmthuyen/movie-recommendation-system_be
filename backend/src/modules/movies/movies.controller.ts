@@ -334,4 +334,21 @@ export class MoviesController {
       result,
     };
   }
+
+  @Get('publish/all')
+  @UseGuards(JwtAuthGuard)
+  @Roles('ADMIN', 'SUPERADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Publish all movies to queue' })
+  async publishAllMoviesToQueue(@Query('maxRows') maxRows?: string) {
+    const result = await this.moviesService.publishAllMoviesToQueue(
+      maxRows ? parseInt(maxRows) : 30000,
+    );
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Published all movies to queue successfully',
+      result,
+    };
+  }
 }

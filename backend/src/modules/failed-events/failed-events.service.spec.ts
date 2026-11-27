@@ -155,6 +155,50 @@ describe('FailedEventsService', () => {
       );
     });
 
+    it('routing interaction.* và auth.* → publish sang exchange tương ứng', async () => {
+      const interaction = makeFailedEvent({
+        routingKey: 'interaction.created',
+        eventType: 'interaction.created',
+      });
+      const auth = makeFailedEvent({
+        routingKey: 'auth.email_verified',
+        eventType: 'auth.email_verified',
+      });
+      repo.findById
+        .mockResolvedValueOnce(interaction)
+        .mockResolvedValueOnce(auth);
+
+      await expect(service.retry('fe-1')).resolves.toBe(true);
+      await expect(service.retry('fe-1')).resolves.toBe(true);
+
+      expect(publisher.publish).toHaveBeenNthCalledWith(
+        1,
+        MESSAGE_BUS_CONFIG.INTERACTION_EXCHANGE,
+        'interaction.created',
+        { movieId: 1 },
+        'corr-1',
+      );
+      expect(publisher.publish).toHaveBeenNthCalledWith(
+        2,
+        MESSAGE_BUS_CONFIG.AUTH_EXCHANGE,
+        'auth.email_verified',
+        { movieId: 1 },
+        'corr-1',
+      );
+    });
+
+    it('publish reject (Promise) → đợi xong rồi đánh dấu RETRIED_FAILED', async () => {
+      const failedEvent = makeFailedEvent();
+      repo.findById.mockResolvedValue(failedEvent);
+      publisher.publish.mockRejectedValue(new Error('channel closed'));
+
+      await expect(service.retry('fe-1')).resolves.toBe(false);
+
+      expect(failedEvent.status).toBe(FailedEventStatus.RETRIED_FAILED);
+      expect(failedEvent.errorReason).toBe('channel closed');
+      expect(repo.save).toHaveBeenCalledWith(failedEvent);
+    });
+
     it('publish lỗi → status RETRIED_FAILED, lưu errorReason, trả false (không ném)', async () => {
       const failedEvent = makeFailedEvent();
       repo.findById.mockResolvedValue(failedEvent);

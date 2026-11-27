@@ -1,4 +1,10 @@
-import { Injectable, Inject, NotFoundException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  NotFoundException,
+  ForbiddenException,
+  Logger,
+} from '@nestjs/common';
 import {
   CreateInteractionDto,
   InteractionGenreDto,
@@ -28,6 +34,8 @@ import { ResultWithPagination } from '@/common/dtos/paginated-result.interface';
 import { RatingsService } from '@/modules/ratings/ratings.service';
 import { Rating } from '@/modules/ratings/entities/rating.entity';
 import { MyInteractionsWithMovie } from '@/modules/interactions/dto/my-interaction-with-movie.dto';
+import { MyActivitiesQueryDto } from '@/modules/interactions/dto/my-activities-query.dto';
+import { Comment } from '@/modules/comments/entities/comment.entity';
 import { DataSource } from 'typeorm';
 
 export interface ToggleInteractionResult {
@@ -36,6 +44,8 @@ export interface ToggleInteractionResult {
   likeCount: number;
   data?: Interaction;
 }
+
+type ActivityInteraction = Interaction & { content?: string };
 
 @Injectable()
 export class InteractionsService {
@@ -209,6 +219,112 @@ export class InteractionsService {
     };
   }
 
+  /**
+   * Lịch sử tương tác đầy đủ của người dùng: click/like/rating/comment, kèm điểm đánh giá và nội dung bình luận.
+   * `types` rỗng được hiểu là lấy cả bốn loại; scope luôn là userId từ JWT.
+   */
+  async getMyActivities(
+    userId: string,
+    request: MyActivitiesQueryDto,
+  ): Promise<ResultWithPagination<ActivityInteraction>> {
+    const page = Math.max(request.page ?? 1, 1);
+    const limit = Math.min(Math.max(request.limit ?? 10, 1), 100);
+    const types =
+      request.types && request.types.length > 0
+        ? request.types
+        : [
+            InteractionType.CLICK,
+            InteractionType.LIKE,
+            InteractionType.RATING,
+            InteractionType.COMMENT,
+          ];
+
+    const [data, total] = await this.repo.findByUser(
+      userId,
+      { ...request, page, limit },
+      types,
+    );
+    await this.attachActivityDetails(userId, data);
+
+    this.logger.log(
+      `Lấy lịch sử tương tác userId=${userId}: page=${page}, limit=${limit}, types=${types.join(',')}`,
+    );
+
+    return {
+      result: data,
+      pagination: PaginationUtils.getPaginationMeta(page, limit, total),
+    };
+  }
+
+  /** Gắn điểm rating và nội dung comment cho page hiện tại bằng 2 truy vấn, không query theo từng item. */
+  private async attachActivityDetails(
+    userId: string,
+    items: ActivityInteraction[],
+  ): Promise<void> {
+    const movieIds = [
+      ...new Set(
+        items
+          .map(item => item.movie?.id)
+          .filter((id): id is number => id !== null && id !== undefined),
+      ),
+    ];
+    if (movieIds.length === 0) {
+      return;
+    }
+
+    const hasRating = items.some(item => item.type === InteractionType.RATING);
+    const hasComment = items.some(
+      item => item.type === InteractionType.COMMENT,
+    );
+
+    const [ratingRows, commentRows] = await Promise.all([
+      hasRating
+        ? this.dataSource
+            .getRepository(Rating)
+            .createQueryBuilder('rating')
+            .select('rating.movie_id', 'movieId')
+            .addSelect('rating.rating', 'score')
+            .where('rating.user_id = :userId', { userId })
+            .andWhere('rating.movie_id IN (:...movieIds)', { movieIds })
+            .getRawMany<{ movieId: string | number; score: string | number }>()
+        : Promise.resolve([]),
+      hasComment
+        ? this.dataSource
+            .getRepository(Comment)
+            .createQueryBuilder('comment')
+            .select('comment.movie_id', 'movieId')
+            .addSelect('comment.content', 'content')
+            .where('comment.user_id = :userId', { userId })
+            .andWhere('comment.movie_id IN (:...movieIds)', { movieIds })
+            .orderBy('comment.createdAt', 'DESC')
+            .addOrderBy('comment.id', 'DESC')
+            .getRawMany<{ movieId: string | number; content: string }>()
+        : Promise.resolve([]),
+    ]);
+
+    const scoreByMovie = new Map<string, number>();
+    for (const row of ratingRows) {
+      scoreByMovie.set(String(row.movieId), Number(row.score));
+    }
+    const contentByMovie = new Map<string, string>();
+    for (const row of commentRows) {
+      const key = String(row.movieId);
+      if (!contentByMovie.has(key)) {
+        contentByMovie.set(key, row.content);
+      }
+    }
+
+    for (const item of items) {
+      const key = String(item.movie?.id);
+      if (item.type === InteractionType.RATING && scoreByMovie.has(key)) {
+        item.score = scoreByMovie.get(key)!;
+      }
+      if (item.type === InteractionType.COMMENT && contentByMovie.has(key)) {
+        item.content = contentByMovie.get(key)!;
+      }
+    }
+  }
+
   async findOne(id: number) {
     const item = await this.repo.findById(id);
     if (!item) {
@@ -218,8 +334,11 @@ export class InteractionsService {
     return item;
   }
 
-  async remove(id: number) {
+  async remove(id: number, userId: string) {
     const item = await this.findOne(id);
+    if (item.user?.id !== userId) {
+      throw new ForbiddenException('Không có quyền xoá tương tác này');
+    }
     await this.repo.remove(item.id);
     this.logger.log(`Xóa tương tác với ID ${id} thành công`);
     return { success: true };

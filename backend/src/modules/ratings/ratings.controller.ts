@@ -108,11 +108,16 @@ export class RatingsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Cập nhật đánh giá của mình (Yêu cầu đăng nhập)' })
   async update(
+    @Req() req: Request,
     @Param('id') id: string,
     @Body() updateRatingDto: UpdateRatingDto,
   ) {
-    // Note: should check if rating belongs to user
-    const result = await this.ratingsService.update(+id, updateRatingDto);
+    const { sub: userId } = req.user as JwtPayload;
+    const result = await this.ratingsService.update(
+      +id,
+      userId,
+      updateRatingDto,
+    );
 
     return {
       success: true,

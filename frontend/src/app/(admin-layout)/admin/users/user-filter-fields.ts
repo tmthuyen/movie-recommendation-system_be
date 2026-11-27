@@ -9,6 +9,7 @@ import type { FilterFieldConfig, FilterOption } from '@/shared/utils/search-quer
  * Lưu ý: `eq` dùng `UPPER(column)` nên chỉ an toàn với cột text/enum — không
  * dùng cho `id` (uuid), `isVerified` (boolean) hay cột ngày. Quan hệ vai trò
  * hiển thị **tên** nhưng gửi **id** qua `in`/`notin`.
+ * `isVerified` dùng `in`/`notin` (không dùng `eq`) vì backend gọi `UPPER()` trên boolean.
  */
 export function createUserFilterFields(roleOptions: FilterOption[]): FilterFieldConfig[] {
   return [
@@ -60,6 +61,16 @@ export function createUserFilterFields(roleOptions: FilterOption[]): FilterField
         { value: 'ACTIVE', label: 'Hoạt động' },
         { value: 'INACTIVE', label: 'Không hoạt động' },
         { value: 'BLOCKED', label: 'Đã khóa' },
+      ],
+    },
+    {
+      field: 'isVerified',
+      label: 'Đã xác thực',
+      type: 'enum',
+      operators: ['in', 'notin'],
+      options: [
+        { value: 'true', label: 'Đã xác thực' },
+        { value: 'false', label: 'Chưa xác thực' },
       ],
     },
     {

@@ -4,10 +4,14 @@ import { RatingsService } from './ratings.service';
 
 describe('RatingsController', () => {
   let controller: RatingsController;
-  let service: { findAll: jest.Mock; findByMovie: jest.Mock };
+  let service: {
+    findAll: jest.Mock;
+    findByMovie: jest.Mock;
+    update: jest.Mock;
+  };
 
   beforeEach(async () => {
-    service = { findAll: jest.fn(), findByMovie: jest.fn() };
+    service = { findAll: jest.fn(), findByMovie: jest.fn(), update: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [RatingsController],
@@ -63,6 +67,18 @@ describe('RatingsController', () => {
         page: 2,
         limit: 5,
       });
+    });
+  });
+
+  describe('update', () => {
+    it('truyền userId từ JWT xuống service để kiểm tra chủ sở hữu', async () => {
+      service.update.mockResolvedValue({ id: 3, rating: 5 });
+      const req = { user: { sub: 'user-1' } } as never;
+
+      const response = await controller.update(req, '3', { rating: 5 });
+
+      expect(service.update).toHaveBeenCalledWith(3, 'user-1', { rating: 5 });
+      expect(response.result).toEqual({ id: 3, rating: 5 });
     });
   });
 });

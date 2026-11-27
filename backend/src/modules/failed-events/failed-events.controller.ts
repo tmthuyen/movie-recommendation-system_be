@@ -5,14 +5,19 @@ import {
   Param,
   Query,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import { FailedEventsService } from './failed-events.service';
 import { FailedEventSearchDto } from './dtos/failed-event-search.dto';
 import { Roles } from '@/common/decorators/roles.decorator';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
+import { RolesGuard } from '@/modules/auth/guards/roles.guard';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 
 @ApiTags('Failed Events (Admin)')
+@ApiBearerAuth()
 @Controller('failed-events')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class FailedEventsController {
   constructor(private readonly failedEventsService: FailedEventsService) {}
 

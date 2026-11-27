@@ -20,7 +20,7 @@ interface MovieYearRangeProps {
 
 const CURRENT_YEAR = new Date().getFullYear();
 export const MIN_RELEASE_YEAR = 1990;
-export const MAX_RELEASE_YEAR = CURRENT_YEAR + 1;
+export const MAX_RELEASE_YEAR = CURRENT_YEAR + 5;
 
 const YEAR_OPTIONS = Array.from(
   { length: MAX_RELEASE_YEAR - MIN_RELEASE_YEAR + 1 },

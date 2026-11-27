@@ -63,6 +63,8 @@ Bảng theo dõi danh sách plan trong `docs/plans/`. Dùng để xác định `
 | 42 | V42_backend_user-preference-genre-weight.md | backend + frontend + ai | user-preference-genre-weight | `preferenceData.genre` lưu `{id,name}`; onboarding hiện lại khi chưa có preference; vẫn 1 event `user.updated.profile`; ai-service set `genre_scores[id] = 1.0` cho long/short + sparse genre payload | ✅ Code/gate xong 2026-11-26 (BE 457 test, FE 289 test; AI pytest 526 pass/8 fail caplog cũ); QA tay chờ stack thật |
 | 43 | V43_backend_google-login-provider-status.md | backend | google-login-provider-status | Google login check `user_providers` trước (providerId/provider → userId), check status trước khi cấp session, link provider cho email đã có, không xoá provider cũ khi tạo user mới | ✅ Code/gate xong 2026-11-26 (BE 466 test, type-check/lint sạch, `git diff --check` ok); QA tay chờ stack thật |
 | 44 | V44_cicd_kong-to-nginx.md | cicd | kong-to-nginx | Giữ `gateway/kong.yml`, comment container Kong, thay bằng Nginx; route `/api`, `/api/recommendations`, `/socket.io/`; load balancing, CORS, X-Request-ID, rate limit, Promtail + exporter ổn định | ✅ Code/config xong 2026-11-26 (`nginx -t` ok, compose config ok, smoke CORS/route/429 ok); thêm resolver Docker để không crash khi backend/ai-service chưa lên; QA tay chờ stack thật |
+| 45 | V45_backend_failed-events-admin-activities-dashboard-movie-fixes.md | backend | failed-events-admin-activities-dashboard-movie-fixes | Backend: guard/retry failed events, my-activities, dashboard aggregate, sửa movie genre/country; **bổ sung P6** transaction + set lại 3 quan hệ (`genres`/`countries`/`movie_peoples`), **P7** admin user đủ thông tin + status + revoke session | ✅ P1–P7 xong 2026-11-27 (Jest + tsc + eslint pass); QA tay chờ stack thật |
+| 46 | V46_frontend_failed-events-admin-history-dashboard-refresh-movie-fixes.md | frontend | failed-events-admin-history-dashboard-refresh-movie-fixes | Frontend: admin failed events, tabs lịch sử, dashboard aggregate, refresh, fix movie form, dirty-field, admin user, **P8** login 401 auth không gọi refresh token | ✅ P1–P8 xong 2026-11-27 (292 test, tsc + eslint + build pass); QA tay chờ stack thật |
 
 ## Cách xác định index khi tạo plan mới
 
@@ -80,8 +82,8 @@ Bảng theo dõi danh sách plan trong `docs/plans/`. Dùng để xác định `
 
 ## Cách tính next_index
 
-`max(index) = 44` → `next_index = 45`
+`max(index) = 46` → `next_index = 47`
 
 ## next_index
 
-`45`
+`47`

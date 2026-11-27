@@ -4,6 +4,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Plus, Search } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { roleApi, type RoleInput } from '@/apis/role.api';
+import { AdminPageHeader } from '@/components/admin/admin-page-header';
 import { ActiveFilterChips } from '@/components/admin/data-view/active-filter-chips';
 import { DataTable } from '@/components/admin/data-view/data-table';
 import { DataTablePagination } from '@/components/admin/data-view/data-table-pagination';
@@ -24,7 +25,15 @@ import { createRoleColumns } from './roles-columns';
 const EMPTY_ROLES: Role[] = [];
 const DEFAULT_SORTING = [{ id: 'createdAt', desc: true }];
 
-export function RolesClient() {
+interface RolesClientProps {
+  title?: string;
+  description?: string;
+}
+
+export function RolesClient({
+  title = 'Vai trò',
+  description = 'Quản lý vai trò và phân quyền',
+}: RolesClientProps = {}) {
   const table = useServerTable({
     initialPageSize: 10,
     initialSorting: DEFAULT_SORTING,
@@ -95,6 +104,7 @@ export function RolesClient() {
 
   return (
     <div className="flex flex-col gap-4">
+      <AdminPageHeader title={title} description={description} queryRoots={[['admin-roles']]} />
       <DataTableToolbar
         actions={
           <Button type="button" className="h-11 gap-2" onClick={openCreate}>

@@ -15,6 +15,7 @@ import { CreateInteractionDto } from './dto/create-interaction.dto';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
+import { MyActivitiesQueryDto } from './dto/my-activities-query.dto';
 import { type Request } from 'express';
 import { JwtPayload } from '@/common/interfaces/jwt-payload.interface';
 import type {
@@ -182,6 +183,28 @@ export class InteractionsController {
     };
   }
 
+  @Get('my-activities')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Lịch sử tương tác của cá nhân (click, like, rating, comment)',
+  })
+  async getMyActivities(
+    @Req() req: Request,
+    @Query() query: MyActivitiesQueryDto,
+  ) {
+    const { sub: userId } = req.user as JwtPayload;
+    const { result, pagination } =
+      await this.interactionsService.getMyActivities(userId, query);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Lấy lịch sử tương tác thành công',
+      result,
+      pagination,
+    };
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Lấy chi tiết tương tác (Public)' })
   async findOne(@Param('id') id: string) {
@@ -202,8 +225,9 @@ export class InteractionsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Xoá tương tác (Yêu cầu đăng nhập)' })
-  async remove(@Param('id') id: string) {
-    const result = await this.interactionsService.remove(+id);
+  async remove(@Req() req: Request, @Param('id') id: string) {
+    const { sub: userId } = req.user as JwtPayload;
+    const result = await this.interactionsService.remove(+id, userId);
 
     return {
       success: true,

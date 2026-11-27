@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { CommentsService } from './comments.service';
 import { ICommentRepository } from './comments.repository';
@@ -213,6 +213,15 @@ describe('CommentsService', () => {
         },
       );
       expect(repo.update).toHaveBeenCalledWith(5, { content: 'mới' });
+    });
+
+    it('update comment của người khác → ForbiddenException, không ghi DB', async () => {
+      repo.findById.mockResolvedValue({ id: 5, user: { id: 'user-2' } });
+
+      await expect(
+        service.update(5, 'user-1', { content: 'mới' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(repo.update).not.toHaveBeenCalled();
     });
 
     it('remove xoá theo id và trả success', async () => {

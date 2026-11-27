@@ -1,7 +1,7 @@
 'use client';
 
 import { createColumnHelper } from '@tanstack/react-table';
-import { Pencil, ShieldCheck, Trash2 } from 'lucide-react';
+import { Eye, Pencil, ShieldCheck, Trash2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ const helper = createColumnHelper<AdminTableFeatures, User>();
 
 export interface UserColumnsOptions {
   onEdit: (user: User) => void;
+  onViewDetails: (user: User) => void;
   onAssignRoles: (user: User) => void;
   onDelete: (user: User) => void;
 }
@@ -32,6 +33,7 @@ function initials(fullName: string): string {
 /** Cột bảng người dùng — sort field khớp whitelist backend. */
 export function createUserColumns({
   onEdit,
+  onViewDetails,
   onAssignRoles,
   onDelete,
 }: UserColumnsOptions): AdminColumnDef<User>[] {
@@ -79,6 +81,14 @@ export function createUserColumns({
         );
       },
     }),
+    helper.accessor('isVerified', {
+      header: 'Xác thực',
+      cell: ({ getValue }) => (
+        <Badge variant={getValue() ? 'secondary' : 'outline'}>
+          {getValue() ? 'Đã xác thực' : 'Chưa xác thực'}
+        </Badge>
+      ),
+    }),
     helper.display({
       id: 'roles',
       header: 'Vai trò',
@@ -117,6 +127,12 @@ export function createUserColumns({
         <span className="text-muted-foreground text-sm">{formatDateTime(getValue())}</span>
       ),
     }),
+    helper.accessor('updatedAt', {
+      header: 'Ngày cập nhật',
+      cell: ({ getValue }) => (
+        <span className="text-muted-foreground text-sm">{formatDateTime(getValue())}</span>
+      ),
+    }),
     helper.display({
       id: 'actions',
       header: () => <span className="sr-only">Thao tác</span>,
@@ -125,6 +141,16 @@ export function createUserColumns({
         const user = row.original;
         return (
           <div className="flex items-center justify-end gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-foreground size-11 cursor-pointer"
+              onClick={() => onViewDetails(user)}
+              aria-label={`Xem chi tiết người dùng ${user.fullName}`}
+            >
+              <Eye className="size-4" aria-hidden />
+            </Button>
             <Button
               type="button"
               variant="ghost"

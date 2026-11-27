@@ -99,17 +99,18 @@ backend/src/
 │                                  # event.types.ts (EventEnvelope), messaging.constants.ts
 ├── modules/
 │   ├── auth/          # controller, service, session.service (Redis), JWT/Google/Optional guards, strategies
-│   ├── users/         # controller, service, repository, user.mapper, entities (User, UserProvider)
-│   ├── roles/          # CRUD roles (module duy nhất gắn RolesGuard)
+│   ├── users/         # CRUD + class-level JwtAuthGuard/RolesGuard; controller, service, repository, user.mapper, entities (User, UserProvider)
+│   ├── roles/          # CRUD roles (class-level JwtAuthGuard + RolesGuard)
 │   ├── permissions/    # STUB placeholder (chưa triển khai thật)
 │   ├── movies/         # CRUD + view count + RabbitMQ movie.*; entities Movie, MoviePeople
 │   ├── genres/ countries/ peoples/     # CRUD đồng nhất
 │   ├── ratings/        # CRUD rating + transaction cập nhật voteAverage/voteCount + WS + publish interaction.created; entities Rating, SeedRating
 │   ├── comments/       # CRUD comment phân cấp (parentId) + WS + publish interaction.created; entity Comment
-│   ├── interactions/   # TOGGLE like + stats + WS + publish interaction.created; entity Interaction; interaction.cron.ts
+│   ├── interactions/   # TOGGLE like + my-activities + stats + WS + publish interaction.created; entity Interaction; interaction.cron.ts
 │   ├── recommendations/ # proxy HTTP sang ai-service: similar, semantic-search, for-you (+ cursor load-more)
 │   ├── files/          # upload file chung (S3/R2)
-│   ├── failed-events/  # danh sách message rớt DLQ + retry thủ công
+│   ├── dashboard/      # aggregate stats theo kỳ/range cho admin (JWT + RolesGuard)
+│   ├── failed-events/  # danh sách message rớt DLQ + retry thủ công (JWT + RolesGuard)
 │   ├── events/         # EventsGateway (Socket.IO)
 │   └── health/         # Terminus health check
 └── seed/               # import-data.seed.ts, ratings.csv, SEED_DATA_GUILDE.md
@@ -202,7 +203,7 @@ Ký hiệu cột **Auth**:
 - `Optional JWT` = có thể không có token.
 - `@Roles(...)` = có decorator role; **⚠ xem ghi chú RolesGuard bên dưới**.
 
-> ⚠ **RolesGuard CHỈ được gắn ở `RolesController`** (`@UseGuards(JwtAuthGuard, RolesGuard)`). Các controller khác có ghi `@Roles(...)` (users, movies, genres, countries, peoples, ratings, comments, files, failed-events) **chỉ có JwtAuthGuard (hoặc không guard) → decorator @Roles KHÔNG được enforce**. Module `permissions`, `failed-events`, `health`, `app` thậm chí **không có JwtAuthGuard**. Xem mục `## Lưu ý cho Frontend/Client` trước khi giả định phân quyền.
+> ⚠ **RolesGuard được enforce thật ở `UsersController`, `RolesController`, `FailedEventsController` và `DashboardController`** (đều có `@UseGuards(JwtAuthGuard, RolesGuard)`). Các controller khác có ghi `@Roles(...)` (movies, genres, countries, peoples, ratings, comments, files) **chỉ có JwtAuthGuard (hoặc không guard) → decorator @Roles KHÔNG được enforce**. Module `permissions`, `health`, `app` thậm chí **không có JwtAuthGuard**. Xem mục `## Lưu ý cho Frontend/Client` trước khi giả định phân quyền.
 
 ### Module `auth` — `/api/auth` (class-level `JwtAuthGuard`, route public đánh dấu `@Public()`)
 
@@ -226,23 +227,25 @@ Ký hiệu cột **Auth**:
 
 JWT payload: `{sub, fullName, email, scopes, sessionId, jti}`. `JwtStrategy` kiểm tra **blacklist `auth:blacklist:{jti}`** và **session `auth:session:{sessionId}`** trong Redis trước khi cho qua.
 
-### Module `users` — `/api/users` (class-level `JwtAuthGuard`)
+### Module `users` — `/api/users` (class-level `JwtAuthGuard` + `RolesGuard`)
 
 | Method | Path | Auth | Request | Response `result` | Ghi chú |
 |---|---|---|---|---|---|
 | GET | `/api/users/me` | JWT | — | user (không `password`) | |
 | PUT | `/api/users/me` | JWT | `UpdateProfileDto` `{fullName?, avatarUrl?, phoneNumber?, birthDate?, gender?, preferenceData?}` | user | `preferenceData` là `jsonb`; `genre` lưu `[{id, name}]` (object JSON, không filter string) |
-| POST | `/api/users` | JWT + `@Roles(ADMIN, SUPERADMIN)` **⚠ không enforce** | `CreateUserDto` `{email, fullName, avatarUrl?, phoneNumber?, password, confirmPassword, roleIds[]}` | user | `201`; publish `user.created` |
-| GET | `/api/users` | JWT + `@Roles` **⚠** | `BaseSearchRequest` `{page=1, limit=10, keyword?, filters?, sort?}` — keyword ILIKE `fullName`/`email`/`phoneNumber` | user[] + `pagination` | filter: `id,email,fullName,phoneNumber,status,isVerified,gender,birthDate,createdAt,updatedAt,roleId,roleCode`; sort: `id,email,fullName,status,isVerified,birthDate,createdAt,updatedAt`; join `roles` |
-| GET | `/api/users/:id` | JWT + `@Roles` **⚠** | path `id` (uuid) | user | |
-| PUT | `/api/users/:id` | JWT + `@Roles` **⚠** | `UpdateProfileDto` | user | publish `user.updated` |
-| DELETE | `/api/users/:id` | JWT + `@Roles` **⚠** | path `id` | user | publish `user.deleted` |
-| PATCH | `/api/users/:id/roles` | JWT + `@Roles` **⚠** | body `{roleIds: number[]}` | user | |
-| POST | `/api/users/avatar` | JWT + `@Roles(ADMIN, SUPERADMIN, USER)` **⚠** | `multipart/form-data`, field `file`, ≤5MB, `jpg/jpeg/png/webp` | `{url}` | `201`; upload lên S3/R2 thư mục `uploads/avatars` |
+| POST | `/api/users` | JWT + `@Roles(ADMIN, SUPERADMIN)` | `CreateUserDto` `{email, fullName, avatarUrl?, phoneNumber?, password, confirmPassword, roleIds[]}` | user | `201`; publish `user.created` |
+| GET | `/api/users` | JWT + `@Roles(ADMIN, SUPERADMIN)` | `BaseSearchRequest` `{page=1, limit=10, keyword?, filters?, sort?}` — keyword ILIKE `fullName`/`email`/`phoneNumber` | user[] + `pagination` | filter: `id,email,fullName,phoneNumber,status,isVerified,gender,birthDate,createdAt,updatedAt,roleId,roleCode`; sort: `id,email,fullName,status,isVerified,birthDate,createdAt,updatedAt`; join `roles` |
+| GET | `/api/users/:id` | JWT + `@Roles(ADMIN, SUPERADMIN)` | path `id` (uuid) | user | |
+| PUT | `/api/users/:id` | JWT + `@Roles(ADMIN, SUPERADMIN)` | `AdminUpdateUserDto` (xem dưới) | user | publish `user.updated`; email trùng user khác → `409`; tự `BLOCKED`/`INACTIVE` chính mình → `400`; chuyển sang `BLOCKED`/`INACTIVE` → thu hồi session |
+| DELETE | `/api/users/:id` | JWT + `@Roles(ADMIN, SUPERADMIN)` | path `id` | user | publish `user.deleted` |
+| PATCH | `/api/users/:id/roles` | JWT + `@Roles(ADMIN, SUPERADMIN)` | body `{roleIds: number[]}` | user | |
+| POST | `/api/users/avatar` | JWT + `@Roles(ADMIN, SUPERADMIN, USER)` | `multipart/form-data`, field `file`, ≤5MB, `jpg/jpeg/png/webp` | `{url}` | `201`; upload lên S3/R2 thư mục `uploads/avatars` |
+
+`AdminUpdateUserDto` (dùng riêng cho `PUT /users/:id`): `email?` (IsEmail), `fullName?`, `phoneNumber?`, `birthDate?` (ISO date), `gender?`, `avatarUrl?`, `status?` (`IsEnum(UserStatus)`: `UNVERIFIED|ACTIVE|INACTIVE|BLOCKED`), `isVerified?` (boolean), `preferenceData?` (object). Mọi field đều `IsOptional`; `PUT /users/me` vẫn dùng `UpdateProfileDto` và **không** nhận `status`/`isVerified`.
 
 `UserMapper.toResponse` chỉ loại bỏ `password` (các field khác trả nguyên).
 
-### Module `roles` — `/api/roles` (`JwtAuthGuard` + **`RolesGuard`** — module duy nhất có RolesGuard)
+### Module `roles` — `/api/roles` (`JwtAuthGuard` + **`RolesGuard`**)
 
 | Method | Path | Auth | Request | Response `result` | Ghi chú |
 |---|---|---|---|---|---|
@@ -264,7 +267,7 @@ JWT payload: `{sub, fullName, email, scopes, sessionId, jti}`. `JwtStrategy` ki�
 
 | Method | Path | Auth | Request | Response `result` | Ghi chú |
 |---|---|---|---|---|---|
-| POST | `/api/movies` | JWT + `@Roles(ADMIN, SUPERADMIN)` **⚠ không enforce** | `CreateMovieDto` (xem dưới) | movie | `201`; validate genreIds/countryId/peopleIds tồn tại; publish `movie.created` |
+| POST | `/api/movies` | JWT + `@Roles(ADMIN, SUPERADMIN)` **⚠ không enforce** | `CreateMovieDto` (xem dưới) | movie | `201`; validate `genreIds`/`countryIds`/`peopleIds` tồn tại; scalar + 3 quan hệ ghi trong 1 transaction; publish `movie.created` |
 | POST | `/api/movies/test-created` | **Public** (guard bị comment) | `CreateMovieDto` | `result: undefined` (bị lược khỏi JSON) | test publish event (movieId cứng 101000) |
 | GET | `/api/movies` | Public | `BaseSearchRequest` `{page=1, limit=10, keyword?, filters?, sort?}` — keyword ILIKE `title` OR `titleVi` | movie[] + `pagination` | join `genres`, `countries` (M2M), `moviePeoples.people`; sort mặc định `createdAt DESC` + `id ASC`; filter: `id,tmdbId,imdbId,title,titleVi,overview,overviewVi,homepage,posterPath,backdropPath,releaseDate,status,originCountry,originalLanguage,tmdbRating,voteAverage,voteCount,viewCount,likeCount,createdAt,updatedAt,genreId,countryId,peopleId`; sort: `id,title,titleVi,releaseDate,tmdbRating,voteAverage,voteCount,viewCount,likeCount,createdAt,updatedAt`; **cache chỉ dùng cho truy vấn mặc định** (không filter + sort `createdAt:DESC` + `page <= 3`) — có filter/sort khác sẽ đọc DB trực tiếp |
 | GET | `/api/movies/search` | Public | query `MovieSearchRequestDto`: `page=1`, `limit=10`, `keyword?`, `sort=releaseDate:DESC`, `genreIds?` (number[]), `countryIds?` (number[]), `releaseYearFrom?`, `releaseYearTo?` | movie[] + `pagination` | Search nâng cao: chỉ lấy phim có đủ `title/titleVi/releaseDate/overview/overviewVi/posterPath/backdropPath`; `sort` cho phép `releaseDate,voteAverage,viewCount,likeCount,createdAt` (nhiều field cách nhau dấu phẩy, thêm `id ASC` để ổn định) |
@@ -275,12 +278,12 @@ JWT payload: `{sub, fullName, email, scopes, sessionId, jti}`. `JwtStrategy` ki�
 | GET | `/api/movies/tmdb/options/languages` | JWT + `@Roles(ADMIN, SUPERADMIN)` | — | `{code, englishName, name}[]` | Option ngôn ngữ TMDB từ `/3/configuration/languages`; map `iso_639_1 → code`, cache `cache:tmdb:options:languages` TTL 24h |
 | GET | `/api/movies/:id` | Public | path `id` (number) | movie (kèm relations) | `404` nếu không thấy |
 | POST | `/api/movies/:id/view` | **Optional JWT** | path `id`, body `{genres?: [{id, name}]}` | `{viewCount, score, interaction: 'created'\|'updated'\|'none'}` | transaction: luôn +`viewCount`; nếu đã đăng nhập: tạo Interaction `click` (score 1, publish MQ) hoặc xem lại → `score = min(5, score+1)` (không publish lại); có `genres` → publish thêm `user.genre.update` `{type: 'click', score: 1}` (ai-service tự chuẩn hoá); WS `movie-{id}-viewCount` + `movie-{id}-interaction` (chỉ khi user đăng nhập) |
-| PATCH | `/api/movies/:id` | JWT + `@Roles` **⚠** | `UpdateMovieDto` = Partial(`CreateMovieDto`) | movie | publish `movie.updated` nếu đổi title/titleVi/overview/overviewVi/genreIds/peopleIds |
+| PATCH | `/api/movies/:id` | JWT + `@Roles` **⚠** | `UpdateMovieDto` = Partial(`CreateMovieDto`) | movie | scalar + 3 quan hệ ghi trong 1 transaction; reload DB rồi so sánh (mảng ID đã sort) — publish `movie.updated` nếu đổi title/titleVi/overview/overviewVi/genreIds/countryIds/peopleIds |
 | DELETE | `/api/movies/:id` | JWT + `@Roles` **⚠** | path `id` | `{success: true}` | publish `movie.deleted` |
 
-`CreateMovieDto` fields: `title` (bắt buộc, ≤255), `titleVi?`, `overview?`, `overviewVi?`, `releaseDate?` (string ≤20), `posterPath?`, `backdropPath?`, `originCountry?`, `originalLanguage?`, `budget?`, `revenue?`, `status?`, `video?` (boolean), `voteAverage?`, `voteCount?`, `genreIds?` (number[]), `countryId?` (number), `peopleIds?` (number[]).
+`CreateMovieDto` fields: `title` (bắt buộc, ≤255), `titleVi?`, `overview?`, `overviewVi?`, `releaseDate?` (string ≤20), `posterPath?`, `backdropPath?`, `originCountry?`, `originalLanguage?`, `budget?`, `revenue?`, `status?`, `video?` (boolean), `voteAverage?`, `voteCount?`, `genreIds?` (number[]), `countryIds?` (number[]), `peopleIds?` (number[]).
 
-⚠ Lưu ý: `countryId` được validate tồn tại (`movies.service.ts`) và `mapDtoToEntity` gán `entity.countries = [{id: countryId}]` (M2M `countries` của entity `Movie`). Search/filter quốc gia dùng M2M `countries` (`movies.service.ts`).
+⚠ Quy ước cho **cả 3 mảng** `genreIds`/`countryIds`/`peopleIds` (dùng cho cả create lẫn update): `undefined` (không gửi) = giữ nguyên quan hệ; `[]` = xoá sạch quan hệ; `[...ids]` = thay thế toàn bộ quan hệ bằng danh sách mới. `genreIds` → join table M2M `movie_genres`, `countryIds` → `movie_countries`; `peopleIds` → entity trung gian `movie_peoples` (PK kép `movie_id` + `people_id`, có `role`: giữ role cũ nếu peopleId đã tồn tại, mặc định `actor` cho ID mới). Mảng ID được dedupe + sort trước khi so sánh; ID không tồn tại → `400` kèm ID. Search/filter quốc gia vẫn dùng M2M `countries` (`movies.service.ts`).
 
 ### Module `genres` — `/api/genres`
 
@@ -320,7 +323,7 @@ JWT payload: `{sub, fullName, email, scopes, sessionId, jti}`. `JwtStrategy` ki�
 | GET | `/api/ratings` | Public | `BaseSearchRequest` `{page=1, limit=10, keyword?, filters?, sort?}` — keyword ILIKE `content`, `user.fullName`, `user.email`, `movie.title`, `movie.titleVi` | rating[] + `pagination` | join `user`, `movie`; filter: `id,rating,content,timestamp,createdAt,updatedAt,userId,userEmail,userFullName,movieId,movieTitle`; sort: `id,rating,timestamp,createdAt,updatedAt` |
 | GET | `/api/ratings/movie/:movieId` | Public | `BaseSearchRequest` như trên | rating[] + `pagination` | join `user` (+ `movie` để filter/keyword); cùng filter/sort với `GET /api/ratings` |
 | GET | `/api/ratings/:id` | Public | — | rating (user + movie) | |
-| PATCH | `/api/ratings/:id` | JWT | `UpdateRatingDto` (Partial) | rating | ⚠ không kiểm tra rating thuộc về user |
+| PATCH | `/api/ratings/:id` | JWT | `UpdateRatingDto` (Partial) | rating | userId lấy từ JWT; `403` nếu rating không thuộc về user |
 | DELETE | `/api/ratings/:id` | JWT + `@Roles(ADMIN, SUPERADMIN)` **⚠** | — | rating | ⚠ không kiểm tra chủ sở hữu |
 
 Rating unique theo (user, movie).
@@ -333,7 +336,7 @@ Rating unique theo (user, movie).
 | GET | `/api/comments` | Public | `QueryCommentDto` (extends `BaseSearchRequest`) `{page=1, limit=10, keyword?, filters?, sort?}` — keyword ILIKE `content`, `user.fullName`, `user.email`, `movie.title`, `movie.titleVi` | comment[] + `pagination` | join `user`, `movie`; filter: `id,content,parentId,createdAt,updatedAt,userId,userEmail,userFullName,movieId,movieTitle`; sort: `id,content,createdAt,updatedAt`; mặc định `createdAt DESC` |
 | GET | `/api/comments/movie/:movieId` | Public | `QueryCommentDto` + `parentId?` (number) | comment[] + `pagination` | không truyền `parentId` → lấy root (`parentId IS NULL`); mỗi item có thêm **`replyCount`** (số reply trực tiếp); filter/sort như `GET /api/comments` |
 | GET | `/api/comments/:id` | Public | — | comment (user + movie) | |
-| PATCH | `/api/comments/:id` | JWT | `UpdateCommentDto` (Partial) | comment | ⚠ không kiểm tra chủ sở hữu |
+| PATCH | `/api/comments/:id` | JWT | `UpdateCommentDto` (Partial) | comment | userId lấy từ JWT; `403` nếu comment không thuộc về user |
 | DELETE | `/api/comments/:id` | JWT + `@Roles(ADMIN, SUPERADMIN)` **⚠** | — | comment | |
 
 ### Module `interactions` — `/api/interactions`
@@ -348,9 +351,10 @@ Rating unique theo (user, movie).
 | GET | `/api/interactions` | Public | `BaseSearchRequest` `{page=1, limit=10, keyword?, filters?, sort?}` — keyword ILIKE `user.fullName`, `user.email`, `movie.title`, `movie.titleVi`, `type` | interaction[] + `pagination` | join `user`, `movie`; filter: `id,score,type,createdAt,updatedAt,userId,userEmail,userFullName,movieId,movieTitle`; sort: `id,score,type,createdAt,updatedAt`; mặc định `createdAt DESC` |
 | GET | `/api/interactions/my-history` | JWT | `BaseSearchRequest` | interaction[] + `pagination` | chỉ `type=click` (lịch sử xem), join `movie`; filter/sort như `GET /api/interactions` |
 | GET | `/api/interactions/my-favorites` | JWT | `BaseSearchRequest` | interaction[] + `pagination` | chỉ `type=like`; filter/sort như `GET /api/interactions` |
+| GET | `/api/interactions/my-activities` | JWT | `MyActivitiesQueryDto` = `BaseSearchRequest` + `types?: InteractionType[]` — `types=click,like,rating,comment` (mặc định cả 4 loại khi không truyền) | interaction[] + `pagination` | **Lịch sử tương tác unified**, scope `req.user.sub`, join `movie`; item rating có `score` lấy từ `ratings.rating`, item comment có `content` lấy từ `comments.content`; filter/sort như `GET /api/interactions` |
 | GET | `/api/interactions/movie/:movieId/me` | JWT | path `movieId` | `{isLiked: boolean, click: boolean, commentCount: number, rating: rating\|null}` | **Trạng thái tương tác của user với 1 phim** — dùng cho trang chi tiết (`interactions.controller.ts:152-175`); gộp 2 query song song (interactions + rating, `interactions.service.ts:237-259`) |
 | GET | `/api/interactions/:id` | Public | — | interaction | |
-| DELETE | `/api/interactions/:id` | JWT | — | `{success: true}` | |
+| DELETE | `/api/interactions/:id` | JWT | — | `{success: true}` | `userId` lấy từ JWT; `403` nếu interaction không thuộc về user |
 
 `InteractionScoreMap` (band 5 = **độ tin cậy**, không hiển thị cho user): `like=5`, `comment=4`, `click=1` (tăng dần tối đa 5 khi xem lại), `rating=0` (động, lấy đúng số sao user nhập). Enum chỉ còn `like/rating/comment/click`; index `(user, movie, type)` **không unique** (cho phép nhiều comment/click/rating cùng phim).
 
@@ -383,12 +387,42 @@ Ghi chú cursor:
 |---|---|---|---|---|---|
 | POST | `/api/files/upload` | JWT + `@Roles(ADMIN, SUPERADMIN, USER)` **⚠** | `multipart/form-data` field `file`, ≤5MB, `jpg/jpeg/png/webp` | `{url}` | `201`; S3/R2, thư mục `uploads` |
 
-### Module `failed-events` — `/api/failed-events` (⚠ **KHÔNG có JwtAuthGuard**, `@Roles` không được enforce)
+### Module `failed-events` — `/api/failed-events` (class-level `JwtAuthGuard` + `RolesGuard`, ADMIN/SUPERADMIN)
 
 | Method | Path | Auth | Request | Response | Ghi chú |
 |---|---|---|---|---|---|
-| GET | `/api/failed-events` | ⚠ Public (chỉ rate-limit) | `FailedEventSearchDto` (extends `BaseSearchRequest`): `{page=1, limit=10, keyword?, filters?, sort?, status?}` — `status` ∈ `PENDING`, `RETRIED_SUCCESS`, `RETRIED_FAILED` (tương thích query cũ, được merge thành `filters=status:eq:<status>` nếu chưa có) | envelope chuẩn: `result` = FailedEvent[] + `pagination` | keyword ILIKE `source`,`queueName`,`routingKey`,`eventId`,`eventType`,`correlationId`,`errorReason`; filter: `id,status,source,queueName,routingKey,eventId,eventType,correlationId,retryCount,createdAt,updatedAt`; sort: `id,status,source,queueName,routingKey,eventType,retryCount,createdAt,updatedAt` |
-| POST | `/api/failed-events/:id/retry` | ⚠ Public (chỉ rate-limit) | path `id` (uuid) | `{success: boolean, statusCode: 200, message}` — **KHÔNG có `result`** | publish lại payload về `movie.exchange` (hoặc `user.exchange` nếu routingKey bắt đầu `user.`); đánh dấu status + tăng `retryCount`; `404` nếu không thấy |
+| GET | `/api/failed-events` | JWT + `@Roles(ADMIN, SUPERADMIN)` | `FailedEventSearchDto` (extends `BaseSearchRequest`): `{page=1, limit=10, keyword?, filters?, sort?, status?}` — `status` ∈ `PENDING`, `RETRIED_SUCCESS`, `RETRIED_FAILED` (tương thích query cũ, được merge thành `filters=status:eq:<status>` nếu chưa có) | envelope chuẩn: `result` = FailedEvent[] + `pagination` | keyword ILIKE `source`,`queueName`,`routingKey`,`eventId`,`eventType`,`correlationId`,`errorReason`; filter: `id,status,source,queueName,routingKey,eventId,eventType,correlationId,retryCount,createdAt,updatedAt`; sort: `id,status,source,queueName,routingKey,eventType,retryCount,createdAt,updatedAt` |
+| POST | `/api/failed-events/:id/retry` | JWT + `@Roles(ADMIN, SUPERADMIN)` | path `id` (uuid) | `{success: boolean, statusCode: 200, message}` — **KHÔNG có `result`** | `await publish()` rồi đánh dấu `RETRIED_SUCCESS`; publish reject → `RETRIED_FAILED`; exchange chọn theo prefix routing key: `movie.` → `movie.exchange`, `user.` → `user.exchange`, `interaction.` → `interaction.exchange`, `auth.` → `auth.exchange`, còn lại fallback `movie.exchange`; tăng `retryCount`; `404` nếu không thấy |
+
+### Module `dashboard` — `/api/admin/dashboard` (class-level `JwtAuthGuard` + `RolesGuard`, ADMIN/SUPERADMIN)
+
+| Method | Path | Auth | Request | Response `result` | Ghi chú |
+|---|---|---|---|---|---|
+| GET | `/api/admin/dashboard/stats` | JWT + `@Roles(ADMIN, SUPERADMIN)` | `period=day\|week\|month\|quarter\|year\|custom` (mặc định `month`); `from?`, `to?` bắt buộc khi `custom` | `DashboardStats` (xem dưới) | Aggregate trực tiếp từ DB, **không lấy mẫu 100 bản ghi** như UI cũ |
+
+**Query & timezone**
+
+- Mọi mốc thời gian hiểu theo **UTC**. Kỳ tương đối tính tới `23:59:59.999Z` của ngày hiện tại (UTC): `day=1 ngày`, `week=7 ngày`, `month=30 ngày`, `quarter=90 ngày`, `year=365 ngày`.
+- `from`/`to` nhận `YYYY-MM-DD` (`from` → `00:00:00.000Z`, `to` → `23:59:59.999Z`) hoặc ISO **phải có `Z`/offset** (vd. `2026-11-01T07:00:00+07:00`). `custom` thiếu mốc hoặc `from > to` → `400` envelope lỗi chuẩn.
+- `period` trả lại trong `result.period` kèm `from`/`to` ISO đã áp dụng (cả kỳ tương đối).
+
+**`result`**
+
+| Key | Kiểu | Ý nghĩa |
+|---|---|---|
+| `totals` | `{movies, users, genres, interactions, ratings, comments}` | `movies/users/genres` là snapshot toàn DB; 3 số còn lại đếm trong kỳ/range |
+| `timeSeries` | `{date: 'YYYY-MM-DD', interactions, ratings, comments}[]` | Group theo ngày UTC có phát sinh dữ liệu; không có dữ liệu → `[]` |
+| `topViewed` | `{label, value}[]` | Top 10 phim theo `viewCount` (cột tích luỹ, không lọc theo kỳ) |
+| `topActiveUsers` | `{label, value}[]` | Tổng interactions + ratings + comments trong kỳ, theo user |
+| `genreDistribution` / `countryDistribution` | `{label, value}[]` | Số phim theo thể loại/quốc gia (M2M); gom phần dư thành `Khác` |
+| `interactionTypes` | `{type, value}[]` | Đếm interaction trong kỳ theo `like/rating/comment/click` |
+| `ratingDistribution` | `{rating, value}[]` | Đếm rating trong kỳ, làm tròn đến số sao nguyên |
+| `topRated` | `{label, value}[]` | Top 10 phim có điểm trung bình cao nhất trong kỳ (tối thiểu 2 lượt đánh giá) |
+| `dataQualityIssues` | `{label, count, description, href}[]` | Chỉ trả issue có `count > 0`: thiếu poster/mô tả/thể loại/quốc gia |
+| `recentActivity` | `{id, kind, kindLabel, createdAt, userName, userEmail, movieTitle, detail}[]` | 12 hoạt động mới nhất trong kỳ, gộp interaction/rating/comment |
+| `period` | `{period, from, to}` | Kỳ và biên UTC thực tế đã dùng |
+
+DB rỗng hoặc kỳ không có dữ liệu → mọi count bằng `0`, mảng rỗng (không trả `null`).
 
 ### Module `health` — `/api/health`
 
@@ -540,7 +574,7 @@ Vượt limit → HTTP **429 Too Many Requests** với message của decorator (
    - Login `POST /api/auth/login` với `{username, password}` (**`username` = email**) → nhận `accessToken` trong JSON + cookie `refreshToken` httpOnly (không đọc được bằng JS).
    - Gọi API bảo mật: header `Authorization: Bearer <accessToken>`.
    - Hết hạn → `POST /api/auth/refresh` (gửi kèm cookie, không cần body) → token mới; `401` nếu session bị thu hồi (đã logout / blacklist jti).
-   - Quy tắc: `401` = chưa đăng nhập/token sai/hết hạn; `403` = sai quyền (chỉ xảy ra thật ở `GET /api/roles`).
+   - Quy tắc: `401` = chưa đăng nhập/token sai/hết hạn; `403` = sai quyền (xảy ra thật ở `/api/roles`, `/api/failed-events`, `/api/admin/dashboard`, và khi sửa/xoá tài nguyên không phải của mình).
    - Google OAuth: `GET /api/auth/google` → callback set cookie → redirect `${FRONTEND_URL}/auth/google-success`.
 4. **Validation strict**: `forbidNonWhitelisted` → không gửi field thừa; field body/query có thể gửi snake_case (interceptor đổi sang camelCase).
 5. **Interactions là TOGGLE like**: `POST /api/interactions` gọi 1 lần để thích, gọi lại để bỏ — đọc `result.action` (`added`/`removed`); client **không gửi `score`** (backend tự tính band 5) và `result.likeCount` phục vụ cập nhật số like. `POST /api/movies/:id/view` là Optional JWT (tăng view kể cả khi chưa đăng nhập; chỉ user đăng nhập mới tạo/tăng `click`).
@@ -550,6 +584,6 @@ Vượt limit → HTTP **429 Too Many Requests** với message của decorator (
    - Tìm kiếm ngữ nghĩa: `GET /api/recommendations/semantic-search?keyword=...&topK=10`; load-more `GET /api/recommendations/semantic-search/cursor?keyword=...&limit=12&cursor=<rank>`.
    - Gợi ý cá nhân hoá: `GET /api/recommendations/for-you?topK=20` (JWT); load-more `GET /api/recommendations/for-you/cursor?limit=12&cursor=<rank>` (JWT).
    - Tất cả trả envelope chuẩn; `pagination.nextCursor = null` khi hết. Backend proxy sang ai-service qua `AI_SERVICE_URL` rồi map với DB. Ngoài HTTP, backend vẫn trao đổi event với ai-service qua RabbitMQ.
-8. **Phân quyền thực tế**: `@Roles` chưa được enforce ở hầu hết module (RolesGuard chỉ gắn ở `/api/roles`). Đừng dựa vào `@Roles` để bảo vệ UI/API phía client — kiểm tra `roles` trong `GET /api/auth/me`.
+8. **Phân quyền thực tế**: `RolesGuard` được enforce ở `/api/users`, `/api/roles`, `/api/failed-events` và `/api/admin/dashboard` (ADMIN/SUPERADMIN). Các module khác chỉ có `@Roles` decorator → **không enforce**; đừng dựa vào đó để bảo vệ UI/API phía client — kiểm tra `roles` trong `GET /api/auth/me`.
 9. **Đổi mật khẩu** (`PATCH /api/auth/change-password`) sẽ logout toàn bộ phiên → client cần đăng nhập lại.
 10. **Upload ảnh**: `POST /api/files/upload` và `POST /api/users/avatar` — multipart field `file`, ≤5MB, chỉ `jpg/jpeg/png/webp` → `{result: {url}}`.

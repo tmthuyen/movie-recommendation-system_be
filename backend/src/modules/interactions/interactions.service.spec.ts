@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { IInteractionRepository } from './interactions.repository';
 import { InteractionProducer } from '@/infrastructure/messaging/producers/interaction.producer';
@@ -26,7 +26,8 @@ describe('InteractionsService', () => {
     increment: jest.Mock;
     decrement: jest.Mock;
   };
-  let dataSource: { transaction: jest.Mock };
+  let dataSource: { transaction: jest.Mock; getRepository: jest.Mock };
+  let detailQueryBuilder: Record<string, jest.Mock>;
   let statsService: {
     getStats: jest.Mock;
     recordLike: jest.Mock;
@@ -56,10 +57,23 @@ describe('InteractionsService', () => {
       decrement: jest.fn().mockResolvedValue(undefined),
     };
 
+    detailQueryBuilder = {
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      addOrderBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([]),
+    };
+
     dataSource = {
       transaction: jest.fn(async (cb: (m: unknown) => Promise<unknown>) =>
         cb(manager),
       ),
+      getRepository: jest.fn(() => ({
+        createQueryBuilder: jest.fn(() => detailQueryBuilder),
+      })),
     };
 
     repo = {
@@ -262,12 +276,23 @@ describe('InteractionsService', () => {
       );
     });
 
-    it('remove xoá theo id và trả success', async () => {
-      repo.findById.mockResolvedValue({ id: 7 });
+    it('remove xoá tương tác của chính chủ và trả success', async () => {
+      repo.findById.mockResolvedValue({ id: 7, user: { id: 'user-1' } });
       repo.remove.mockResolvedValue(undefined);
 
-      await expect(service.remove(7)).resolves.toEqual({ success: true });
+      await expect(service.remove(7, 'user-1')).resolves.toEqual({
+        success: true,
+      });
       expect(repo.remove).toHaveBeenCalledWith(7);
+    });
+
+    it('remove tương tác của người khác → ForbiddenException, không xoá', async () => {
+      repo.findById.mockResolvedValue({ id: 7, user: { id: 'user-2' } });
+
+      await expect(service.remove(7, 'user-1')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(repo.remove).not.toHaveBeenCalled();
     });
 
     it('findAll chuẩn hoá page/limit và trả {result, pagination}', async () => {
@@ -315,6 +340,76 @@ describe('InteractionsService', () => {
         [InteractionType.LIKE],
       );
       expect(result.pagination.total).toBe(3);
+    });
+
+    it('getMyActivities mặc định lấy cả 4 type, gắn score rating và content comment', async () => {
+      const items = [
+        {
+          id: 1,
+          type: InteractionType.CLICK,
+          score: 1,
+          movie: { id: 10 },
+        },
+        {
+          id: 2,
+          type: InteractionType.RATING,
+          score: 0,
+          movie: { id: 11 },
+        },
+        {
+          id: 3,
+          type: InteractionType.COMMENT,
+          score: 0,
+          movie: { id: 11 },
+        },
+        {
+          id: 4,
+          type: InteractionType.LIKE,
+          score: 5,
+          movie: { id: 12 },
+        },
+      ];
+      repo.findByUser.mockResolvedValue([items, 9]);
+      detailQueryBuilder.getRawMany
+        .mockResolvedValueOnce([{ movieId: 11, score: 4 }])
+        .mockResolvedValueOnce([{ movieId: 11, content: 'Phim hay' }]);
+
+      const result = await service.getMyActivities('user-1', {
+        page: 2,
+        limit: 5,
+      });
+
+      expect(repo.findByUser).toHaveBeenCalledWith(
+        'user-1',
+        { page: 2, limit: 5 },
+        ['click', 'like', 'rating', 'comment'],
+      );
+      expect(result.result[1].score).toBe(4);
+      expect(result.result[2].content).toBe('Phim hay');
+      expect(result.result[0].content).toBeUndefined();
+      expect(result.pagination).toEqual({
+        total: 9,
+        page: 2,
+        limit: 5,
+        totalPages: 2,
+      });
+    });
+
+    it('getMyActivities với types chỉ định thì không query bảng rating/comment', async () => {
+      repo.findByUser.mockResolvedValue([[], 0]);
+
+      await service.getMyActivities('user-1', {
+        page: 1,
+        limit: 10,
+        types: [InteractionType.CLICK],
+      });
+
+      expect(repo.findByUser).toHaveBeenCalledWith(
+        'user-1',
+        { page: 1, limit: 10, types: [InteractionType.CLICK] },
+        [InteractionType.CLICK],
+      );
+      expect(dataSource.getRepository).not.toHaveBeenCalled();
     });
   });
 });

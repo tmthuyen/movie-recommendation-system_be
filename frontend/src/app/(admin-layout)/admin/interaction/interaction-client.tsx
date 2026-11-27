@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { AdminPageHeader } from '@/components/admin/admin-page-header';
 import { AdminDeleteDialog } from '@/components/admin/data-view/admin-delete-dialog';
 import { AdminTablePage } from '@/components/admin/data-view/admin-table-page';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -276,34 +277,56 @@ function LikeClickTab() {
   );
 }
 
-/** Trang Tương tác: 3 tab độc lập (đánh giá / bình luận / like-click). */
-export function InteractionClient() {
-  return (
-    <Tabs defaultValue="ratings" className="gap-4">
-      <TabsList
-        className="h-auto! w-full justify-start gap-1 overflow-x-auto sm:w-fit"
-        aria-label="Loại tương tác"
-      >
-        <TabsTrigger value="ratings" className="min-h-11 cursor-pointer px-4">
-          Đánh giá
-        </TabsTrigger>
-        <TabsTrigger value="comments" className="min-h-11 cursor-pointer px-4">
-          Bình luận
-        </TabsTrigger>
-        <TabsTrigger value="like-click" className="min-h-11 cursor-pointer px-4">
-          Like / Click
-        </TabsTrigger>
-      </TabsList>
+interface InteractionClientProps {
+  title?: string;
+  description?: string;
+}
 
-      <TabsContent value="ratings">
-        <RatingTab />
-      </TabsContent>
-      <TabsContent value="comments">
-        <CommentTab />
-      </TabsContent>
-      <TabsContent value="like-click">
-        <LikeClickTab />
-      </TabsContent>
-    </Tabs>
+const INTERACTION_QUERY_ROOTS = [
+  ['admin-interactions'],
+  ['admin-ratings'],
+  ['admin-comments'],
+  ['admin-movies'],
+] as const;
+
+/** Trang Tương tác: 3 tab độc lập (đánh giá / bình luận / like-click). */
+export function InteractionClient({
+  title = 'Tương tác',
+  description = 'Theo dõi tương tác, đánh giá và bình luận của người dùng',
+}: InteractionClientProps = {}) {
+  return (
+    <div className="flex h-full w-full flex-col gap-4">
+      <AdminPageHeader
+        title={title}
+        description={description}
+        queryRoots={INTERACTION_QUERY_ROOTS}
+      />
+      <Tabs defaultValue="ratings" className="gap-4">
+        <TabsList
+          className="h-auto! w-full justify-start gap-1 overflow-x-auto sm:w-fit"
+          aria-label="Loại tương tác"
+        >
+          <TabsTrigger value="ratings" className="cursor-pointer px-4">
+            Đánh giá
+          </TabsTrigger>
+          <TabsTrigger value="comments" className="cursor-pointer px-4">
+            Bình luận
+          </TabsTrigger>
+          <TabsTrigger value="like-click" className="cursor-pointer px-4">
+            Like / Click
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="ratings">
+          <RatingTab />
+        </TabsContent>
+        <TabsContent value="comments">
+          <CommentTab />
+        </TabsContent>
+        <TabsContent value="like-click">
+          <LikeClickTab />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }

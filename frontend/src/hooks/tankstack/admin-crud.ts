@@ -35,17 +35,22 @@ export interface CrudListResult<T> {
 }
 
 /** Contract API CRUD mà mỗi domain cung cấp cho factory. */
-export interface CrudApi<T, TInput> {
+export interface CrudApi<T, TInput, TUpdateInput = TInput> {
   /** QueryKey root riêng cho domain (vd. `admin-genres`) — invalidate theo root. */
   domain: string;
   list: (params: SearchListParams) => Promise<ApiPaginatedResponse<T[]>>;
   create: (data: TInput) => Promise<unknown>;
-  update: (id: string | number, data: TInput) => Promise<unknown>;
+  update: (id: string | number, data: TUpdateInput) => Promise<unknown>;
   remove: (id: string | number) => Promise<unknown>;
 }
 
-/** Bộ hooks CRUD dùng chung — mỗi domain chỉ cần cung cấp `CrudApi`, không viết lại query/mutation. */
-export function createCrudHooks<T, TInput>(api: CrudApi<T, TInput>) {
+/**
+ * Bộ hooks CRUD dùng chung — mỗi domain chỉ cần cung cấp `CrudApi`, không viết lại query/mutation.
+ * `TUpdateInput` cho phép PATCH/PUT nhận payload từng phần (dirty fields) trong khi create vẫn đủ field.
+ */
+export function createCrudHooks<T, TInput, TUpdateInput = TInput>(
+  api: CrudApi<T, TInput, TUpdateInput>,
+) {
   function useList(params: SearchListParams & { enabled?: boolean } = {}) {
     const { enabled = true, ...rest } = params;
     const queryParams = useNormalizedListParams(rest);
@@ -74,10 +79,15 @@ export function createCrudHooks<T, TInput>(api: CrudApi<T, TInput>) {
     });
   }
 
-  function useUpdate(): UseMutationResult<unknown, Error, { id: string | number; data: TInput }> {
+  function useUpdate(): UseMutationResult<
+    unknown,
+    Error,
+    { id: string | number; data: TUpdateInput }
+  > {
     const queryClient = useQueryClient();
     return useMutation({
-      mutationFn: ({ id, data }: { id: string | number; data: TInput }) => api.update(id, data),
+      mutationFn: ({ id, data }: { id: string | number; data: TUpdateInput }) =>
+        api.update(id, data),
       onSuccess: () => {
         toast.success('Đã cập nhật.');
         queryClient.invalidateQueries({ queryKey: [api.domain] });

@@ -29,6 +29,9 @@ export interface MovieAdminInput {
   peopleIds?: number[];
 }
 
+/** `PATCH /movies/:id` nhận `Partial<CreateMovieDto>` — field không gửi giữ nguyên. */
+export type MovieAdminUpdateInput = Partial<MovieAdminInput>;
+
 /** Option thể loại TMDB — `GET /api/movies/tmdb/options/genres`. */
 export interface TmdbGenreOption {
   id: number;

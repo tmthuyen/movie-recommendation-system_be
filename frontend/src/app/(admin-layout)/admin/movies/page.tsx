@@ -1,5 +1,3 @@
-import React from 'react';
-import { PageHeader } from '@/components/common/PageHeader';
 import { MoviesClient } from './movies-client';
 
 export const metadata = {
@@ -8,12 +6,5 @@ export const metadata = {
 };
 
 export default function Page() {
-  return (
-    <div className="flex h-full w-full flex-col gap-4">
-      <PageHeader title={metadata.title} description={metadata.description} />
-
-      {/* content */}
-      <MoviesClient />
-    </div>
-  );
+  return <MoviesClient title={metadata.title} description={metadata.description} />;
 }

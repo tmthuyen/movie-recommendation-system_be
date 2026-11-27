@@ -64,6 +64,8 @@ export interface Movie extends BaseDto {
   /** ManyToMany `movie_countries` — danh sách trả về từ `GET /api/movies`. */
   countries?: Country[];
   country?: Country;
+  /** Quan hệ `movie_peoples` (kèm `people`) — có ở `GET /api/movies/:id` và có thể ở list. */
+  moviePeoples?: MoviePeople[];
 }
 
 export interface MovieDetail extends Movie {

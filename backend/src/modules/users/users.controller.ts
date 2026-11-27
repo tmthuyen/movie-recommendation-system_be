@@ -20,7 +20,9 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '@/common/decorators/roles.decorator';
+import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
 import {
   ApiTags,
   ApiOperation,
@@ -36,7 +38,7 @@ import { AssignRolesDto } from '@/modules/users/dto/assign-role.dto';
 
 @ApiTags('Users')
 @Controller('users')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
@@ -113,10 +115,12 @@ export class UsersController {
   @Roles('ADMIN', 'SUPERADMIN')
   @Put(':id')
   async update(
+    @Req() req: Request,
     @Param('id') id: string,
-    @Body() updateUserDto: UpdateProfileDto,
+    @Body() updateUserDto: AdminUpdateUserDto,
   ) {
-    const result = await this.usersService.update(id, updateUserDto);
+    const { sub: actorId } = req.user as JwtPayload;
+    const result = await this.usersService.update(id, updateUserDto, actorId);
     return {
       success: true,
       statusCode: HttpStatus.OK,

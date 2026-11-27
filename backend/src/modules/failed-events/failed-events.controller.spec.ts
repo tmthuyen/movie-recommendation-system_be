@@ -2,6 +2,9 @@ import { HttpStatus } from '@nestjs/common';
 
 import { FailedEventsController } from './failed-events.controller';
 import { FailedEventsService } from './failed-events.service';
+import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
+import { RolesGuard } from '@/modules/auth/guards/roles.guard';
+import { ROLES_KEY } from '@/common/decorators/roles.decorator';
 
 describe('FailedEventsController', () => {
   let controller: FailedEventsController;
@@ -15,6 +18,29 @@ describe('FailedEventsController', () => {
   });
 
   afterEach(() => jest.restoreAllMocks());
+
+  describe('phân quyền', () => {
+    it('cả 2 endpoint đều có JwtAuthGuard + RolesGuard và @Roles ADMIN/SUPERADMIN', () => {
+      const guards = Reflect.getMetadata(
+        '__guards__',
+        FailedEventsController,
+      ) as Array<new (...args: never[]) => unknown>;
+      expect(guards).toEqual(
+        expect.arrayContaining([JwtAuthGuard, RolesGuard]),
+      );
+
+      for (const name of ['findAll', 'retry'] as const) {
+        const handler = Object.getOwnPropertyDescriptor(
+          FailedEventsController.prototype,
+          name,
+        )?.value as (...args: never[]) => unknown;
+        expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual([
+          'ADMIN',
+          'SUPERADMIN',
+        ]);
+      }
+    });
+  });
 
   describe('findAll', () => {
     it('map envelope + pagination từ service', async () => {

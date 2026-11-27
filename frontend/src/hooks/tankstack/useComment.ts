@@ -82,6 +82,8 @@ export function useCreateComment(movieId: number | string) {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['comments', String(movieId)] });
+      // Lịch sử tương tác cá nhân (tab Bình luận)
+      queryClient.invalidateQueries({ queryKey: ['my-activities'] });
     },
   });
 }

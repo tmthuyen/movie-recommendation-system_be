@@ -1,12 +1,20 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { Movie } from './entities/movie.entity';
+import { MoviePeople } from './entities/movie-people.entity';
 import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
 import { PaginatedResult } from '@/common/dtos/paginated-result.interface';
 import { SearchUtils } from '@/common/utils/search.util';
 
 export const IMovieRepository = Symbol('IMovieRepository');
+
+/** `undefined` = giữ nguyên; `[]` = xoá sạch; mảng ID = thay thế toàn bộ quan hệ. */
+export interface MovieRelationIds {
+  genreIds?: number[];
+  countryIds?: number[];
+  peopleIds?: number[];
+}
 
 export interface IMovieRepository {
   findAll(request: BaseSearchRequest): Promise<PaginatedResult<Movie>>;
@@ -14,6 +22,15 @@ export interface IMovieRepository {
   findByTmdbId(tmdbId: number): Promise<Movie | null>;
   create(movie: Partial<Movie>): Promise<Movie>;
   update(id: number, movie: Partial<Movie>): Promise<Movie | null>;
+  createWithRelations(
+    movie: Partial<Movie>,
+    relations: MovieRelationIds,
+  ): Promise<Movie>;
+  updateWithRelations(
+    id: number,
+    movie: Partial<Movie>,
+    relations: MovieRelationIds,
+  ): Promise<Movie | null>;
   remove(id: number): Promise<boolean>;
   findAllByIds(ids: number[]): Promise<Movie[]>;
 }
@@ -65,6 +82,7 @@ export class MovieRepository implements IMovieRepository {
   constructor(
     @InjectRepository(Movie)
     private readonly repo: Repository<Movie>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async findAll(request: BaseSearchRequest): Promise<PaginatedResult<Movie>> {
@@ -127,6 +145,7 @@ export class MovieRepository implements IMovieRepository {
     return this.repo
       .createQueryBuilder('movie')
       .leftJoinAndSelect('movie.genres', 'genre')
+      .leftJoinAndSelect('movie.countries', 'country')
       .leftJoinAndSelect('movie.moviePeoples', 'moviePeople')
       .leftJoinAndSelect('moviePeople.people', 'people')
       .where('movie.id = :id', { id })
@@ -148,6 +167,144 @@ export class MovieRepository implements IMovieRepository {
     const updated = this.repo.merge(existing, movie);
     await this.repo.save(updated);
     return this.findById(id);
+  }
+
+  /**
+   * Scalar + 3 nhánh quan hệ nằm trong cùng một transaction.
+   * Không dùng `repo.merge()` cho mảng relation: merge gộp theo index, không thay thế join table.
+   */
+  async createWithRelations(
+    movie: Partial<Movie>,
+    relations: MovieRelationIds,
+  ): Promise<Movie> {
+    this.logger.log(
+      `Bắt đầu transaction tạo phim: fields=[${Object.keys(movie).join(',')}]`,
+    );
+    try {
+      const saved = await this.dataSource.transaction(async manager => {
+        const repo = manager.getRepository(Movie);
+        const entity = repo.create(movie);
+        const created = await repo.save(entity);
+        await this.applyRelations(manager, created.id, relations);
+        return created;
+      });
+      this.logger.log(`Kết thúc transaction tạo phim: movieId=${saved.id}`);
+      return saved;
+    } catch (error) {
+      this.logger.error(
+        `Transaction tạo phim thất bại: fields=[${Object.keys(movie).join(',')}]`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw error;
+    }
+  }
+
+  async updateWithRelations(
+    id: number,
+    movie: Partial<Movie>,
+    relations: MovieRelationIds,
+  ): Promise<Movie | null> {
+    this.logger.log(
+      `Bắt đầu transaction cập nhật phim: movieId=${id}, fields=[${Object.keys(movie).join(',')}]`,
+    );
+    try {
+      const existing = await this.dataSource.transaction(async manager => {
+        const repo = manager.getRepository(Movie);
+        const current = await repo.findOne({
+          where: { id },
+          select: { id: true },
+        });
+        if (!current) return null;
+
+        if (Object.keys(movie).length > 0) {
+          await repo.update(id, movie);
+        }
+        await this.applyRelations(manager, id, relations);
+        return current;
+      });
+      this.logger.log(`Kết thúc transaction cập nhật phim: movieId=${id}`);
+      return existing;
+    } catch (error) {
+      this.logger.error(
+        `Transaction cập nhật phim thất bại: movieId=${id}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * ManyToMany không dùng `.set()` — TypeORM chỉ cho phép set với
+   * many-to-one/one-to-one. Đọc ID hiện tại rồi add/remove phần khác nhau:
+   * `[]` → remove hết, create mới → loadMany trả rỗng → add hết.
+   */
+  private async syncManyToMany(
+    manager: EntityManager,
+    property: 'genres' | 'countries',
+    movieId: number,
+    ids: number[],
+  ): Promise<void> {
+    const relation = manager
+      .getRepository(Movie)
+      .createQueryBuilder()
+      .relation(Movie, property)
+      .of(movieId);
+
+    const currentIds = new Set(
+      (await relation.loadMany<{ id: number }>()).map(item => Number(item.id)),
+    );
+    const nextIds = new Set(ids.map(id => Number(id)));
+
+    await relation.addAndRemove(
+      [...nextIds].filter(id => !currentIds.has(id)).sort((a, b) => a - b),
+      [...currentIds].filter(id => !nextIds.has(id)).sort((a, b) => a - b),
+    );
+  }
+
+  /** Dùng chung cho create/update. `undefined` = giữ nguyên, `[]` = xoá sạch. */
+  private async applyRelations(
+    manager: EntityManager,
+    movieId: number,
+    relations: MovieRelationIds,
+  ): Promise<void> {
+    if (relations.genreIds !== undefined) {
+      await this.syncManyToMany(manager, 'genres', movieId, relations.genreIds);
+    }
+
+    if (relations.countryIds !== undefined) {
+      await this.syncManyToMany(
+        manager,
+        'countries',
+        movieId,
+        relations.countryIds,
+      );
+    }
+
+    if (relations.peopleIds !== undefined) {
+      // `movie_peoples` có PK kép + cột role → không dùng `.set()`.
+      const ids = relations.peopleIds;
+      const peopleRepo = manager.getRepository(MoviePeople);
+      const existingRows = ids.length
+        ? await peopleRepo.find({
+            where: { movieId, peopleId: In(ids) },
+            select: { peopleId: true, role: true },
+          })
+        : [];
+      const roleByPeopleId = new Map(
+        existingRows.map(row => [Number(row.peopleId), row.role]),
+      );
+
+      await peopleRepo.delete({ movieId });
+      if (ids.length > 0) {
+        await peopleRepo.insert(
+          ids.map(peopleId => ({
+            movieId,
+            peopleId,
+            role: roleByPeopleId.get(peopleId) ?? 'actor',
+          })),
+        );
+      }
+    }
   }
 
   async remove(id: number): Promise<boolean> {

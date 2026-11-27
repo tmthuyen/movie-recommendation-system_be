@@ -114,8 +114,9 @@ function LoginForm() {
       const toRoute = returnPage || roleUtil.getHomeRouteByRole(user.roles);
       router.push(toRoute);
     } catch (error: any) {
-      const { statusCode, message } = parseAxiosError(error);
-      setError('Lỗi khi đăng nhập. ' + message || 'Vui lòng thử lại.');
+      // Giữ nguyên message 401 từ backend (vd. "Email hoặc mật khẩu không chính xác").
+      const { message } = parseAxiosError(error);
+      setError(message ? `Lỗi khi đăng nhập. ${message}` : 'Vui lòng thử lại.');
     }
   };
 

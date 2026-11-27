@@ -4,9 +4,11 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { userApi } from '@/apis/user.api';
+import { AdminPageHeader } from '@/components/admin/admin-page-header';
 import { AdminDeleteDialog } from '@/components/admin/data-view/admin-delete-dialog';
 import { AdminFormDialog } from '@/components/admin/data-view/admin-form-dialog';
 import type {
+  AdminFormDirtyFields,
   AdminFormField,
   AdminFormValues,
 } from '@/components/admin/data-view/admin-form-schema';
@@ -15,14 +17,40 @@ import { adminRoles, adminUsers, type AdminUserInput } from '@/hooks/tankstack/a
 import { useServerTable } from '@/hooks/use-server-table';
 import { parseAxiosError } from '@/lib/axiosClient';
 import type { User } from '@/shared/types/api.types';
+import { UserDetailDialog } from './user-detail-dialog';
 import { createUserFilterFields } from './user-filter-fields';
+import { buildUserPayload } from './user-form-payload';
 import { createUserColumns } from './users-columns';
 
 const EMPTY_USERS: User[] = [];
 const DEFAULT_SORTING = [{ id: 'createdAt', desc: true }];
 
-/** Field dùng chung cho cả tạo và sửa (`UpdateProfileDto` không nhận email). */
+/**
+ * Field dùng chung cho cả tạo và sửa. `PUT /users/me` dùng `UpdateProfileDto`
+ * (không nhận email); `PUT /users/:id` dùng `AdminUpdateUserDto`
+ * (nhận email/status/isVerified).
+ */
+const USER_STATUS_OPTIONS = [
+  { value: 'UNVERIFIED', label: 'Chưa xác thực' },
+  { value: 'ACTIVE', label: 'Hoạt động' },
+  { value: 'INACTIVE', label: 'Không hoạt động' },
+  { value: 'BLOCKED', label: 'Đã khóa' },
+];
+
+const USER_VERIFIED_OPTIONS = [
+  { value: 'true', label: 'Đã xác thực' },
+  { value: 'false', label: 'Chưa xác thực' },
+];
+
 const EDIT_USER_FORM_FIELDS: AdminFormField[] = [
+  {
+    name: 'email',
+    label: 'Email',
+    required: true,
+    maxLength: 255,
+    placeholder: 'VD: user@example.com',
+    wide: true,
+  },
   {
     name: 'fullName',
     label: 'Họ tên',
@@ -30,6 +58,20 @@ const EDIT_USER_FORM_FIELDS: AdminFormField[] = [
     maxLength: 100,
     placeholder: 'VD: Nguyễn Văn A',
     wide: true,
+  },
+  {
+    name: 'status',
+    label: 'Trạng thái tài khoản',
+    type: 'select',
+    options: USER_STATUS_OPTIONS,
+    placeholder: 'Chọn trạng thái',
+  },
+  {
+    name: 'isVerified',
+    label: 'Xác thực email',
+    type: 'select',
+    options: USER_VERIFIED_OPTIONS,
+    placeholder: 'Chọn trạng thái xác thực',
   },
   {
     name: 'phoneNumber',
@@ -94,7 +136,15 @@ function toDateInput(value?: string | Date): string {
   return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
 }
 
-export function UsersClient() {
+interface UsersClientProps {
+  title?: string;
+  description?: string;
+}
+
+export function UsersClient({
+  title = 'Người dùng',
+  description = 'Quản lý người dùng',
+}: UsersClientProps = {}) {
   const queryClient = useQueryClient();
 
   const table = useServerTable({
@@ -172,6 +222,7 @@ export function UsersClient() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
+  const [detailTarget, setDetailTarget] = useState<User | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
   const [rolesTarget, setRolesTarget] = useState<User | null>(null);
 
@@ -187,6 +238,7 @@ export function UsersClient() {
           setEditing(user);
           setFormOpen(true);
         },
+        onViewDetails: (user) => setDetailTarget(user),
         onAssignRoles: (user) => setRolesTarget(user),
         onDelete: (user) => setDeleteTarget(user),
       }),
@@ -206,7 +258,11 @@ export function UsersClient() {
 
   const editDefaults = useMemo<AdminFormValues>(
     () => ({
+      email: editing?.email ?? '',
       fullName: editing?.fullName ?? '',
+      status: editing?.status ?? '',
+      // Select của form nhận chuỗi; boolean được convert lại trong buildUserPayload.
+      isVerified: editing ? String(editing.isVerified) : 'false',
       phoneNumber: editing?.phoneNumber ?? '',
       birthDate: toDateInput(editing?.birthDate),
       gender: editing?.gender ?? '',
@@ -237,15 +293,9 @@ export function UsersClient() {
     setFormOpen(false);
   };
 
-  const handleEdit = async (values: AdminFormValues) => {
+  const handleEdit = async (values: AdminFormValues, dirtyFields: AdminFormDirtyFields) => {
     if (!editing) return;
-    const input: AdminUserInput = {
-      fullName: String(values.fullName ?? '').trim(),
-      phoneNumber: values.phoneNumber ? String(values.phoneNumber).trim() : undefined,
-      birthDate: values.birthDate ? String(values.birthDate) : undefined,
-      gender: values.gender ? String(values.gender).trim() : undefined,
-      avatarUrl: values.avatarUrl ? String(values.avatarUrl).trim() : undefined,
-    };
+    const input = buildUserPayload(values, dirtyFields, true);
 
     await updateUser.mutateAsync({ id: editing.id, data: input });
     setFormOpen(false);
@@ -273,83 +323,103 @@ export function UsersClient() {
   };
 
   return (
-    <AdminTablePage
-      table={table}
-      columns={columns}
-      data={users}
-      total={total}
-      isLoading={usersQuery.isLoading}
-      isFetching={usersQuery.isFetching}
-      error={usersQuery.error}
-      onRetry={() => void usersQuery.refetch()}
-      searchPlaceholder="Tìm theo tên, email, số điện thoại…"
-      searchLabel="Tìm kiếm người dùng"
-      filterFields={filterFields}
-      entityLabel="người dùng"
-      emptyDescription="Thêm người dùng đầu tiên để bắt đầu quản lý tài khoản."
-      addLabel="Thêm người dùng"
-      onAdd={openCreate}
-    >
-      <AdminFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        title={editing ? 'Sửa người dùng' : 'Thêm người dùng'}
-        description={
-          editing
-            ? 'Cập nhật thông tin hồ sơ. Dùng nút “Gán vai trò” để thay đổi quyền.'
-            : 'Tạo tài khoản mới và gán vai trò ban đầu.'
-        }
-        fields={editing ? EDIT_USER_FORM_FIELDS : createFields}
-        defaultValues={editing ? editDefaults : createDefaults}
-        onSubmit={editing ? handleEdit : handleCreate}
-        submitting={createUser.isPending || updateUser.isPending}
-        submitLabel={editing ? 'Lưu thay đổi' : 'Thêm người dùng'}
-        mapServerError={(error) => {
-          const parsed = parseAxiosError(error);
-          if (parsed.statusCode === 409) {
-            return { field: 'email', message: 'Email này đã được sử dụng' };
+    <div className="flex h-full w-full flex-col gap-4">
+      <AdminPageHeader title={title} description={description} queryRoots={[['admin-users']]} />
+      <AdminTablePage
+        table={table}
+        columns={columns}
+        data={users}
+        total={total}
+        isLoading={usersQuery.isLoading}
+        isFetching={usersQuery.isFetching}
+        error={usersQuery.error}
+        onRetry={() => void usersQuery.refetch()}
+        searchPlaceholder="Tìm theo tên, email, số điện thoại…"
+        searchLabel="Tìm kiếm người dùng"
+        filterFields={filterFields}
+        entityLabel="người dùng"
+        emptyDescription="Thêm người dùng đầu tiên để bắt đầu quản lý tài khoản."
+        addLabel="Thêm người dùng"
+        onAdd={openCreate}
+      >
+        <AdminFormDialog
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          title={editing ? 'Sửa người dùng' : 'Thêm người dùng'}
+          description={
+            editing
+              ? 'Cập nhật thông tin hồ sơ. Dùng nút “Gán vai trò” để thay đổi quyền.'
+              : 'Tạo tài khoản mới và gán vai trò ban đầu.'
           }
-          return null;
-        }}
-      />
+          fields={editing ? EDIT_USER_FORM_FIELDS : createFields}
+          defaultValues={editing ? editDefaults : createDefaults}
+          onSubmit={editing ? handleEdit : handleCreate}
+          submitting={createUser.isPending || updateUser.isPending}
+          submitLabel={editing ? 'Lưu thay đổi' : 'Thêm người dùng'}
+          mapServerError={(error) => {
+            const parsed = parseAxiosError(error);
+            if (parsed.statusCode === 409) {
+              return { field: 'email', message: 'Email này đã được sử dụng' };
+            }
+            // 400/403: hiển thị message từ envelope; toast đã do hook mutation lo.
+            if (parsed.statusCode === 400 || parsed.statusCode === 403) {
+              return { field: 'root', message: parsed.message };
+            }
+            return null;
+          }}
+        />
 
-      <AdminFormDialog
-        open={rolesTarget !== null}
-        onOpenChange={(next) => {
-          if (!next) setRolesTarget(null);
-        }}
-        title="Gán vai trò"
-        description={
-          rolesTarget
-            ? `Chọn vai trò cho ${rolesTarget.fullName}. Danh sách mới sẽ thay thế vai trò hiện tại.`
-            : undefined
-        }
-        fields={assignRoleFields}
-        defaultValues={rolesDefaults}
-        onSubmit={handleAssignRoles}
-        submitting={assignRoles.isPending}
-        submitLabel="Lưu vai trò"
-      />
+        <AdminFormDialog
+          open={rolesTarget !== null}
+          onOpenChange={(next) => {
+            if (!next) setRolesTarget(null);
+          }}
+          title="Gán vai trò"
+          description={
+            rolesTarget
+              ? `Chọn vai trò cho ${rolesTarget.fullName}. Danh sách mới sẽ thay thế vai trò hiện tại.`
+              : undefined
+          }
+          fields={assignRoleFields}
+          defaultValues={rolesDefaults}
+          onSubmit={handleAssignRoles}
+          submitting={assignRoles.isPending}
+          submitLabel="Lưu vai trò"
+        />
 
-      <AdminDeleteDialog
-        open={deleteTarget !== null}
-        onOpenChange={(next) => {
-          if (!next) setDeleteTarget(null);
-        }}
-        title="Khóa người dùng?"
-        description={
-          <>
-            Tài khoản{' '}
-            <span className="text-foreground font-medium">
-              {deleteTarget?.fullName ?? deleteTarget?.email ?? 'này'}
-            </span>{' '}
-            sẽ bị chuyển sang trạng thái khóa và không thể đăng nhập. Hành động này có thể hoàn tác
-            bằng cách cập nhật lại trạng thái trong CSDL.
-          </>
-        }
-        onConfirm={handleDelete}
-        deleting={deleteUser.isPending}
-      />
-    </AdminTablePage>
+        <UserDetailDialog
+          user={detailTarget}
+          open={detailTarget !== null}
+          onOpenChange={(next) => {
+            if (!next) setDetailTarget(null);
+          }}
+          onEdit={(user) => {
+            setDetailTarget(null);
+            setEditing(user);
+            setFormOpen(true);
+          }}
+        />
+
+        <AdminDeleteDialog
+          open={deleteTarget !== null}
+          onOpenChange={(next) => {
+            if (!next) setDeleteTarget(null);
+          }}
+          title="Khóa người dùng?"
+          description={
+            <>
+              Tài khoản{' '}
+              <span className="text-foreground font-medium">
+                {deleteTarget?.fullName ?? deleteTarget?.email ?? 'này'}
+              </span>{' '}
+              sẽ bị chuyển sang trạng thái khóa và không thể đăng nhập. Hành động này có thể hoàn
+              tác bằng cách cập nhật lại trạng thái trong CSDL.
+            </>
+          }
+          onConfirm={handleDelete}
+          deleting={deleteUser.isPending}
+        />
+      </AdminTablePage>
+    </div>
   );
 }

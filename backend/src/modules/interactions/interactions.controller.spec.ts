@@ -9,7 +9,9 @@ describe('InteractionsController', () => {
     findAll: jest.Mock;
     getHistory: jest.Mock;
     getFavorites: jest.Mock;
+    getMyActivities: jest.Mock;
     getMovieRanking: jest.Mock;
+    remove: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -17,7 +19,9 @@ describe('InteractionsController', () => {
       findAll: jest.fn(),
       getHistory: jest.fn(),
       getFavorites: jest.fn(),
+      getMyActivities: jest.fn(),
       getMovieRanking: jest.fn().mockResolvedValue([{ movieId: 3, score: 9 }]),
+      remove: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -77,6 +81,37 @@ describe('InteractionsController', () => {
         page: 2,
         limit: 5,
       });
+    });
+
+    it('getMyActivities lấy userId từ token, truyền types/page/limit xuống service', async () => {
+      service.getMyActivities.mockResolvedValue({ result: [], pagination });
+      const req = { user: { sub: 'user-1' } } as never;
+      const query = {
+        types: ['click' as never, 'comment' as never],
+        page: 2,
+        limit: 5,
+      };
+
+      const response = await controller.getMyActivities(req, query);
+
+      expect(service.getMyActivities).toHaveBeenCalledWith('user-1', query);
+      expect(response).toEqual({
+        success: true,
+        statusCode: 200,
+        message: 'Lấy lịch sử tương tác thành công',
+        result: [],
+        pagination,
+      });
+    });
+
+    it('remove truyền userId từ token xuống service để kiểm tra chủ sở hữu', async () => {
+      service.remove.mockResolvedValue({ success: true });
+      const req = { user: { sub: 'user-1' } } as never;
+
+      const response = await controller.remove(req, '7');
+
+      expect(service.remove).toHaveBeenCalledWith(7, 'user-1');
+      expect(response.result).toEqual({ success: true });
     });
   });
 

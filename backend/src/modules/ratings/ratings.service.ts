@@ -1,4 +1,9 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { CreateRatingDto } from './dto/create-rating.dto';
 import { UpdateRatingDto } from './dto/update-rating.dto';
 import { IRatingRepository } from './ratings.repository';
@@ -176,8 +181,11 @@ export class RatingsService {
     return rating;
   }
 
-  async update(id: number, updateRatingDto: UpdateRatingDto) {
+  async update(id: number, userId: string, updateRatingDto: UpdateRatingDto) {
     const rating = await this.findOne(id);
+    if (rating.user?.id !== userId) {
+      throw new ForbiddenException('Không có quyền cập nhật đánh giá này');
+    }
     return this.repo.update(rating.id, updateRatingDto);
   }
 

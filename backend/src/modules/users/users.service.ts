@@ -1,12 +1,16 @@
 import {
+  BadRequestException,
   ConflictException,
+  forwardRef,
   Inject,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
+import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { SessionService } from '@/modules/auth/session.service';
 import { User, UserStatus } from './entities/user.entity';
 import { RolesService } from '@/modules/roles/roles.service';
 import { BaseSearchRequest } from '@/common/dtos/base-search-query.dto';
@@ -38,6 +42,8 @@ export class UsersService {
     private readonly roleSv: RolesService,
     private readonly userProducer: UserProducer,
     @Inject(STORAGE_SERVICE) private readonly storageService: IStorageService,
+    @Inject(forwardRef(() => SessionService))
+    private readonly sessionService: SessionService,
   ) {}
 
   // =========
@@ -86,25 +92,66 @@ export class UsersService {
   async findOne(id: string) {
     const user = await this.userRepo.findByIdWithRoles(id);
     if (!user) {
-      throw new NotFoundException(`User with ID ${id} not found`);
+      throw new NotFoundException(`Không tìm thấy người dùng với ID ${id}`);
     }
     return user;
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto) {
+  async update(
+    id: string,
+    updateUserDto: UpdateProfileDto | AdminUpdateUserDto,
+    actorId?: string,
+  ) {
     const user: User = await this.findOne(id);
-    if (updateUserDto.password) {
-      updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
+    const payload = { ...updateUserDto } as Partial<User> & {
+      password?: string;
+    };
+
+    if (payload.password) {
+      payload.password = await bcrypt.hash(payload.password, 10);
     }
-    this.logger.log(`Updating user: ${user.id}`);
-    this.logger.log(`Update data: ${JSON.stringify(updateUserDto)}`);
-    Object.assign(user, updateUserDto);
+    if (payload.email && payload.email !== user.email) {
+      const existing = await this.findByEmail(payload.email);
+      if (existing && existing.id !== id) {
+        throw new ConflictException('Email đã tồn tại');
+      }
+    }
+
+    const status = payload.status;
+    if (status !== undefined && !Object.values(UserStatus).includes(status)) {
+      throw new BadRequestException('Trạng thái tài khoản không hợp lệ');
+    }
+    if (
+      actorId === id &&
+      (status === UserStatus.BLOCKED || status === UserStatus.INACTIVE)
+    ) {
+      throw new BadRequestException(
+        'Không thể tự khoá hoặc vô hiệu hoá tài khoản của chính mình',
+      );
+    }
+
+    const previousStatus = user.status;
+    const changedFields = Object.keys(payload);
+    Object.assign(user, payload);
     await this.userRepo.save(user);
+
+    // Chuyển sang BLOCKED/INACTIVE thì thu hồi session, blacklist jti accessToken.
+    if (
+      status !== undefined &&
+      status !== previousStatus &&
+      (status === UserStatus.BLOCKED || status === UserStatus.INACTIVE)
+    ) {
+      await this.sessionService.removeAllSessions(user.id);
+    }
 
     await this.userProducer.publishUserUpdated({
       userId: user.id,
       preferenceData: getPreferenceData(user.preferenceData),
     });
+
+    this.logger.log(
+      `Cập nhật user: userId=${user.id}, fields=[${changedFields.join(',')}]`,
+    );
 
     return user;
   }
@@ -133,7 +180,7 @@ export class UsersService {
   async findByIdWithRoles(userId: string): Promise<User> {
     const user = await this.userRepo.findByIdWithRoles(userId);
     if (!user) {
-      throw new NotFoundException(`User with not found`);
+      throw new NotFoundException('Không tìm thấy người dùng');
     }
     return user;
   }

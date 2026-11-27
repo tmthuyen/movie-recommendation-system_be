@@ -26,6 +26,9 @@ export interface AdminFormField {
 
 export type AdminFormValues = Record<string, unknown>;
 
+/** `formState.dirtyFields` của React Hook Form cho các form admin (field đều là cấp 1). */
+export type AdminFormDirtyFields = Record<string, boolean | undefined>;
+
 function toOptionalNumber(value: unknown): number | undefined {
   if (value === '' || value === null || value === undefined) return undefined;
   const parsed = Number(value);

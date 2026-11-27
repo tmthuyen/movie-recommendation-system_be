@@ -1,130 +1,260 @@
-import {
-  adminGenres,
-  adminMovies,
-  adminUsers,
-  useAdminComments,
-  useAdminInteractions,
-  useAdminRatings,
-} from '@/hooks/tankstack/admin';
-import {
-  buildCountryDistribution,
-  buildDataQualityIssues,
-  buildGenreDistribution,
-  buildInteractionTypeDistribution,
-  buildRatingDistribution,
-  buildRecentActivity,
-  buildTopActiveUsers,
-  buildTopMoviesByViews,
-  buildTopRatedMovies,
-  filterWithinDays,
-} from '@/shared/utils/admin-dashboard';
-import { useQueryClient } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { adminDashboardApi } from '@/apis/admin-dashboard.api';
+import type {
+  AdminDashboardActivity,
+  AdminDashboardDataIssue,
+  AdminDashboardInteractionType,
+  AdminDashboardLabelDatum,
+  AdminDashboardParams,
+  AdminDashboardRatingBucket,
+  AdminDashboardStats,
+  AdminDashboardTimePoint,
+  AdminDashboardTotals,
+  DashboardPeriod,
+} from '@/shared/types/admin-dashboard.types';
+import { useCallback, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-/** Số bản ghi tối đa lấy về để tính thống kê client-side (backend chưa có endpoint aggregate). */
-export const DASHBOARD_SAMPLE_LIMIT = 100;
+/** QueryKey root của dashboard — dùng chung cho invalidate khi bấm "Làm mới". */
+export const ADMIN_DASHBOARD_QUERY_ROOT = 'admin-dashboard';
 
-/** Số mục hiển thị trên mỗi biểu đồ / bảng xếp hạng. */
-export const DASHBOARD_TOP_COUNT = 10;
+const PERIODS: DashboardPeriod[] = ['day', 'week', 'month', 'quarter', 'year', 'custom'];
 
-/** QueryKey root của các list dùng cho dashboard — dùng để làm mới toàn bộ. */
-const DASHBOARD_QUERY_ROOTS = [
-  'admin-movies',
-  'admin-genres',
-  'admin-users',
-  'admin-interactions',
-  'admin-ratings',
-  'admin-comments',
-];
+type UnknownRecord = Record<string, unknown>;
 
-/**
- * Gom **mọi** query + phép tính của dashboard admin vào 1 hook: mỗi list API chỉ gọi
- * 1 lần (lấy `pagination.total` cho thẻ chỉ số và `limit` bản ghi cho biểu đồ),
- * phần tổng hợp tách sang `shared/utils/admin-dashboard.ts`.
- *
- * `days = 0` → không lọc thời gian (backend chưa hỗ trợ filter theo ngày, nên bộ lọc
- * chỉ áp dụng trên bảng "Hoạt động gần đây" của mẫu đã tải).
- */
-export function useAdminDashboard({
-  sampleLimit = DASHBOARD_SAMPLE_LIMIT,
-  days = 0,
-}: { sampleLimit?: number; days?: number } = {}) {
-  const queryClient = useQueryClient();
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
-  const moviesQuery = adminMovies.useList({ page: 1, limit: sampleLimit });
-  const genresQuery = adminGenres.useList({ page: 1, limit: 1 });
-  const usersQuery = adminUsers.useList({ page: 1, limit: 1 });
-  const interactionsQuery = useAdminInteractions({ page: 1, limit: sampleLimit });
-  const ratingsQuery = useAdminRatings({ page: 1, limit: sampleLimit });
-  const commentsQuery = useAdminComments({ page: 1, limit: sampleLimit });
+function toArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
 
-  // Giữ tham chiếu gốc trong deps (không dùng `?? []` trực tiếp — tránh mảng mới mỗi render).
-  const movieItems = moviesQuery.data?.items;
-  const interactionItems = interactionsQuery.data?.items;
-  const ratingItems = ratingsQuery.data?.items;
-  const commentItems = commentsQuery.data?.items;
+function toNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const match = /^\s*(-?\d+(?:\.\d+)?)/.exec(value);
+    if (match) return Number(match[1]);
+  }
+  return undefined;
+}
 
-  const derived = useMemo(() => {
-    const movies = movieItems ?? [];
-    const interactions = interactionItems ?? [];
-    const ratings = ratingItems ?? [];
-    const comments = commentItems ?? [];
-    return {
-      topViewed: buildTopMoviesByViews(movies, DASHBOARD_TOP_COUNT),
-      genreDistribution: buildGenreDistribution(movies, DASHBOARD_TOP_COUNT),
-      countryDistribution: buildCountryDistribution(movies, DASHBOARD_TOP_COUNT),
-      interactionTypes: buildInteractionTypeDistribution(interactions),
-      ratingDistribution: buildRatingDistribution(ratings),
-      topRated: buildTopRatedMovies(ratings, DASHBOARD_TOP_COUNT),
-      topActiveUsers: buildTopActiveUsers(
-        [...interactions, ...ratings, ...comments],
-        DASHBOARD_TOP_COUNT,
-      ),
-      dataQualityIssues: buildDataQualityIssues(movies).filter((issue) => issue.count > 0),
-      recentActivity: buildRecentActivity({
-        interactions: filterWithinDays(interactions, days),
-        ratings: filterWithinDays(ratings, days),
-        comments: filterWithinDays(comments, days),
-        limit: 12,
-      }),
-      /** Số bản ghi thực tế đang phân tích (mẫu) — hiển thị để không gây hiểu nhầm. */
-      sampleSize: movies.length + interactions.length + ratings.length + comments.length,
-    };
-  }, [movieItems, interactionItems, ratingItems, commentItems, days]);
+function pickNumber(record: UnknownRecord | undefined, keys: string[]): number {
+  if (!record) return 0;
+  for (const key of keys) {
+    const parsed = toNumber(record[key]);
+    if (parsed !== undefined) return parsed;
+  }
+  return 0;
+}
 
-  const totals = {
-    movies: moviesQuery.data?.pagination.total ?? 0,
-    users: usersQuery.data?.pagination.total ?? 0,
-    genres: genresQuery.data?.pagination.total ?? 0,
-    interactions: interactionsQuery.data?.pagination.total ?? 0,
-    ratings: ratingsQuery.data?.pagination.total ?? 0,
-    comments: commentsQuery.data?.pagination.total ?? 0,
+function pickString(record: UnknownRecord | undefined, keys: string[]): string {
+  if (!record) return '';
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim()) return value;
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  }
+  return '';
+}
+
+function pickRecord(record: UnknownRecord | undefined, keys: string[]): UnknownRecord | undefined {
+  if (!record) return undefined;
+  for (const key of keys) {
+    if (isRecord(record[key])) return record[key] as UnknownRecord;
+  }
+  return undefined;
+}
+
+function pickNestedString(
+  record: UnknownRecord | undefined,
+  parentKey: string,
+  keys: string[],
+): string {
+  const nested = isRecord(record?.[parentKey]) ? (record?.[parentKey] as UnknownRecord) : undefined;
+  return pickString(nested, keys);
+}
+
+const EMPTY_TOTALS: AdminDashboardTotals = {
+  movies: 0,
+  users: 0,
+  genres: 0,
+  interactions: 0,
+  ratings: 0,
+  comments: 0,
+};
+
+const EMPTY_STATS: AdminDashboardStats = {
+  totals: EMPTY_TOTALS,
+  timeSeries: [],
+  topViewed: [],
+  topActiveUsers: [],
+  genreDistribution: [],
+  countryDistribution: [],
+  interactionTypes: [],
+  ratingDistribution: [],
+  topRated: [],
+  dataQualityIssues: [],
+  recentActivity: [],
+  period: { period: 'month' },
+};
+
+function normalizeTotals(value: unknown): AdminDashboardTotals {
+  const record = isRecord(value) ? value : undefined;
+  return {
+    movies: pickNumber(record, ['movies', 'totalMovies', 'movieCount', 'movie']),
+    users: pickNumber(record, ['users', 'totalUsers', 'userCount', 'user']),
+    genres: pickNumber(record, ['genres', 'totalGenres', 'genreCount', 'genre']),
+    interactions: pickNumber(record, ['interactions', 'totalInteractions', 'interactionCount']),
+    ratings: pickNumber(record, ['ratings', 'totalRatings', 'ratingCount']),
+    comments: pickNumber(record, ['comments', 'totalComments', 'commentCount']),
   };
+}
 
-  const queries = [
-    moviesQuery,
-    genresQuery,
-    usersQuery,
-    interactionsQuery,
-    ratingsQuery,
-    commentsQuery,
-  ];
+function normalizeTimePoint(value: unknown): AdminDashboardTimePoint {
+  const record = isRecord(value) ? value : {};
+  return {
+    date: pickString(record, ['date', 'label', 'day', 'bucket']) || '—',
+    interactions: pickNumber(record, ['interactions', 'click', 'count']),
+    ratings: pickNumber(record, ['ratings', 'rating']),
+    comments: pickNumber(record, ['comments', 'comment']),
+  };
+}
+
+function normalizeLabelDatum(value: unknown): AdminDashboardLabelDatum {
+  const record = isRecord(value) ? value : {};
+  const label =
+    pickString(record, ['label', 'name', 'title', 'viName', 'fullName', 'userName', 'email']) ||
+    '—';
+  return { label, value: pickNumber(record, ['value', 'count', 'total', 'viewCount', 'amount']) };
+}
+
+function normalizeInteractionType(value: unknown): AdminDashboardInteractionType {
+  const record = isRecord(value) ? value : {};
+  return {
+    type: pickString(record, ['type', 'name', 'label']) || 'unknown',
+    value: pickNumber(record, ['value', 'count', 'total']),
+  };
+}
+
+function normalizeRatingBucket(value: unknown): AdminDashboardRatingBucket {
+  const record = isRecord(value) ? value : {};
+  return {
+    rating: pickNumber(record, ['rating', 'star', 'score', 'label', 'name']),
+    value: pickNumber(record, ['value', 'count', 'total']),
+  };
+}
+
+function normalizeDataIssue(value: unknown): AdminDashboardDataIssue {
+  const record = isRecord(value) ? value : {};
+  const label = pickString(record, ['label', 'name', 'title', 'type']) || '—';
+  return {
+    label,
+    count: pickNumber(record, ['count', 'value', 'total', 'movieCount']),
+    description: pickString(record, ['description', 'message', 'detail']),
+    href: pickString(record, ['href', 'link', 'url']) || '/admin/movies',
+  };
+}
+
+const ACTIVITY_KIND_LABELS: Record<string, string> = {
+  interaction: 'Tương tác',
+  rating: 'Đánh giá',
+  comment: 'Bình luận',
+  click: 'Đã xem',
+  like: 'Yêu thích',
+};
+
+function normalizeActivity(value: unknown, index: number): AdminDashboardActivity {
+  const record = isRecord(value) ? value : {};
+  const kind = pickString(record, ['kind', 'type', 'activityType']) || 'interaction';
+  const kindLabel = pickString(record, ['kindLabel', 'typeLabel', 'label']) || kind;
+  return {
+    id: pickString(record, ['id', 'eventId']) || `${kind}-${index}`,
+    kind,
+    kindLabel: ACTIVITY_KIND_LABELS[kindLabel] ?? kindLabel,
+    createdAt: pickString(record, ['createdAt', 'created_at', 'timestamp', 'date']) || undefined,
+    userName:
+      pickString(record, ['userName', 'fullName', 'email', 'userEmail']) ||
+      pickNestedString(record, 'user', ['fullName', 'email', 'userName']) ||
+      '—',
+    userEmail:
+      pickString(record, ['userEmail', 'email']) || pickNestedString(record, 'user', ['email']),
+    movieTitle:
+      pickString(record, ['movieTitle', 'movieName', 'title']) ||
+      pickNestedString(record, 'movie', ['title', 'name', 'titleVi', 'viName']) ||
+      '—',
+    detail:
+      pickString(record, ['detail', 'content', 'description', 'value']) ||
+      ACTIVITY_KIND_LABELS[kind] ||
+      kind,
+  };
+}
+
+/** Chuẩn hoá `result` về đúng shape UI đang dùng (backend có thể trả thêm/thiếu field). */
+function normalizeStats(value: unknown, requested: AdminDashboardParams): AdminDashboardStats {
+  const record = isRecord(value) ? value : undefined;
+  if (!record) return { ...EMPTY_STATS, period: { period: requested.period } };
+
+  const periodRecord = pickRecord(record, ['period', 'dateRange', 'range']);
+  const rawPeriod = pickString(periodRecord ?? record, ['period', 'value']) || requested.period;
+  const period: DashboardPeriod = PERIODS.includes(rawPeriod as DashboardPeriod)
+    ? (rawPeriod as DashboardPeriod)
+    : requested.period;
 
   return {
-    totals,
-    sampleLimit,
-    ...derived,
-    /** Chỉ true khi **mọi** list đang tải lần đầu (tránh nhấp nháy từng thẻ). */
-    isLoading: queries.every((query) => query.isLoading),
-    /** true khi list phim lỗi (dữ liệu biểu đồ chính) hoặc mọi list lỗi. */
-    isError: moviesQuery.isError || queries.every((query) => query.isError),
-    /** true khi còn bất kỳ list nào đang tải lại (dùng để disable nút "Làm mới"). */
-    isFetching: queries.some((query) => query.isFetching),
-    /** Tải lại toàn bộ dữ liệu dashboard từ server. */
-    refresh: () => {
-      DASHBOARD_QUERY_ROOTS.forEach((root) =>
-        queryClient.invalidateQueries({ queryKey: [root] }),
-      );
+    totals: normalizeTotals(record.totals ?? record.total),
+    timeSeries: toArray(record.timeSeries ?? record.timeline).map(normalizeTimePoint),
+    topViewed: toArray(record.topViewed).map(normalizeLabelDatum),
+    topActiveUsers: toArray(record.topActiveUsers).map(normalizeLabelDatum),
+    genreDistribution: toArray(record.genreDistribution).map(normalizeLabelDatum),
+    countryDistribution: toArray(record.countryDistribution).map(normalizeLabelDatum),
+    interactionTypes: toArray(record.interactionTypes).map(normalizeInteractionType),
+    ratingDistribution: toArray(record.ratingDistribution).map(normalizeRatingBucket),
+    topRated: toArray(record.topRated).map(normalizeLabelDatum),
+    dataQualityIssues: toArray(record.dataQualityIssues).map(normalizeDataIssue),
+    recentActivity: toArray(record.recentActivity).map(normalizeActivity),
+    period: {
+      period,
+      from: pickString(periodRecord, ['from', 'start', 'startDate']) || requested.from,
+      to: pickString(periodRecord, ['to', 'end', 'endDate']) || requested.to,
     },
+  };
+}
+
+/**
+ * Dashboard admin — lấy toàn bộ số liệu từ endpoint aggregate của backend.
+ * Mọi widget (kể cả "Hoạt động gần đây") đều đi theo `period`/`from`/`to`.
+ */
+export function useAdminDashboard(params: AdminDashboardParams) {
+  const queryClient = useQueryClient();
+  const { period, from, to } = params;
+  /** `custom` cần đủ 2 đầu khoảng thời gian mới gọi API. */
+  const enabled = period !== 'custom' || Boolean(from && to);
+
+  const query = useQuery({
+    queryKey: [ADMIN_DASHBOARD_QUERY_ROOT, { period, from: from ?? null, to: to ?? null }],
+    queryFn: () => adminDashboardApi.getStats({ period, from, to }),
+    enabled,
+    staleTime: 1000 * 60,
+    refetchOnWindowFocus: false,
+  });
+
+  const stats = useMemo(
+    () => normalizeStats(query.data?.result, { period, from, to }),
+    [query.data, period, from, to],
+  );
+
+  /** Làm mới mọi kỳ/range của dashboard (invalidate theo queryKey root). */
+  const refresh = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: [ADMIN_DASHBOARD_QUERY_ROOT] });
+  }, [queryClient]);
+
+  return {
+    ...stats,
+    /** true khi khoảng custom chưa đủ điều kiện để gọi API. */
+    isRangeIncomplete: !enabled,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    isFetching: query.isFetching,
+    refresh,
   };
 }

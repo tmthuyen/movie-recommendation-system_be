@@ -2,7 +2,7 @@ import { commentApi } from '@/apis/comment.api';
 import { countryApi } from '@/apis/country.api';
 import { genreApi } from '@/apis/genre.api';
 import { interactionApi } from '@/apis/interaction.api';
-import { movieApi, MovieAdminInput } from '@/apis/movie.api';
+import { movieApi, MovieAdminInput, MovieAdminUpdateInput } from '@/apis/movie.api';
 import { peopleApi, PeopleInput } from '@/apis/people.api';
 import { ratingApi } from '@/apis/rating.api';
 import { roleApi, RoleInput } from '@/apis/role.api';
@@ -44,17 +44,17 @@ export const adminPeoples = createCrudHooks<People, PeopleInput>({
   remove: peopleApi.remove,
 });
 
-export const adminMovies = createCrudHooks<Movie, MovieAdminInput>({
+export const adminMovies = createCrudHooks<Movie, MovieAdminInput, MovieAdminUpdateInput>({
   domain: 'admin-movies',
   list: movieApi.getAll,
   create: movieApi.create,
-  update: (id: string | number, data: MovieAdminInput) => movieApi.update(Number(id), data),
+  update: (id: string | number, data: MovieAdminUpdateInput) => movieApi.update(Number(id), data),
   remove: (id: string | number) => movieApi.remove(Number(id)),
 });
 
 /** Users — id là uuid (string); gán vai trò qua `PATCH /users/:id/roles` (form riêng). */
 export type AdminUserInput = {
-  /** Bắt buộc khi tạo; bỏ qua khi cập nhật (`UpdateProfileDto` không nhận email). */
+  /** Bắt buộc khi tạo; `PUT /users/me` dùng `UpdateProfileDto` (không nhận email). */
   email?: string;
   fullName: string;
   password?: string;
@@ -63,11 +63,17 @@ export type AdminUserInput = {
   birthDate?: string;
   gender?: string;
   avatarUrl?: string;
+  /** `PUT /users/:id` nhận `AdminUpdateUserDto` (khác `UpdateProfileDto` của `/users/me`). */
+  status?: string;
+  isVerified?: boolean;
   /** Chỉ dùng khi tạo (`CreateUserDto`). */
   roleIds?: number[];
 };
 
-export const adminUsers = createCrudHooks<User, AdminUserInput>({
+/** `PUT /users/:id` nhận từng field dirty, không bắt buộc `fullName` như lúc tạo. */
+export type AdminUserUpdateInput = Partial<AdminUserInput>;
+
+export const adminUsers = createCrudHooks<User, AdminUserInput, AdminUserUpdateInput>({
   domain: 'admin-users',
   list: userApi.getAllUsers,
   create: userApi.createUser,

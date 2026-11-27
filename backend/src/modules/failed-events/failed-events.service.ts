@@ -45,6 +45,23 @@ export class FailedEventsService {
     };
   }
 
+  /** Chọn exchange đích theo prefix của routing key; routing key ngoài danh sách dùng exchange movie. */
+  private resolveExchange(routingKey: string): string {
+    if (routingKey.startsWith('movie.')) {
+      return MESSAGE_BUS_CONFIG.MOVIE_EXCHANGE;
+    }
+    if (routingKey.startsWith('user.')) {
+      return MESSAGE_BUS_CONFIG.USER_EXCHANGE;
+    }
+    if (routingKey.startsWith('interaction.')) {
+      return MESSAGE_BUS_CONFIG.INTERACTION_EXCHANGE;
+    }
+    if (routingKey.startsWith('auth.')) {
+      return MESSAGE_BUS_CONFIG.AUTH_EXCHANGE;
+    }
+    return MESSAGE_BUS_CONFIG.MOVIE_EXCHANGE;
+  }
+
   async retry(id: string) {
     const failedEvent = await this.repo.findById(id);
     if (!failedEvent) {
@@ -52,14 +69,12 @@ export class FailedEventsService {
     }
 
     try {
-      this.logger.log(`Retrying event ${JSON.stringify(failedEvent)}`);
+      this.logger.log(
+        `Retry failed event: id=${failedEvent.id}, routingKey=${failedEvent.routingKey}`,
+      );
 
-      let exchange = MESSAGE_BUS_CONFIG.MOVIE_EXCHANGE as string;
-      if (failedEvent.routingKey.startsWith('user.')) {
-        exchange = MESSAGE_BUS_CONFIG.USER_EXCHANGE;
-      }
-      this.eventPublisher.publish(
-        exchange,
+      await this.eventPublisher.publish(
+        this.resolveExchange(failedEvent.routingKey),
         failedEvent.routingKey,
         failedEvent.payload,
         failedEvent.correlationId,
@@ -76,6 +91,9 @@ export class FailedEventsService {
       let message = '';
       if (error instanceof Error) message = error.message;
       failedEvent.errorReason = message;
+      this.logger.warn(
+        `Retry failed event thất bại: id=${failedEvent.id}, reason=${message}`,
+      );
       await this.repo.save(failedEvent);
       return false;
     }

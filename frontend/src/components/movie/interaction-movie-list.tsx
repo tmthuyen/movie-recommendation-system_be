@@ -1,6 +1,6 @@
 'use client';
 
-import { Clock, Film, Heart } from 'lucide-react';
+import { Activity, Clock, Film, Heart } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -11,17 +11,29 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import useInteraction from '@/hooks/tankstack/useInteraction';
 import { cn } from '@/lib/utils';
-import { Interaction } from '@/shared/types/interaction.types';
+import { Interaction, InteractionType } from '@/shared/types/interaction.types';
+import { INTERACTION_TYPE_BADGES } from '@/shared/utils/interaction';
 import { getMovieTitle, getPosterUrl, getReleaseYear } from '@/shared/utils/movie';
 
 const PAGE_LIMIT = 12;
 
-/** Nhãn + màu badge theo loại tương tác (history luôn là `click`; favorites là `like`). Dùng lại ở trang admin Interaction. */
-export const TYPE_BADGES: Record<string, { label: string; className: string }> = {
-  click: { label: 'Đã xem', className: 'border-border text-muted-foreground' },
-  like: { label: 'Yêu thích', className: 'border-red-500/30 bg-red-500/10 text-red-500' },
-  rating: { label: 'Đánh giá', className: 'border-amber-500/30 bg-amber-500/10 text-amber-500' },
-  comment: { label: 'Bình luận', className: 'border-primary/30 bg-primary/10 text-primary' },
+type ActivityTab = 'all' | InteractionType;
+
+const ACTIVITY_TABS: Array<{ label: string; value: ActivityTab }> = [
+  { label: 'Tất cả', value: 'all' },
+  { label: 'Đã xem', value: 'click' },
+  { label: 'Yêu thích', value: 'like' },
+  { label: 'Đánh giá', value: 'rating' },
+  { label: 'Bình luận', value: 'comment' },
+];
+
+/** `types` gửi cho backend; `all` để trống để backend lấy cả bốn loại. */
+const TAB_TYPES: Record<ActivityTab, InteractionType[] | undefined> = {
+  all: undefined,
+  click: ['click'],
+  like: ['like'],
+  rating: ['rating'],
+  comment: ['comment'],
 };
 
 function formatDate(value?: Date | string): string {
@@ -30,15 +42,23 @@ function formatDate(value?: Date | string): string {
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('vi-VN');
 }
 
-function InteractionRow({ interaction }: { interaction: Interaction }) {
+function InteractionRow({
+  interaction,
+  showDetail = false,
+}: {
+  interaction: Interaction;
+  showDetail?: boolean;
+}) {
   const movie = interaction.movie;
   if (!movie) return null;
 
-  const badge = TYPE_BADGES[interaction.type] ?? TYPE_BADGES.click;
+  const badge = INTERACTION_TYPE_BADGES[interaction.type] ?? INTERACTION_TYPE_BADGES.click;
   const poster = getPosterUrl(movie.posterPath || movie.backdropPath);
   const title = getMovieTitle(movie);
   const year = getReleaseYear(movie.releaseDate);
   const dateLabel = formatDate(interaction.createdAt);
+  const ratingScore = Number(interaction.score ?? 0);
+  const comment = interaction.content?.trim();
 
   return (
     <li>
@@ -69,8 +89,21 @@ function InteractionRow({ interaction }: { interaction: Interaction }) {
             >
               {badge.label}
             </span>
+            {showDetail && interaction.type === 'rating' ? (
+              <span
+                className="text-xs font-medium text-amber-500 tabular-nums"
+                aria-label={`Đánh giá ${ratingScore} trên 5`}
+              >
+                ★ {ratingScore}/5
+              </span>
+            ) : null}
             {dateLabel ? <span className="text-muted-foreground">{dateLabel}</span> : null}
           </div>
+          {showDetail && interaction.type === 'comment' && comment ? (
+            <p className="text-muted-foreground mt-1 line-clamp-2 text-xs" title={comment}>
+              “{comment}”
+            </p>
+          ) : null}
         </div>
       </Link>
     </li>
@@ -108,33 +141,46 @@ const SOURCE_CONFIG = {
 
 interface MyInteractionListProps {
   /**
-   * Nguồn dữ liệu: `history` (lịch sử xem — `type=click`) hoặc
-   * `favorites` (`type=like`) — gọi API tương ứng.
+   * Nguồn dữ liệu:
+   * - `history` — `GET /my-history` (type=click)
+   * - `favorites` — `GET /my-favorites` (type=like)
+   * - `activities` — `GET /my-activities` với tabs click/like/rating/comment
    */
-  source: 'history' | 'favorites';
+  source: 'history' | 'favorites' | 'activities';
 }
 
 /**
- * Danh sách tương tác cá nhân **dùng chung** cho `/my-history` và `/my-favorites`
- * (1 điểm render — không duplicate code): hàng phim (poster + tên + badge loại
- * tương tác + ngày), click → `/movies/[id]`, phân trang `DataPagination`,
- * đầy đủ loading skeleton / empty / error state.
+ * Danh sách tương tác cá nhân dùng chung cho `/my-history`, `/my-favorites`
+ * và `/my-interactions` (tabs đầy đủ). Hàng phim gồm poster + tên + badge loại
+ * tương tác + ngày; tab activities hiển thị thêm điểm rating và nội dung comment.
  */
 export function MyInteractionList({ source }: MyInteractionListProps) {
   const [page, setPage] = useState(1);
+  const [tab, setTab] = useState<ActivityTab>('all');
+  const isActivities = source === 'activities';
+  const types = TAB_TYPES[tab];
 
-  // Gọi cả hai hook (rules của React Hooks) — hook không được chọn sẽ `enabled=false` nên không fetch.
+  // Gọi cả ba hook (rules của React Hooks) — hook không dùng sẽ `enabled=false`.
   const historyQuery = useInteraction.useMyHistory(page, PAGE_LIMIT, source === 'history');
   const favoritesQuery = useInteraction.useMyFavoritesPaged(
     page,
     PAGE_LIMIT,
     source === 'favorites',
   );
+  const activitiesQuery = useInteraction.useMyActivities(
+    page,
+    PAGE_LIMIT,
+    types ?? [],
+    isActivities,
+  );
 
-  const { data, isLoading, isError, isFetching, refetch } =
-    source === 'history' ? historyQuery : favoritesQuery;
+  const query = isActivities
+    ? activitiesQuery
+    : source === 'history'
+      ? historyQuery
+      : favoritesQuery;
 
-  const config = SOURCE_CONFIG[source];
+  const { data, isLoading, isError, isFetching, refetch } = query;
   const items = data?.items ?? [];
   const pagination = data?.pagination;
 
@@ -143,22 +189,34 @@ export function MyInteractionList({ source }: MyInteractionListProps) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  if (isLoading) {
-    return <InteractionListSkeleton />;
-  }
+  const handleTabChange = (nextTab: ActivityTab) => {
+    setTab(nextTab);
+    setPage(1);
+  };
 
-  if (isError) {
-    return (
+  const legacyConfig = source === 'favorites' ? SOURCE_CONFIG.favorites : SOURCE_CONFIG.history;
+  const tabLabel = ACTIVITY_TABS.find((item) => item.value === tab)?.label ?? 'Tất cả';
+  const config = isActivities
+    ? {
+        emptyIcon: Activity,
+        emptyTitle: `Chưa có tương tác ${tabLabel.toLowerCase()}`,
+        emptyDescription: 'Tương tác của bạn với phim sẽ xuất hiện tại đây.',
+      }
+    : legacyConfig;
+
+  let content: React.ReactNode;
+  if (isLoading) {
+    content = <InteractionListSkeleton />;
+  } else if (isError) {
+    content = (
       <ErrorState
         title="Không thể tải danh sách"
         description="Vui lòng kiểm tra kết nối và thử lại."
         onRetry={() => refetch()}
       />
     );
-  }
-
-  if (items.length === 0) {
-    return (
+  } else if (items.length === 0) {
+    content = (
       <EmptyState
         icon={config.emptyIcon}
         title={config.emptyTitle}
@@ -170,26 +228,63 @@ export function MyInteractionList({ source }: MyInteractionListProps) {
         }
       />
     );
+  } else {
+    content = (
+      <div className="flex w-full flex-col gap-6">
+        <ul
+          className={cn('space-y-3 transition-opacity', isFetching ? 'opacity-60' : 'opacity-100')}
+        >
+          {items.map((interaction) => (
+            <InteractionRow
+              key={interaction.id}
+              interaction={interaction}
+              showDetail={isActivities}
+            />
+          ))}
+        </ul>
+
+        {pagination ? (
+          <DataPagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            onPageChange={handlePageChange}
+            disabled={isFetching}
+            ariaLabel="Phân trang danh sách"
+          />
+        ) : null}
+      </div>
+    );
   }
 
   return (
     <div className="flex w-full flex-col gap-6">
-      <ul className={cn('space-y-3 transition-opacity', isFetching ? 'opacity-60' : 'opacity-100')}>
-        {items.map((interaction) => (
-          <InteractionRow key={interaction.id} interaction={interaction} />
-        ))}
-      </ul>
-
-      {pagination ? (
-        <DataPagination
-          page={pagination.page}
-          totalPages={pagination.totalPages}
-          total={pagination.total}
-          onPageChange={handlePageChange}
-          disabled={isFetching}
-          ariaLabel="Phân trang danh sách"
-        />
+      {isActivities ? (
+        <div
+          role="tablist"
+          aria-label="Loại tương tác"
+          className="bg-muted flex flex-wrap items-center gap-1 rounded-lg p-1"
+        >
+          {ACTIVITY_TABS.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              role="tab"
+              aria-selected={tab === item.value}
+              onClick={() => handleTabChange(item.value)}
+              className={cn(
+                'cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                tab === item.value
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
       ) : null}
+      {content}
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { countryApi } from '@/apis/country.api';
+import { AdminPageHeader } from '@/components/admin/admin-page-header';
 import { AdminDeleteDialog } from '@/components/admin/data-view/admin-delete-dialog';
 import { AdminFormDialog } from '@/components/admin/data-view/admin-form-dialog';
 import type {
@@ -51,7 +52,15 @@ const COUNTRY_FORM_FIELDS: AdminFormField[] = [
   },
 ];
 
-export function CountriesClient() {
+interface CountriesClientProps {
+  title?: string;
+  description?: string;
+}
+
+export function CountriesClient({
+  title = 'Quốc gia',
+  description = 'Quản lý quốc gia xuất xứ của phim',
+}: CountriesClientProps = {}) {
   const table = useServerTable({
     initialPageSize: 10,
     initialSorting: DEFAULT_SORTING,
@@ -137,58 +146,61 @@ export function CountriesClient() {
   };
 
   return (
-    <AdminTablePage
-      table={table}
-      columns={columns}
-      data={countries}
-      total={total}
-      isLoading={countriesQuery.isLoading}
-      isFetching={countriesQuery.isFetching}
-      error={countriesQuery.error}
-      onRetry={() => void countriesQuery.refetch()}
-      searchPlaceholder="Tìm theo tên hoặc mã quốc gia…"
-      searchLabel="Tìm kiếm quốc gia"
-      filterFields={COUNTRY_FILTER_FIELDS}
-      entityLabel="quốc gia"
-      emptyDescription="Thêm quốc gia đầu tiên để gắn vào phim."
-      addLabel="Thêm quốc gia"
-      onAdd={openCreate}
-    >
-      <AdminFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        title={editing ? 'Sửa quốc gia' : 'Thêm quốc gia'}
-        description={
-          editing ? 'Cập nhật thông tin quốc gia đang chọn.' : 'Tạo quốc gia mới để gắn vào phim.'
-        }
-        fields={COUNTRY_FORM_FIELDS}
-        defaultValues={defaultValues}
-        onSubmit={handleSubmit}
-        submitting={createCountry.isPending || updateCountry.isPending}
-        submitLabel={editing ? 'Lưu thay đổi' : 'Thêm quốc gia'}
-        mapServerError={(error) =>
-          parseAxiosError(error).statusCode === 409
-            ? { field: 'code', message: 'Tên hoặc mã quốc gia đã tồn tại' }
-            : null
-        }
-      />
+    <div className="flex h-full w-full flex-col gap-4">
+      <AdminPageHeader title={title} description={description} queryRoots={[['admin-countries']]} />
+      <AdminTablePage
+        table={table}
+        columns={columns}
+        data={countries}
+        total={total}
+        isLoading={countriesQuery.isLoading}
+        isFetching={countriesQuery.isFetching}
+        error={countriesQuery.error}
+        onRetry={() => void countriesQuery.refetch()}
+        searchPlaceholder="Tìm theo tên hoặc mã quốc gia…"
+        searchLabel="Tìm kiếm quốc gia"
+        filterFields={COUNTRY_FILTER_FIELDS}
+        entityLabel="quốc gia"
+        emptyDescription="Thêm quốc gia đầu tiên để gắn vào phim."
+        addLabel="Thêm quốc gia"
+        onAdd={openCreate}
+      >
+        <AdminFormDialog
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          title={editing ? 'Sửa quốc gia' : 'Thêm quốc gia'}
+          description={
+            editing ? 'Cập nhật thông tin quốc gia đang chọn.' : 'Tạo quốc gia mới để gắn vào phim.'
+          }
+          fields={COUNTRY_FORM_FIELDS}
+          defaultValues={defaultValues}
+          onSubmit={handleSubmit}
+          submitting={createCountry.isPending || updateCountry.isPending}
+          submitLabel={editing ? 'Lưu thay đổi' : 'Thêm quốc gia'}
+          mapServerError={(error) =>
+            parseAxiosError(error).statusCode === 409
+              ? { field: 'code', message: 'Tên hoặc mã quốc gia đã tồn tại' }
+              : null
+          }
+        />
 
-      <AdminDeleteDialog
-        open={deleteTarget !== null}
-        onOpenChange={(next) => {
-          if (!next) setDeleteTarget(null);
-        }}
-        title="Xóa quốc gia?"
-        description={
-          <>
-            Quốc gia{' '}
-            <span className="text-foreground font-medium">{deleteTarget?.viName ?? 'này'}</span> sẽ
-            bị xóa khỏi tất cả phim liên quan. Hành động này không thể hoàn tác.
-          </>
-        }
-        onConfirm={handleDelete}
-        deleting={deleteCountry.isPending}
-      />
-    </AdminTablePage>
+        <AdminDeleteDialog
+          open={deleteTarget !== null}
+          onOpenChange={(next) => {
+            if (!next) setDeleteTarget(null);
+          }}
+          title="Xóa quốc gia?"
+          description={
+            <>
+              Quốc gia{' '}
+              <span className="text-foreground font-medium">{deleteTarget?.viName ?? 'này'}</span>{' '}
+              sẽ bị xóa khỏi tất cả phim liên quan. Hành động này không thể hoàn tác.
+            </>
+          }
+          onConfirm={handleDelete}
+          deleting={deleteCountry.isPending}
+        />
+      </AdminTablePage>
+    </div>
   );
 }

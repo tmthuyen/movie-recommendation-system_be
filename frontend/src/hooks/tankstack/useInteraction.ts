@@ -119,6 +119,34 @@ export function useMyFavoritesPaged(page: number = 1, limit: number = 12, enable
   );
 }
 
+/** QueryKey root của lịch sử tương tác đầy đủ (`my-activities`). */
+export const MY_ACTIVITIES_QUERY_ROOT = 'my-activities';
+
+/**
+ * Lịch sử tương tác đầy đủ (JWT) — `GET /api/interactions/my-activities?types=...`.
+ * `types` rỗng được hiểu là lấy cả 4 loại (backend tự mặc định).
+ */
+export function useMyActivities(
+  page: number = 1,
+  limit: number = 12,
+  types: InteractionType[] = [],
+  enabled: boolean = true,
+) {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const typeKey = [...types].sort().join(',');
+
+  return useQuery({
+    queryKey: [MY_ACTIVITIES_QUERY_ROOT, page, limit, typeKey],
+    queryFn: async (): Promise<PagedInteractions> => {
+      const response = await interactionApi.getMyActivities({ page, limit, types });
+      return { items: response.result ?? [], pagination: response.pagination };
+    },
+    enabled: enabled && isAuthenticated,
+    staleTime: 1000 * 60 * 2,
+    gcTime: 1000 * 60 * 5,
+  });
+}
+
 /**
  * Set các key `"${movieId}:${type}"` mà user đã tương tác (dùng để render
  * trạng thái active của nút trên card).
@@ -238,6 +266,7 @@ export function useToggleInteraction() {
       // Danh sách trang Lịch sử xem / Yêu thích (queryKey root riêng, có phân trang)
       queryClient.invalidateQueries({ queryKey: ['my-history'] });
       queryClient.invalidateQueries({ queryKey: ['my-favorites-page'] });
+      queryClient.invalidateQueries({ queryKey: [MY_ACTIVITIES_QUERY_ROOT] });
       // if (variables?.movieId) {
       //   queryClient.invalidateQueries({
       //     queryKey: interactionStatsQueryKey(variables.movieId),
@@ -276,6 +305,7 @@ const useInteraction = {
   useMyFavoriteKeys,
   useMyHistory,
   useMyFavoritesPaged,
+  useMyActivities,
   useToggleInteraction,
   useInteractionStats,
   useMyInteractionsWithMovie,

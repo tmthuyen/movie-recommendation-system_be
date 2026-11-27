@@ -6,7 +6,6 @@ import {
   Download,
   Film,
   MessageSquare,
-  RefreshCw,
   Star,
   Tags,
   Users,
@@ -16,8 +15,11 @@ import { useMemo, useState } from 'react';
 import {
   Bar,
   BarChart,
+  CartesianGrid,
   Cell,
   Legend,
+  Line,
+  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -26,23 +28,25 @@ import {
   YAxis,
 } from 'recharts';
 
+import { AdminPageHeader } from '@/components/admin/admin-page-header';
 import { DataTable, DataTableColumn } from '@/components/admin/data-table';
 import { EmptyState } from '@/components/common/EmptyState';
 import { ErrorState } from '@/components/common/ErrorState';
-import { PageHeader } from '@/components/common/PageHeader';
-import { TYPE_BADGES } from '@/components/movie/interaction-movie-list';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { DASHBOARD_SAMPLE_LIMIT, useAdminDashboard } from '@/hooks/tankstack/admin-dashboard';
+import { ADMIN_DASHBOARD_QUERY_ROOT, useAdminDashboard } from '@/hooks/tankstack/admin-dashboard';
+import { cn } from '@/lib/utils';
+import type { DashboardPeriod } from '@/shared/types/admin-dashboard.types';
 import {
   downloadCsv,
   formatActivityTime,
   RecentActivityItem,
   toCsv,
 } from '@/shared/utils/admin-dashboard';
-import { cn } from '@/lib/utils';
+import { INTERACTION_TYPE_BADGES } from '@/shared/utils/interaction';
 
 const CHART_COLORS = [
   'var(--chart-1)',
@@ -52,12 +56,13 @@ const CHART_COLORS = [
   'var(--chart-5)',
 ];
 
-/** Bộ lọc thời gian cho bảng hoạt động (`0` = tất cả). */
-const TIME_RANGES = [
-  { label: '7 ngày', value: 7 },
-  { label: '30 ngày', value: 30 },
-  { label: '90 ngày', value: 90 },
-  { label: 'Tất cả', value: 0 },
+const PERIOD_OPTIONS: Array<{ label: string; value: DashboardPeriod }> = [
+  { label: 'Hôm nay', value: 'day' },
+  { label: '7 ngày', value: 'week' },
+  { label: '30 ngày', value: 'month' },
+  { label: 'Quý', value: 'quarter' },
+  { label: 'Năm', value: 'year' },
+  { label: 'Tuỳ chỉnh', value: 'custom' },
 ];
 
 const Y_AXIS_WIDTH = 130;
@@ -101,7 +106,7 @@ interface ChartFrameProps {
   isError?: boolean;
   isEmpty?: boolean;
   emptyTitle?: string;
-  /** Ghi chú nhỏ dưới tiêu đề (đơn vị, giới hạn dữ liệu…). */
+  /** Ghi chú nhỏ dưới tiêu đề (đơn vị, khoảng thời gian…). */
   hint?: string;
   children: React.ReactNode;
   className?: string;
@@ -190,40 +195,90 @@ function HorizontalBarChart({
   );
 }
 
+/** Ngày ngắn gọn cho trục thời gian (giữ nguyên chuỗi nếu backend trả nhãn có sẵn). */
+function formatTimePointLabel(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+}
+
 /**
- * Dashboard admin — chỉ số lấy `pagination.total` (số liệu **chính xác**);
- * biểu đồ/bảng xếp hạng/cảnh báo dữ liệu tổng hợp phía client từ tối đa
- * `DASHBOARD_SAMPLE_LIMIT` bản ghi mới nhất mà list API trả về (backend chưa có
- * endpoint thống kê/aggregate hay filter theo thời gian).
+ * Dashboard admin — toàn bộ số liệu lấy từ `GET /api/admin/dashboard/stats`
+ * theo kỳ hoặc khoảng thời gian đã chọn (backend aggregate, không lấy mẫu client).
  */
 export function DashboardClient() {
-  const [days, setDays] = useState(30);
+  const [period, setPeriod] = useState<DashboardPeriod>('month');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+
   const {
     totals,
+    timeSeries,
     topViewed,
+    topActiveUsers,
     genreDistribution,
     countryDistribution,
     interactionTypes,
     ratingDistribution,
     topRated,
-    topActiveUsers,
     dataQualityIssues,
     recentActivity,
-    sampleSize,
+    period: appliedPeriod,
+    isRangeIncomplete,
     isLoading,
     isError,
-    isFetching,
-    refresh,
-  } = useAdminDashboard({ days });
+  } = useAdminDashboard({
+    period,
+    from: from || undefined,
+    to: to || undefined,
+  });
 
-  // Donut tương tác: map `type` → nhãn tiếng Việt (dùng chung TYPE_BADGES với nơi khác).
+  const periodLabel = PERIOD_OPTIONS.find((option) => option.value === period)?.label ?? '';
+  const rangeLabel =
+    period === 'custom'
+      ? `${from || '…'} → ${to || '…'}`
+      : `${periodLabel} (${appliedPeriod.from || '…'} → ${appliedPeriod.to || '…'})`;
+
+  // Donut tương tác: map `type` → nhãn tiếng Việt (dùng chung badge với nơi khác).
   const interactionPie = useMemo(
     () =>
       interactionTypes.map((entry) => ({
-        name: TYPE_BADGES[entry.type]?.label ?? entry.type,
+        name: INTERACTION_TYPE_BADGES[entry.type]?.label ?? entry.type,
         value: entry.value,
       })),
     [interactionTypes],
+  );
+
+  const timeSeriesChart = useMemo(
+    () =>
+      timeSeries.map((point) => ({
+        date: formatTimePointLabel(point.date),
+        interactions: point.interactions,
+        ratings: point.ratings,
+        comments: point.comments,
+      })),
+    [timeSeries],
+  );
+
+  const ratingBars = useMemo(
+    () =>
+      ratingDistribution.map((bucket) => ({
+        label: `${bucket.rating} sao`,
+        value: bucket.value,
+      })),
+    [ratingDistribution],
+  );
+
+  /** Backend có thể trả `click`/`like` — gom về 3 nhóm của bảng hoạt động. */
+  const activityItems = useMemo<RecentActivityItem[]>(
+    () =>
+      recentActivity.map((item) => ({
+        ...item,
+        kind: (['interaction', 'rating', 'comment'].includes(item.kind)
+          ? item.kind
+          : 'interaction') as RecentActivityItem['kind'],
+      })),
+    [recentActivity],
   );
 
   const activityColumns = useMemo<DataTableColumn<RecentActivityItem>[]>(
@@ -268,84 +323,117 @@ export function DashboardClient() {
     [],
   );
 
-  /** Xuất CSV (client-side) — gồm chỉ số tổng + các bảng xếp hạng đang hiển thị. */
+  /** Xuất CSV — toàn bộ số liệu aggregate đã tải theo kỳ/range hiện tại. */
   const handleExport = () => {
     const rows: Array<Record<string, string | number>> = [
-      { Nhóm: 'Chỉ số', Tên: 'Tổng số phim', 'Giá trị': totals.movies },
-      { Nhóm: 'Chỉ số', Tên: 'Người dùng', 'Giá trị': totals.users },
-      { Nhóm: 'Chỉ số', Tên: 'Thể loại', 'Giá trị': totals.genres },
-      { Nhóm: 'Chỉ số', Tên: 'Tương tác', 'Giá trị': totals.interactions },
-      { Nhóm: 'Chỉ số', Tên: 'Đánh giá', 'Giá trị': totals.ratings },
-      { Nhóm: 'Chỉ số', Tên: 'Bình luận', 'Giá trị': totals.comments },
+      { Nhóm: 'Kỳ', Tên: rangeLabel, 'Giá trị': '', 'Chi tiết': period },
+      { Nhóm: 'Chỉ số', Tên: 'Tổng số phim', 'Giá trị': totals.movies, 'Chi tiết': '' },
+      { Nhóm: 'Chỉ số', Tên: 'Người dùng', 'Giá trị': totals.users, 'Chi tiết': '' },
+      { Nhóm: 'Chỉ số', Tên: 'Thể loại', 'Giá trị': totals.genres, 'Chi tiết': '' },
+      { Nhóm: 'Chỉ số', Tên: 'Tương tác', 'Giá trị': totals.interactions, 'Chi tiết': '' },
+      { Nhóm: 'Chỉ số', Tên: 'Đánh giá', 'Giá trị': totals.ratings, 'Chi tiết': '' },
+      { Nhóm: 'Chỉ số', Tên: 'Bình luận', 'Giá trị': totals.comments, 'Chi tiết': '' },
+      ...timeSeries.map((point) => ({
+        Nhóm: 'Chuỗi thời gian',
+        Tên: point.date,
+        'Giá trị': point.interactions,
+        'Chi tiết': `Đánh giá: ${point.ratings}; Bình luận: ${point.comments}`,
+      })),
       ...topViewed.map((item) => ({
         Nhóm: 'Top phim xem nhiều',
         Tên: item.label,
         'Giá trị': item.value,
+        'Chi tiết': '',
       })),
       ...topActiveUsers.map((item) => ({
         Nhóm: 'Top người dùng hoạt động',
         Tên: item.label,
         'Giá trị': item.value,
+        'Chi tiết': '',
       })),
       ...genreDistribution.map((item) => ({
         Nhóm: 'Phim theo thể loại',
         Tên: item.label,
         'Giá trị': item.value,
+        'Chi tiết': '',
       })),
       ...countryDistribution.map((item) => ({
         Nhóm: 'Phim theo quốc gia',
         Tên: item.label,
         'Giá trị': item.value,
+        'Chi tiết': '',
+      })),
+      ...interactionTypes.map((item) => ({
+        Nhóm: 'Tương tác theo loại',
+        Tên: item.type,
+        'Giá trị': item.value,
+        'Chi tiết': '',
+      })),
+      ...ratingDistribution.map((item) => ({
+        Nhóm: 'Phân bố đánh giá',
+        Tên: `${item.rating} sao`,
+        'Giá trị': item.value,
+        'Chi tiết': '',
+      })),
+      ...topRated.map((item) => ({
+        Nhóm: 'Top phim đánh giá cao',
+        Tên: item.label,
+        'Giá trị': item.value,
+        'Chi tiết': '',
+      })),
+      ...dataQualityIssues.map((item) => ({
+        Nhóm: 'Cảnh báo dữ liệu',
+        Tên: item.label,
+        'Giá trị': item.count,
+        'Chi tiết': item.description ?? '',
+      })),
+      ...recentActivity.map((item) => ({
+        Nhóm: 'Hoạt động gần đây',
+        Tên: `${item.kindLabel}: ${item.userName} — ${item.movieTitle}`,
+        'Giá trị': formatActivityTime(item.createdAt),
+        'Chi tiết': item.detail,
       })),
     ];
-    downloadCsv(`dashboard-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(rows));
+    downloadCsv(`dashboard-${period}-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(rows));
   };
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      <PageHeader
+      <AdminPageHeader
         title="Dashboard"
-        description="Tổng quan hoạt động hệ thống gợi ý phim."
+        description={`Tổng quan hoạt động hệ thống gợi ý phim — ${rangeLabel}.`}
+        queryRoots={[[ADMIN_DASHBOARD_QUERY_ROOT]]}
         actions={
           <>
-            {/* Lọc thời gian — chỉ áp dụng cho bảng "Hoạt động gần đây" (xem ghi chú cuối trang) */}
             <div
               role="group"
-              aria-label="Khoảng thời gian hoạt động gần đây"
-              className="bg-muted flex items-center gap-1 rounded-lg p-1"
+              aria-label="Kỳ thống kê"
+              className="bg-muted flex flex-wrap items-center gap-1 rounded-lg p-1"
             >
-              {TIME_RANGES.map((range) => (
+              {PERIOD_OPTIONS.map((option) => (
                 <button
-                  key={range.value}
+                  key={option.value}
                   type="button"
-                  aria-pressed={days === range.value}
-                  onClick={() => setDays(range.value)}
+                  aria-pressed={period === option.value}
+                  onClick={() => setPeriod(option.value)}
                   className={cn(
                     'cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-                    days === range.value
+                    period === option.value
                       ? 'bg-background text-foreground shadow-sm'
                       : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
-                  {range.label}
+                  {option.label}
                 </button>
               ))}
             </div>
 
             <Button
               variant="outline"
-              className="h-9 cursor-pointer"
-              onClick={refresh}
-              disabled={isFetching}
+              className="h-11 cursor-pointer"
+              onClick={handleExport}
+              disabled={isRangeIncomplete || isError}
             >
-              <RefreshCw
-                className={cn('size-4', isFetching && 'animate-spin motion-reduce:animate-none')}
-                aria-hidden="true"
-              />
-              Làm mới
-            </Button>
-
-            <Button variant="outline" className="h-9 cursor-pointer" onClick={handleExport}>
               <Download className="size-4" aria-hidden="true" />
               Xuất CSV
             </Button>
@@ -353,254 +441,336 @@ export function DashboardClient() {
         }
       />
 
-      {/* Thẻ chỉ số — số liệu chính xác từ `pagination.total` */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <StatCard
-          title="Tổng số phim"
-          value={totals.movies}
-          isLoading={isLoading}
-          isError={isError}
-          icon={<Film className="size-4" />}
-        />
-        <StatCard
-          title="Người dùng"
-          value={totals.users}
-          isLoading={isLoading}
-          isError={isError}
-          icon={<Users className="size-4" />}
-        />
-        <StatCard
-          title="Thể loại"
-          value={totals.genres}
-          isLoading={isLoading}
-          isError={isError}
-          icon={<Tags className="size-4" />}
-        />
-        <StatCard
-          title="Tương tác"
-          value={totals.interactions}
-          isLoading={isLoading}
-          isError={isError}
-          icon={<Activity className="size-4" />}
-        />
-        <StatCard
-          title="Đánh giá"
-          value={totals.ratings}
-          isLoading={isLoading}
-          isError={isError}
-          icon={<Star className="size-4" />}
-        />
-        <StatCard
-          title="Bình luận"
-          value={totals.comments}
-          isLoading={isLoading}
-          isError={isError}
-          icon={<MessageSquare className="size-4" />}
-        />
-      </div>
-
-      {/* Biểu đồ */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <ChartFrame
-          title="Top phim xem nhiều nhất"
-          ariaLabel={`Biểu đồ cột ngang: top 10 phim có lượt xem cao nhất`}
-          isLoading={isLoading}
-          isError={isError}
-          isEmpty={topViewed.length === 0}
-          emptyTitle="Chưa có phim nào"
-          hint="Theo `viewCount` trong mẫu dữ liệu tải về"
+      {period === 'custom' ? (
+        <div
+          role="group"
+          aria-label="Khoảng thời gian tuỳ chỉnh"
+          className="flex flex-wrap items-end gap-3"
         >
-          <HorizontalBarChart data={topViewed} valueName="Lượt xem" />
-        </ChartFrame>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="dashboard-from" className="text-muted-foreground text-xs font-medium">
+              Từ ngày
+            </label>
+            <Input
+              id="dashboard-from"
+              type="date"
+              value={from}
+              max={to || undefined}
+              onChange={(event) => setFrom(event.target.value)}
+              className="h-11"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="dashboard-to" className="text-muted-foreground text-xs font-medium">
+              Đến ngày
+            </label>
+            <Input
+              id="dashboard-to"
+              type="date"
+              value={to}
+              min={from || undefined}
+              onChange={(event) => setTo(event.target.value)}
+              className="h-11"
+            />
+          </div>
+        </div>
+      ) : null}
 
-        <ChartFrame
-          title="Tương tác theo loại"
-          ariaLabel="Biểu đồ tròn: phân bố tương tác theo loại"
-          isLoading={isLoading}
-          isError={isError}
-          isEmpty={interactionPie.length === 0}
-          emptyTitle="Chưa có tương tác nào"
-          hint={`Trên ${DASHBOARD_SAMPLE_LIMIT} tương tác gần nhất`}
-        >
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={interactionPie}
-                dataKey="value"
-                nameKey="name"
-                innerRadius={55}
-                outerRadius={90}
-                paddingAngle={2}
-              >
-                {interactionPie.map((entry, index) => (
-                  <Cell
-                    key={entry.name}
-                    fill={CHART_COLORS[index % CHART_COLORS.length]}
-                    stroke="none"
+      {isRangeIncomplete ? (
+        <Card>
+          <CardContent>
+            <EmptyState
+              title="Chọn khoảng thời gian"
+              description="Vui lòng chọn cả ngày bắt đầu và ngày kết thúc để tải thống kê."
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {/* Thẻ chỉ số — số liệu tổng hợp từ backend theo kỳ đã chọn */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <StatCard
+              title="Tổng số phim"
+              value={totals.movies}
+              isLoading={isLoading}
+              isError={isError}
+              icon={<Film className="size-4" />}
+            />
+            <StatCard
+              title="Người dùng"
+              value={totals.users}
+              isLoading={isLoading}
+              isError={isError}
+              icon={<Users className="size-4" />}
+            />
+            <StatCard
+              title="Thể loại"
+              value={totals.genres}
+              isLoading={isLoading}
+              isError={isError}
+              icon={<Tags className="size-4" />}
+            />
+            <StatCard
+              title="Tương tác"
+              value={totals.interactions}
+              isLoading={isLoading}
+              isError={isError}
+              icon={<Activity className="size-4" />}
+            />
+            <StatCard
+              title="Đánh giá"
+              value={totals.ratings}
+              isLoading={isLoading}
+              isError={isError}
+              icon={<Star className="size-4" />}
+            />
+            <StatCard
+              title="Bình luận"
+              value={totals.comments}
+              isLoading={isLoading}
+              isError={isError}
+              icon={<MessageSquare className="size-4" />}
+            />
+          </div>
+
+          {/* Biểu đồ */}
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <ChartFrame
+              title="Xu hướng theo thời gian"
+              ariaLabel="Biểu đồ đường: số tương tác, đánh giá và bình luận theo thời gian"
+              isLoading={isLoading}
+              isError={isError}
+              isEmpty={timeSeriesChart.length === 0}
+              emptyTitle="Chưa có dữ liệu theo thời gian"
+              hint={rangeLabel}
+              className="xl:col-span-2"
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                  data={timeSeriesChart}
+                  margin={{ top: 8, right: 16, bottom: 8, left: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
+                  <Tooltip />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Line
+                    type="monotone"
+                    dataKey="interactions"
+                    name="Tương tác"
+                    stroke="var(--chart-1)"
+                    dot={false}
                   />
-                ))}
-              </Pie>
-              <Tooltip formatter={(value) => Number(value).toLocaleString('vi-VN')} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-            </PieChart>
-          </ResponsiveContainer>
-        </ChartFrame>
+                  <Line
+                    type="monotone"
+                    dataKey="ratings"
+                    name="Đánh giá"
+                    stroke="var(--chart-2)"
+                    dot={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="comments"
+                    name="Bình luận"
+                    stroke="var(--chart-3)"
+                    dot={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </ChartFrame>
 
-        <ChartFrame
-          title="Top người dùng hoạt động"
-          ariaLabel="Biểu đồ cột ngang: người dùng có nhiều tương tác, đánh giá, bình luận nhất"
-          isLoading={isLoading}
-          isError={isError}
-          isEmpty={topActiveUsers.length === 0}
-          emptyTitle="Chưa có hoạt động nào"
-          hint="Gộp tương tác + đánh giá + bình luận trong mẫu"
-        >
-          <HorizontalBarChart data={topActiveUsers} valueName="Số hoạt động" />
-        </ChartFrame>
+            <ChartFrame
+              title="Top phim xem nhiều nhất"
+              ariaLabel="Biểu đồ cột ngang: top phim có lượt xem cao nhất"
+              isLoading={isLoading}
+              isError={isError}
+              isEmpty={topViewed.length === 0}
+              emptyTitle="Chưa có phim nào"
+              hint="Theo `viewCount`, tổng hợp trên toàn hệ thống"
+            >
+              <HorizontalBarChart data={topViewed} valueName="Lượt xem" />
+            </ChartFrame>
 
-        <ChartFrame
-          title="Phân bố đánh giá theo số sao"
-          ariaLabel="Biểu đồ cột ngang: số lượng đánh giá theo từng mức sao 1 đến 5"
-          isLoading={isLoading}
-          isError={isError}
-          isEmpty={ratingDistribution.every((bucket) => bucket.value === 0)}
-          emptyTitle="Chưa có đánh giá nào"
-          hint="Trên mẫu đánh giá tải về"
-        >
-          <HorizontalBarChart
-            data={ratingDistribution}
-            colorMode="single"
-            valueName="Số đánh giá"
-          />
-        </ChartFrame>
+            <ChartFrame
+              title="Tương tác theo loại"
+              ariaLabel="Biểu đồ tròn: phân bố tương tác theo loại"
+              isLoading={isLoading}
+              isError={isError}
+              isEmpty={interactionPie.length === 0}
+              emptyTitle="Chưa có tương tác nào"
+              hint={`Trong kỳ ${rangeLabel}`}
+            >
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={interactionPie}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={55}
+                    outerRadius={90}
+                    paddingAngle={2}
+                  >
+                    {interactionPie.map((entry, index) => (
+                      <Cell
+                        key={entry.name}
+                        fill={CHART_COLORS[index % CHART_COLORS.length]}
+                        stroke="none"
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => Number(value).toLocaleString('vi-VN')} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </ChartFrame>
 
-        <ChartFrame
-          title="Phim theo thể loại"
-          ariaLabel="Biểu đồ cột ngang: số phim theo từng thể loại"
-          isLoading={isLoading}
-          isError={isError}
-          isEmpty={genreDistribution.length === 0}
-          emptyTitle="Chưa có phim gắn thể loại"
-          className="xl:col-span-2"
-          hint="Một phim thuộc nhiều thể loại sẽ được đếm ở từng thể loại"
-        >
-          <HorizontalBarChart data={genreDistribution} valueName="Số phim" />
-        </ChartFrame>
+            <ChartFrame
+              title="Top người dùng hoạt động"
+              ariaLabel="Biểu đồ cột ngang: người dùng có nhiều tương tác, đánh giá, bình luận nhất"
+              isLoading={isLoading}
+              isError={isError}
+              isEmpty={topActiveUsers.length === 0}
+              emptyTitle="Chưa có hoạt động nào"
+              hint="Gộp tương tác + đánh giá + bình luận"
+            >
+              <HorizontalBarChart data={topActiveUsers} valueName="Số hoạt động" />
+            </ChartFrame>
 
-        <ChartFrame
-          title="Phim theo quốc gia"
-          ariaLabel="Biểu đồ cột ngang: số phim theo từng quốc gia"
-          isLoading={isLoading}
-          isError={isError}
-          isEmpty={countryDistribution.length === 0}
-          emptyTitle="Chưa có dữ liệu quốc gia"
-          hint="Một phim thuộc nhiều quốc gia sẽ được đếm ở từng quốc gia"
-        >
-          <HorizontalBarChart data={countryDistribution} valueName="Số phim" />
-        </ChartFrame>
+            <ChartFrame
+              title="Phân bố đánh giá theo số sao"
+              ariaLabel="Biểu đồ cột ngang: số lượng đánh giá theo từng mức sao"
+              isLoading={isLoading}
+              isError={isError}
+              isEmpty={ratingBars.every((bucket) => bucket.value === 0)}
+              emptyTitle="Chưa có đánh giá nào"
+              hint={`Trong kỳ ${rangeLabel}`}
+            >
+              <HorizontalBarChart data={ratingBars} colorMode="single" valueName="Số đánh giá" />
+            </ChartFrame>
 
-        <ChartFrame
-          title="Top phim đánh giá cao"
-          ariaLabel="Biểu đồ cột ngang: phim có điểm trung bình cao nhất"
-          isLoading={isLoading}
-          isError={isError}
-          isEmpty={topRated.length === 0}
-          emptyTitle="Chưa đủ dữ liệu đánh giá"
-          hint="Điểm trung bình, chỉ tính phim có từ 2 lượt đánh giá trong mẫu"
-        >
-          <HorizontalBarChart
-            data={topRated}
-            colorMode="single"
-            valueName="Điểm trung bình"
-            suffix=" ★"
-          />
-        </ChartFrame>
-      </div>
+            <ChartFrame
+              title="Phim theo thể loại"
+              ariaLabel="Biểu đồ cột ngang: số phim theo từng thể loại"
+              isLoading={isLoading}
+              isError={isError}
+              isEmpty={genreDistribution.length === 0}
+              emptyTitle="Chưa có phim gắn thể loại"
+              className="xl:col-span-2"
+              hint="Một phim thuộc nhiều thể loại sẽ được đếm ở từng thể loại"
+            >
+              <HorizontalBarChart data={genreDistribution} valueName="Số phim" />
+            </ChartFrame>
 
-      {/* Hoạt động gần đây */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Hoạt động gần đây</CardTitle>
-          <p className="text-muted-foreground text-xs">
-            {days > 0 ? `Trong ${days} ngày gần nhất` : 'Toàn bộ'} — trích từ mẫu dữ liệu tải về
-            (backend chưa hỗ trợ lọc theo thời gian).
-          </p>
-        </CardHeader>
-        <CardContent className="min-w-0">
-          {isLoading ? (
-            <Skeleton className="h-40 w-full" />
-          ) : (
-            <DataTable
-              columns={activityColumns}
-              items={recentActivity}
-              rowKey={(item) => item.id}
-              empty={
-                <EmptyState
-                  title="Không có hoạt động nào"
-                  description={
-                    days > 0
-                      ? 'Thử chọn khoảng thời gian rộng hơn (30/90 ngày hoặc Tất cả).'
-                      : 'Chưa có tương tác, đánh giá hay bình luận nào.'
+            <ChartFrame
+              title="Phim theo quốc gia"
+              ariaLabel="Biểu đồ cột ngang: số phim theo từng quốc gia"
+              isLoading={isLoading}
+              isError={isError}
+              isEmpty={countryDistribution.length === 0}
+              emptyTitle="Chưa có dữ liệu quốc gia"
+              hint="Một phim thuộc nhiều quốc gia sẽ được đếm ở từng quốc gia"
+            >
+              <HorizontalBarChart data={countryDistribution} valueName="Số phim" />
+            </ChartFrame>
+
+            <ChartFrame
+              title="Top phim đánh giá cao"
+              ariaLabel="Biểu đồ cột ngang: phim có điểm trung bình cao nhất"
+              isLoading={isLoading}
+              isError={isError}
+              isEmpty={topRated.length === 0}
+              emptyTitle="Chưa đủ dữ liệu đánh giá"
+              hint="Điểm trung bình từ hệ thống"
+            >
+              <HorizontalBarChart
+                data={topRated}
+                colorMode="single"
+                valueName="Điểm trung bình"
+                suffix=" ★"
+              />
+            </ChartFrame>
+          </div>
+
+          {/* Hoạt động gần đây */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Hoạt động gần đây</CardTitle>
+              <p className="text-muted-foreground text-xs">{rangeLabel}</p>
+            </CardHeader>
+            <CardContent className="min-w-0">
+              {isLoading ? (
+                <Skeleton className="h-40 w-full" />
+              ) : (
+                <DataTable
+                  columns={activityColumns}
+                  items={activityItems}
+                  rowKey={(item) => item.id}
+                  empty={
+                    <EmptyState
+                      title="Không có hoạt động nào"
+                      description="Thử chọn kỳ khác hoặc khoảng thời gian rộng hơn."
+                    />
                   }
                 />
-              }
-            />
-          )}
-        </CardContent>
-      </Card>
+              )}
+            </CardContent>
+          </Card>
 
-      {/* Cảnh báo dữ liệu */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Cảnh báo dữ liệu phim</CardTitle>
-          <p className="text-muted-foreground text-xs">
-            Kiểm tra nhanh trên mẫu phim tải về — bấm để mở trang quản trị tương ứng.
-          </p>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <Skeleton className="h-24 w-full" />
-          ) : dataQualityIssues.length === 0 ? (
-            <EmptyState
-              title="Dữ liệu phim đầy đủ"
-              description="Không phát hiện phim thiếu thông tin trong mẫu."
-            />
-          ) : (
-            <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {dataQualityIssues.map((issue) => (
-                <li key={issue.label}>
-                  <Link
-                    href={issue.href}
-                    className="hover:bg-accent/50 flex items-start gap-3 rounded-xl border p-3 transition-colors"
-                  >
-                    <AlertTriangle
-                      className="text-muted-foreground mt-0.5 size-4 shrink-0"
-                      aria-hidden="true"
-                    />
-                    <span className="min-w-0">
-                      <span className="flex items-center gap-2">
-                        <span className="text-sm font-medium">{issue.label}</span>
-                        <Badge variant="secondary" className="tabular-nums">
-                          {issue.count.toLocaleString('vi-VN')}
-                        </Badge>
-                      </span>
-                      <span className="text-muted-foreground mt-1 block text-xs">
-                        {issue.description}
-                      </span>
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+          {/* Cảnh báo dữ liệu */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Cảnh báo dữ liệu phim</CardTitle>
+              <p className="text-muted-foreground text-xs">
+                Tổng hợp từ backend — bấm để mở trang quản trị tương ứng.
+              </p>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <Skeleton className="h-24 w-full" />
+              ) : dataQualityIssues.length === 0 ? (
+                <EmptyState
+                  title="Dữ liệu phim đầy đủ"
+                  description="Không phát hiện phim thiếu thông tin."
+                />
+              ) : (
+                <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {dataQualityIssues.map((issue) => (
+                    <li key={issue.label}>
+                      <Link
+                        href={issue.href ?? '/admin/movies'}
+                        className="hover:bg-accent/50 flex items-start gap-3 rounded-xl border p-3 transition-colors"
+                      >
+                        <AlertTriangle
+                          className="text-muted-foreground mt-0.5 size-4 shrink-0"
+                          aria-hidden="true"
+                        />
+                        <span className="min-w-0">
+                          <span className="flex items-center gap-2">
+                            <span className="text-sm font-medium">{issue.label}</span>
+                            <Badge variant="secondary" className="tabular-nums">
+                              {issue.count.toLocaleString('vi-VN')}
+                            </Badge>
+                          </span>
+                          {issue.description ? (
+                            <span className="text-muted-foreground mt-1 block text-xs">
+                              {issue.description}
+                            </span>
+                          ) : null}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       <p className="text-muted-foreground text-xs">
-        Chú ý: thẻ chỉ số dùng tổng chính xác từ API phân trang (`pagination.total`). Biểu đồ, bảng
-        xếp hạng và cảnh báo dữ liệu tổng hợp phía client từ {DASHBOARD_SAMPLE_LIMIT} bản ghi gần
-        nhất (đang phân tích {sampleSize.toLocaleString('vi-VN')} bản ghi) — backend chưa cung cấp
-        endpoint thống kê/aggregate, sort hay lọc theo thời gian.
+        Số liệu được tổng hợp từ backend theo kỳ/range đã chọn — không lấy mẫu ở frontend. Chọn「Làm
+        mới」để invalidate toàn bộ dữ liệu dashboard.
       </p>
     </div>
   );

@@ -12,7 +12,6 @@ import {
   Interaction,
   InteractionType,
 } from '@/modules/interactions/entities/interaction.entity';
-import { Movie } from './entities/movie.entity';
 import { FakeCacheService } from '@/infrastructure/cache/testing/fake-cache.service';
 import type { IRedisService } from '@/infrastructure/redis/redis.service';
 import type { SearchEventService } from '@/infrastructure/messaging/search-event.service';
@@ -25,9 +24,17 @@ describe('MoviesService', () => {
     findById: jest.Mock;
     create: jest.Mock;
     update: jest.Mock;
+    createWithRelations: jest.Mock;
+    updateWithRelations: jest.Mock;
     remove: jest.Mock;
   };
   let queryBuilder: Record<string, jest.Mock>;
+  let relationRepository: {
+    createQueryBuilder: jest.Mock;
+    find: jest.Mock;
+    findOne: jest.Mock;
+    count: jest.Mock;
+  };
   let dataSource: {
     getRepository: jest.Mock;
     transaction: jest.Mock;
@@ -63,10 +70,11 @@ describe('MoviesService', () => {
       getManyAndCount: jest.fn().mockResolvedValue([[{ id: 1 }], 0]),
     };
 
-    const repositoryStub = {
+    relationRepository = {
       createQueryBuilder: jest.fn().mockReturnValue(queryBuilder),
       findOne: jest.fn(),
       count: jest.fn(),
+      find: jest.fn().mockResolvedValue([]),
     };
 
     manager = {
@@ -77,7 +85,7 @@ describe('MoviesService', () => {
     };
 
     dataSource = {
-      getRepository: jest.fn().mockReturnValue(repositoryStub),
+      getRepository: jest.fn().mockReturnValue(relationRepository),
       transaction: jest.fn(async (cb: (m: unknown) => Promise<unknown>) =>
         cb(manager),
       ),
@@ -86,8 +94,10 @@ describe('MoviesService', () => {
     repo = {
       findAll: jest.fn(),
       findById: jest.fn(),
-      create: jest.fn(),
+      create: jest.fn().mockResolvedValue({ id: 9 }),
       update: jest.fn(),
+      createWithRelations: jest.fn().mockResolvedValue({ id: 9 }),
+      updateWithRelations: jest.fn().mockResolvedValue({ id: 1 }),
       remove: jest.fn(),
     };
 
@@ -190,8 +200,10 @@ describe('MoviesService', () => {
 
   describe('invalidate cache', () => {
     it('update xoá detail + tăng version list/recommendation', async () => {
-      repo.findById.mockResolvedValue({ id: 7, title: 'A' });
-      repo.update.mockResolvedValue({ id: 7, title: 'B' });
+      repo.findById
+        .mockResolvedValueOnce({ id: 7, title: 'A' })
+        .mockResolvedValueOnce({ id: 7, title: 'B' });
+      repo.updateWithRelations.mockResolvedValue({ id: 7 });
 
       await service.update(7, { title: 'B' });
 
@@ -200,6 +212,181 @@ describe('MoviesService', () => {
       expect(await cache.getCounter('cache:recommendation:ver:similar:7')).toBe(
         1,
       );
+    });
+  });
+
+  describe('movie genre/country/people', () => {
+    it('create dùng countryIds (không phải countryId) và báo ID quốc gia không tồn tại', async () => {
+      relationRepository.find.mockResolvedValue([]);
+      repo.findById.mockResolvedValue(null);
+
+      await expect(
+        service.create({ title: 'A', countryIds: [99] }),
+      ).rejects.toThrow('Một hoặc nhiều quốc gia không tồn tại: 99');
+      expect(repo.createWithRelations).not.toHaveBeenCalled();
+    });
+
+    it('countryIds = [] hợp lệ và xoá quan hệ; undefined thì giữ nguyên', async () => {
+      repo.findById.mockResolvedValue(null);
+
+      await service.create({ title: 'A', countryIds: [] });
+      expect(relationRepository.find).not.toHaveBeenCalled();
+      expect(repo.createWithRelations).toHaveBeenCalledWith(
+        { title: 'A' },
+        { countryIds: [] },
+      );
+
+      repo.createWithRelations.mockClear();
+      await service.create({ title: 'A' });
+      expect(repo.createWithRelations).toHaveBeenCalledWith({ title: 'A' }, {});
+    });
+
+    it('update genre/country thay thế hoàn toàn ID cũ bằng ID mới', async () => {
+      relationRepository.find
+        .mockResolvedValueOnce([{ id: 2 }])
+        .mockResolvedValueOnce([{ id: 2 }, { id: 3 }]);
+      repo.findById
+        .mockResolvedValueOnce({
+          id: 1,
+          title: 'A',
+          genres: [{ id: 1 }],
+          countries: [{ id: 1 }],
+          moviePeoples: [],
+        })
+        .mockResolvedValueOnce({
+          id: 1,
+          title: 'A',
+          genres: [{ id: 2 }],
+          countries: [{ id: 2 }, { id: 3 }],
+          moviePeoples: [],
+        });
+
+      await service.update(1, { genreIds: [2], countryIds: [2, 3] });
+
+      expect(repo.updateWithRelations).toHaveBeenCalledWith(
+        1,
+        {},
+        { genreIds: [2], countryIds: [2, 3] },
+      );
+      expect(movieProducer.publishMovieUpdated).toHaveBeenCalledTimes(1);
+    });
+
+    it('update peopleIds thay thế quan hệ, role được repository giữ lại', async () => {
+      relationRepository.find.mockResolvedValue([{ id: 2 }]);
+      repo.findById
+        .mockResolvedValueOnce({
+          id: 1,
+          title: 'A',
+          genres: [],
+          countries: [],
+          moviePeoples: [{ people: { id: 1 }, role: 'director' }],
+        })
+        .mockResolvedValueOnce({
+          id: 1,
+          title: 'A',
+          genres: [],
+          countries: [],
+          moviePeoples: [{ people: { id: 2 }, role: 'actor' }],
+        });
+
+      await service.update(1, { peopleIds: [2] });
+
+      expect(repo.updateWithRelations).toHaveBeenCalledWith(
+        1,
+        {},
+        { peopleIds: [2] },
+      );
+      expect(movieProducer.publishMovieUpdated).toHaveBeenCalledTimes(1);
+    });
+
+    it('update countryIds trùng (khác thứ tự) thì không phát lại event AI', async () => {
+      relationRepository.find.mockResolvedValue([{ id: 1 }, { id: 2 }]);
+      repo.findById.mockResolvedValue({
+        id: 1,
+        title: 'A',
+        genres: [],
+        countries: [{ id: 2 }, { id: 1 }],
+        moviePeoples: [],
+      });
+
+      await service.update(1, { countryIds: [1, 2] });
+
+      expect(repo.updateWithRelations).toHaveBeenCalledWith(
+        1,
+        {},
+        { countryIds: [1, 2] },
+      );
+      expect(movieProducer.publishMovieUpdated).not.toHaveBeenCalled();
+    });
+
+    it('update countryIds = [] xoá quan hệ và phát event AI', async () => {
+      repo.findById
+        .mockResolvedValueOnce({
+          id: 1,
+          title: 'A',
+          genres: [],
+          countries: [{ id: 1 }],
+          moviePeoples: [],
+        })
+        .mockResolvedValueOnce({
+          id: 1,
+          title: 'A',
+          genres: [],
+          countries: [],
+          moviePeoples: [],
+        });
+
+      await service.update(1, { countryIds: [] });
+
+      expect(repo.updateWithRelations).toHaveBeenCalledWith(
+        1,
+        {},
+        { countryIds: [] },
+      );
+      expect(movieProducer.publishMovieUpdated).toHaveBeenCalledTimes(1);
+    });
+
+    it('không gửi mảng quan hệ thì giữ nguyên, không phát event', async () => {
+      repo.findById.mockResolvedValue({ id: 1, title: 'A', budget: 1 });
+
+      await service.update(1, { budget: 2 });
+
+      expect(repo.updateWithRelations).toHaveBeenCalledWith(
+        1,
+        { budget: 2 },
+        {},
+      );
+      expect(movieProducer.publishMovieUpdated).not.toHaveBeenCalled();
+    });
+
+    it('ID people không tồn tại → BadRequest kèm ID, không ghi phim', async () => {
+      relationRepository.find.mockResolvedValue([]);
+      repo.findById.mockResolvedValue({ id: 1, title: 'A' });
+
+      await expect(service.update(1, { peopleIds: [7] })).rejects.toThrow(
+        'Một hoặc nhiều nhân vật không tồn tại: 7',
+      );
+      expect(repo.updateWithRelations).not.toHaveBeenCalled();
+    });
+
+    it('relation lỗi thì không publish event, không invalidate cache', async () => {
+      relationRepository.find.mockResolvedValue([{ id: 2 }]);
+      repo.findById.mockResolvedValue({
+        id: 1,
+        title: 'A',
+        genres: [{ id: 1 }],
+        countries: [],
+        moviePeoples: [],
+      });
+      repo.updateWithRelations.mockRejectedValueOnce(
+        new Error('relation down'),
+      );
+
+      await expect(service.update(1, { genreIds: [2] })).rejects.toThrow(
+        'relation down',
+      );
+      expect(movieProducer.publishMovieUpdated).not.toHaveBeenCalled();
+      expect(cache.delCalls).toHaveLength(0);
     });
   });
 
@@ -444,7 +631,7 @@ describe('MoviesService', () => {
 
   describe('create / update / remove', () => {
     it('create publish movie.created kèm genres', async () => {
-      repo.create.mockResolvedValue({ id: 9 });
+      repo.createWithRelations.mockResolvedValue({ id: 9 });
       repo.findById.mockResolvedValue({
         id: 9,
         title: 'A',
@@ -462,21 +649,17 @@ describe('MoviesService', () => {
     });
 
     it('create với genreIds không tồn tại → BadRequestException', async () => {
-      dataSource.getRepository.mockReturnValue({
-        count: jest.fn().mockResolvedValue(1),
-        findOne: jest.fn(),
-        createQueryBuilder: jest.fn().mockReturnValue(queryBuilder),
-      });
+      relationRepository.find.mockResolvedValue([]);
 
       await expect(
         service.create({ genreIds: [1, 2] } as never),
       ).rejects.toBeInstanceOf(BadRequestException);
-      expect(repo.create).not.toHaveBeenCalled();
+      expect(repo.createWithRelations).not.toHaveBeenCalled();
     });
 
     it('update không đổi field AI → không publish movie.updated', async () => {
       repo.findById.mockResolvedValue({ id: 5, title: 'A' });
-      repo.update.mockResolvedValue({ id: 5 });
+      repo.updateWithRelations.mockResolvedValue({ id: 5 });
 
       await service.update(5, { budget: 100 });
 
@@ -491,7 +674,7 @@ describe('MoviesService', () => {
           title: 'B',
           genres: [{ name: 'Kinh dị' }],
         });
-      repo.update.mockResolvedValue({ id: 5 });
+      repo.updateWithRelations.mockResolvedValue({ id: 5 });
 
       await service.update(5, { title: 'B' });
 

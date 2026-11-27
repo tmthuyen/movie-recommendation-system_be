@@ -3,6 +3,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { peopleApi } from '@/apis/people.api';
+import { AdminPageHeader } from '@/components/admin/admin-page-header';
 import { AdminDeleteDialog } from '@/components/admin/data-view/admin-delete-dialog';
 import { AdminFormDialog } from '@/components/admin/data-view/admin-form-dialog';
 import type {
@@ -59,7 +60,15 @@ function displayName(people: People): string {
   return people.fullName ?? people.name ?? `#${people.id}`;
 }
 
-export function PeopleClient() {
+interface PeopleClientProps {
+  title?: string;
+  description?: string;
+}
+
+export function PeopleClient({
+  title = 'Diễn viên / Đạo diễn',
+  description = 'Quản lý người tham gia phim',
+}: PeopleClientProps = {}) {
   const table = useServerTable({
     initialPageSize: 10,
     initialSorting: DEFAULT_SORTING,
@@ -145,62 +154,65 @@ export function PeopleClient() {
   };
 
   return (
-    <AdminTablePage
-      table={table}
-      columns={columns}
-      data={peoples}
-      total={total}
-      isLoading={peoplesQuery.isLoading}
-      isFetching={peoplesQuery.isFetching}
-      error={peoplesQuery.error}
-      onRetry={() => void peoplesQuery.refetch()}
-      searchPlaceholder="Tìm theo họ tên diễn viên…"
-      searchLabel="Tìm kiếm diễn viên / đạo diễn"
-      filterFields={PEOPLE_FILTER_FIELDS}
-      entityLabel="diễn viên"
-      emptyDescription="Thêm diễn viên hoặc đạo diễn đầu tiên để gắn vào phim."
-      addLabel="Thêm diễn viên"
-      onAdd={openCreate}
-    >
-      <AdminFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        title={editing ? 'Sửa thông tin' : 'Thêm diễn viên / đạo diễn'}
-        description={
-          editing
-            ? 'Cập nhật thông tin người tham gia phim đang chọn.'
-            : 'Tạo hồ sơ mới cho diễn viên hoặc đạo diễn.'
-        }
-        fields={PEOPLE_FORM_FIELDS}
-        defaultValues={defaultValues}
-        onSubmit={handleSubmit}
-        submitting={createPeople.isPending || updatePeople.isPending}
-        submitLabel={editing ? 'Lưu thay đổi' : 'Thêm'}
-        mapServerError={(error) =>
-          parseAxiosError(error).statusCode === 409
-            ? { field: 'fullName', message: 'Họ tên này đã tồn tại' }
-            : null
-        }
-      />
+    <div className="flex h-full w-full flex-col gap-4">
+      <AdminPageHeader title={title} description={description} queryRoots={[['admin-peoples']]} />
+      <AdminTablePage
+        table={table}
+        columns={columns}
+        data={peoples}
+        total={total}
+        isLoading={peoplesQuery.isLoading}
+        isFetching={peoplesQuery.isFetching}
+        error={peoplesQuery.error}
+        onRetry={() => void peoplesQuery.refetch()}
+        searchPlaceholder="Tìm theo họ tên diễn viên…"
+        searchLabel="Tìm kiếm diễn viên / đạo diễn"
+        filterFields={PEOPLE_FILTER_FIELDS}
+        entityLabel="diễn viên"
+        emptyDescription="Thêm diễn viên hoặc đạo diễn đầu tiên để gắn vào phim."
+        addLabel="Thêm diễn viên"
+        onAdd={openCreate}
+      >
+        <AdminFormDialog
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          title={editing ? 'Sửa thông tin' : 'Thêm diễn viên / đạo diễn'}
+          description={
+            editing
+              ? 'Cập nhật thông tin người tham gia phim đang chọn.'
+              : 'Tạo hồ sơ mới cho diễn viên hoặc đạo diễn.'
+          }
+          fields={PEOPLE_FORM_FIELDS}
+          defaultValues={defaultValues}
+          onSubmit={handleSubmit}
+          submitting={createPeople.isPending || updatePeople.isPending}
+          submitLabel={editing ? 'Lưu thay đổi' : 'Thêm'}
+          mapServerError={(error) =>
+            parseAxiosError(error).statusCode === 409
+              ? { field: 'fullName', message: 'Họ tên này đã tồn tại' }
+              : null
+          }
+        />
 
-      <AdminDeleteDialog
-        open={deleteTarget !== null}
-        onOpenChange={(next) => {
-          if (!next) setDeleteTarget(null);
-        }}
-        title="Xóa hồ sơ?"
-        description={
-          <>
-            Hồ sơ{' '}
-            <span className="text-foreground font-medium">
-              {deleteTarget ? displayName(deleteTarget) : 'này'}
-            </span>{' '}
-            sẽ bị xóa khỏi tất cả phim liên quan. Hành động này không thể hoàn tác.
-          </>
-        }
-        onConfirm={handleDelete}
-        deleting={deletePeople.isPending}
-      />
-    </AdminTablePage>
+        <AdminDeleteDialog
+          open={deleteTarget !== null}
+          onOpenChange={(next) => {
+            if (!next) setDeleteTarget(null);
+          }}
+          title="Xóa hồ sơ?"
+          description={
+            <>
+              Hồ sơ{' '}
+              <span className="text-foreground font-medium">
+                {deleteTarget ? displayName(deleteTarget) : 'này'}
+              </span>{' '}
+              sẽ bị xóa khỏi tất cả phim liên quan. Hành động này không thể hoàn tác.
+            </>
+          }
+          onConfirm={handleDelete}
+          deleting={deletePeople.isPending}
+        />
+      </AdminTablePage>
+    </div>
   );
 }

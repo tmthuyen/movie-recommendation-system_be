@@ -66,6 +66,12 @@ export interface Role extends BaseDto {
   description?: string;
 }
 
+/** Nhà cung cấp đăng nhập liên kết (nếu API trả về). */
+export interface UserProviderInfo {
+  provider?: string;
+  providerId?: string;
+}
+
 // User
 export interface User extends BaseDto {
   id: string;
@@ -80,6 +86,8 @@ export interface User extends BaseDto {
   birthDate?: Date;
   address?: string;
   roles: Role[];
+  /** `local`/`google`… — tuỳ backend có trả về trong chi tiết user. */
+  providers?: Array<UserProviderInfo | string>;
 }
 
 // genres

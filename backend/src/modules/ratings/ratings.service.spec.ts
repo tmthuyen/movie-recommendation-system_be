@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { RatingsService } from './ratings.service';
 import { IRatingRepository } from './ratings.repository';
@@ -220,6 +220,26 @@ describe('RatingsService', () => {
       await expect(service.findOne(1)).rejects.toBeInstanceOf(
         NotFoundException,
       );
+    });
+
+    it('update rating của người khác → ForbiddenException, không ghi DB', async () => {
+      repo.findById.mockResolvedValue({ id: 3, user: { id: 'user-2' } });
+
+      await expect(
+        service.update(3, 'user-1', { rating: 5 }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(repo.update).not.toHaveBeenCalled();
+    });
+
+    it('update rating của chính chủ → cập nhật thành công', async () => {
+      const updated = { id: 3, rating: 5 };
+      repo.findById.mockResolvedValue({ id: 3, user: { id: 'user-1' } });
+      repo.update.mockResolvedValue(updated);
+
+      await expect(service.update(3, 'user-1', { rating: 5 })).resolves.toEqual(
+        updated,
+      );
+      expect(repo.update).toHaveBeenCalledWith(3, { rating: 5 });
     });
 
     it('findByUserAndMovie trả null khi chưa đánh giá', async () => {

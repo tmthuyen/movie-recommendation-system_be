@@ -117,7 +117,6 @@ export class CommentsController {
   ) {
     const { sub: userId } = req.user as JwtPayload;
 
-    // Note: should check if comment belongs to user
     const result = await this.commentsService.update(
       +id,
       userId,

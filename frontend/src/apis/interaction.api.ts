@@ -2,6 +2,7 @@ import { ApiPaginatedResponse, ApiResponse } from '@/shared/types/api.types';
 import {
   Interaction,
   InteractionStats,
+  InteractionType,
   MyInteractionsWithMovie,
   ToggleInteractionResult,
 } from '@/shared/types/interaction.types';
@@ -47,6 +48,24 @@ export const interactionApi = {
     limit?: number;
   }): Promise<ApiPaginatedResponse<Interaction[]>> => {
     const { data } = await axiosClient.get('/interactions/my-favorites', { params });
+    return data;
+  },
+  /**
+   * Lịch sử tương tác đầy đủ (JWT) — `GET /api/interactions/my-activities`.
+   * `types` được gửi dạng `click,like,rating,comment` (backend tách bằng dấu phẩy).
+   */
+  getMyActivities: async (params: {
+    page?: number;
+    limit?: number;
+    types?: InteractionType[];
+  }): Promise<ApiPaginatedResponse<Interaction[]>> => {
+    const { types, ...paging } = params;
+    const { data } = await axiosClient.get('/interactions/my-activities', {
+      params: {
+        ...paging,
+        ...(types?.length ? { types: types.join(',') } : {}),
+      },
+    });
     return data;
   },
   /** Danh sách tương tác của user với movie cụ thể

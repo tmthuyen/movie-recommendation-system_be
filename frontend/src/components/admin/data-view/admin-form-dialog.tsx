@@ -25,10 +25,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { parseAxiosError } from '@/lib/axiosClient';
 import {
   buildAdminFormSchema,
+  type AdminFormDirtyFields,
   type AdminFormField,
   type AdminFormValues,
 } from './admin-form-schema';
 import { MultiSelectField } from './multi-select-field';
+
+export type { AdminFormDirtyFields };
 
 export interface AdminFormDialogProps {
   open: boolean;
@@ -37,7 +40,7 @@ export interface AdminFormDialogProps {
   description?: string;
   fields: AdminFormField[];
   defaultValues: AdminFormValues;
-  onSubmit: (values: AdminFormValues) => Promise<void>;
+  onSubmit: (values: AdminFormValues, dirtyFields: AdminFormDirtyFields) => Promise<void>;
   submitting?: boolean;
   submitLabel?: string;
   /** Map lỗi server về field cụ thể (vd. 409 → `code`); trả `null` để hiện lỗi chung. */
@@ -84,7 +87,8 @@ export function AdminFormDialog({
 
   const submit = handleSubmit(async (values) => {
     try {
-      await onSubmit(values);
+      // Field chưa từng thay đổi không được đưa vào payload PATCH/PUT.
+      await onSubmit(values, formState.dirtyFields as AdminFormDirtyFields);
     } catch (error) {
       const mapped = mapServerError?.(error);
       if (mapped) {

@@ -1,5 +1,6 @@
 import {
   Activity,
+  AlertTriangle,
   BarChart4,
   Bell,
   Clock,
@@ -123,21 +124,31 @@ export const NAV_SECTIONS = {
         url: '/admin/interaction',
         icon: Activity,
       },
+      {
+        title: 'Sự kiện lỗi',
+        url: '/admin/failed-events',
+        icon: AlertTriangle,
+      },
     ],
   },
   personal: {
     groupLabel: 'Cá nhân',
     items: [
+      // {
+      //   title: 'Lịch sử xem',
+      //   url: '/my-history',
+      //   icon: Clock,
+      // },
       {
-        title: 'Lịch sử xem',
-        url: '/my-history',
-        icon: Clock,
+        title: 'Lịch sử tương tác',
+        url: '/my-interactions',
+        icon: Activity,
       },
-      {
-        title: 'Yêu thích',
-        url: '/my-favorites',
-        icon: Heart,
-      },
+      // {
+      //   title: 'Yêu thích',
+      //   url: '/my-favorites',
+      //   icon: Heart,
+      // },
     ],
   },
   settings: {
@@ -192,7 +203,7 @@ export const BOTTOM_NAV: Record<'user' | 'admin', BottomNavItemData[]> = {
     { href: '/dashboard', label: 'Tổng quan', icon: LayoutDashboard, exact: true },
     { href: '/admin/movies', label: 'Phim', icon: Film },
     { href: '/admin/interaction', label: 'Tương tác', icon: Activity },
+    { href: '/admin/failed-events', label: 'Sự kiện lỗi', icon: AlertTriangle },
     { href: '/admin/users', label: 'Tài khoản', icon: ContactRound },
-    { href: '/profile', label: 'Hồ sơ', icon: UserIcon },
   ],
 };

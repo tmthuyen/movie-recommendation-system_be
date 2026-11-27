@@ -3,6 +3,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { genreApi } from '@/apis/genre.api';
+import { AdminPageHeader } from '@/components/admin/admin-page-header';
 import { AdminDeleteDialog } from '@/components/admin/data-view/admin-delete-dialog';
 import { AdminFormDialog } from '@/components/admin/data-view/admin-form-dialog';
 import type {
@@ -37,7 +38,15 @@ const GENRE_FORM_FIELDS: AdminFormField[] = [
   },
 ];
 
-export function GenresClient() {
+interface GenresClientProps {
+  title?: string;
+  description?: string;
+}
+
+export function GenresClient({
+  title = 'Thể loại',
+  description = 'Quản lý các nhóm thể loại phim',
+}: GenresClientProps = {}) {
   const table = useServerTable({
     initialPageSize: 10,
     initialSorting: DEFAULT_SORTING,
@@ -118,60 +127,63 @@ export function GenresClient() {
   };
 
   return (
-    <AdminTablePage
-      table={table}
-      columns={columns}
-      data={genres}
-      total={total}
-      isLoading={genresQuery.isLoading}
-      isFetching={genresQuery.isFetching}
-      error={genresQuery.error}
-      onRetry={() => void genresQuery.refetch()}
-      searchPlaceholder="Tìm theo tên thể loại…"
-      searchLabel="Tìm kiếm thể loại"
-      filterFields={GENRE_FILTER_FIELDS}
-      entityLabel="thể loại"
-      emptyDescription="Thêm thể loại đầu tiên để gắn vào phim."
-      addLabel="Thêm thể loại"
-      onAdd={openCreate}
-    >
-      <AdminFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        title={editing ? 'Sửa thể loại' : 'Thêm thể loại'}
-        description={
-          editing
-            ? 'Cập nhật tên thể loại. Thay đổi áp dụng ngay cho danh sách phim.'
-            : 'Tạo thể loại mới để phân loại phim.'
-        }
-        fields={GENRE_FORM_FIELDS}
-        defaultValues={defaultValues}
-        onSubmit={handleSubmit}
-        submitting={createGenre.isPending || updateGenre.isPending}
-        submitLabel={editing ? 'Lưu thay đổi' : 'Thêm thể loại'}
-        mapServerError={(error) =>
-          parseAxiosError(error).statusCode === 409
-            ? { field: 'name', message: 'Thể loại này đã tồn tại' }
-            : null
-        }
-      />
+    <div className="flex h-full w-full flex-col gap-4">
+      <AdminPageHeader title={title} description={description} queryRoots={[['admin-genres']]} />
+      <AdminTablePage
+        table={table}
+        columns={columns}
+        data={genres}
+        total={total}
+        isLoading={genresQuery.isLoading}
+        isFetching={genresQuery.isFetching}
+        error={genresQuery.error}
+        onRetry={() => void genresQuery.refetch()}
+        searchPlaceholder="Tìm theo tên thể loại…"
+        searchLabel="Tìm kiếm thể loại"
+        filterFields={GENRE_FILTER_FIELDS}
+        entityLabel="thể loại"
+        emptyDescription="Thêm thể loại đầu tiên để gắn vào phim."
+        addLabel="Thêm thể loại"
+        onAdd={openCreate}
+      >
+        <AdminFormDialog
+          open={formOpen}
+          onOpenChange={setFormOpen}
+          title={editing ? 'Sửa thể loại' : 'Thêm thể loại'}
+          description={
+            editing
+              ? 'Cập nhật tên thể loại. Thay đổi áp dụng ngay cho danh sách phim.'
+              : 'Tạo thể loại mới để phân loại phim.'
+          }
+          fields={GENRE_FORM_FIELDS}
+          defaultValues={defaultValues}
+          onSubmit={handleSubmit}
+          submitting={createGenre.isPending || updateGenre.isPending}
+          submitLabel={editing ? 'Lưu thay đổi' : 'Thêm thể loại'}
+          mapServerError={(error) =>
+            parseAxiosError(error).statusCode === 409
+              ? { field: 'name', message: 'Thể loại này đã tồn tại' }
+              : null
+          }
+        />
 
-      <AdminDeleteDialog
-        open={deleteTarget !== null}
-        onOpenChange={(next) => {
-          if (!next) setDeleteTarget(null);
-        }}
-        title="Xóa thể loại?"
-        description={
-          <>
-            Thể loại{' '}
-            <span className="text-foreground font-medium">{deleteTarget?.name ?? 'này'}</span> sẽ bị
-            xóa khỏi tất cả phim liên quan. Hành động này không thể hoàn tác.
-          </>
-        }
-        onConfirm={handleDelete}
-        deleting={deleteGenre.isPending}
-      />
-    </AdminTablePage>
+        <AdminDeleteDialog
+          open={deleteTarget !== null}
+          onOpenChange={(next) => {
+            if (!next) setDeleteTarget(null);
+          }}
+          title="Xóa thể loại?"
+          description={
+            <>
+              Thể loại{' '}
+              <span className="text-foreground font-medium">{deleteTarget?.name ?? 'này'}</span> sẽ
+              bị xóa khỏi tất cả phim liên quan. Hành động này không thể hoàn tác.
+            </>
+          }
+          onConfirm={handleDelete}
+          deleting={deleteGenre.isPending}
+        />
+      </AdminTablePage>
+    </div>
   );
 }

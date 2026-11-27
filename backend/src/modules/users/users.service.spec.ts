@@ -1,8 +1,11 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 
 import { UsersService } from './users.service';
-import { IUserRepository } from './users.repository';
 import { RolesService } from '@/modules/roles/roles.service';
 import { UserProducer } from '@/infrastructure/messaging/producers/user.producer';
 import { IStorageService } from '@/infrastructure/storage/storage.service';
@@ -49,6 +52,7 @@ describe('UsersService', () => {
     publishUserDeleted: jest.Mock;
   };
   let storage: Record<string, jest.Mock>;
+  let sessionService: { removeAllSessions: jest.Mock };
   let loggerLog: jest.SpyInstance;
 
   beforeEach(() => {
@@ -68,12 +72,16 @@ describe('UsersService', () => {
       uploadFile: jest.fn().mockResolvedValue('https://cdn.local/new.png'),
       deleteFile: jest.fn().mockResolvedValue(undefined),
     };
+    sessionService = {
+      removeAllSessions: jest.fn().mockResolvedValue(undefined),
+    };
 
     service = new UsersService(
       repo,
       roleService as unknown as RolesService,
       producer as unknown as UserProducer,
       storage as unknown as IStorageService,
+      sessionService as never,
     );
 
     // Logger của Nest làm ồn output test, đồng thời ta cần soi nội dung log
@@ -239,7 +247,7 @@ describe('UsersService', () => {
       repo.findByIdWithRoles.mockResolvedValue(null);
 
       await expect(service.findOne('missing-id')).rejects.toThrow(
-        'User with ID missing-id not found',
+        'Không tìm thấy người dùng với ID missing-id',
       );
       await expect(service.findOne('missing-id')).rejects.toBeInstanceOf(
         NotFoundException,
@@ -316,17 +324,17 @@ describe('UsersService', () => {
       });
     });
 
-    it('không ghi plaintext password vào log', async () => {
+    it('log chỉ field name, không ghi plaintext password hay hash', async () => {
       repo.findByIdWithRoles.mockResolvedValue(makeUser());
 
-      // DTO bị Object.assign vào entity; log phải chứa hash, không chứa plaintext.
-      await service.update('user-1', { password: 'plain-secret' });
+      await service.update('user-1', { password: 'plain-secret' } as never);
 
       const logged = loggerLog.mock.calls
         .map(call => String(call[0]))
         .join('\n');
-      expect(logged).toContain('hashed-new-password');
+      expect(logged).toContain('fields=[password]');
       expect(logged).not.toContain('plain-secret');
+      expect(logged).not.toContain('hashed-new-password');
     });
 
     it('không hash khi không đổi password', async () => {
@@ -348,6 +356,83 @@ describe('UsersService', () => {
       ).rejects.toBeInstanceOf(NotFoundException);
       expect(repo.save).not.toHaveBeenCalled();
       expect(producer.publishUserUpdated).not.toHaveBeenCalled();
+    });
+
+    it('admin đổi email trùng user khác → ConflictException 409', async () => {
+      repo.findByIdWithRoles.mockResolvedValue(makeUser());
+      repo.findByEmail.mockResolvedValue(makeUser({ id: 'user-2' }));
+
+      await expect(
+        service.update('user-1', { email: 'dup@example.com' }),
+      ).rejects.toThrow('Email đã tồn tại');
+      await expect(
+        service.update('user-1', { email: 'dup@example.com' }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('admin gửi status không hợp lệ → BadRequestException', async () => {
+      repo.findByIdWithRoles.mockResolvedValue(makeUser());
+
+      await expect(
+        service.update('user-1', { status: 'GHOST' } as never),
+      ).rejects.toThrow('Trạng thái tài khoản không hợp lệ');
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('admin tự BLOCKED hoặc INACTIVE chính mình → BadRequestException', async () => {
+      repo.findByIdWithRoles.mockResolvedValue(makeUser());
+
+      for (const status of [UserStatus.BLOCKED, UserStatus.INACTIVE]) {
+        await expect(
+          service.update('user-1', { status }, 'user-1'),
+        ).rejects.toBeInstanceOf(BadRequestException);
+      }
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it.each([UserStatus.BLOCKED, UserStatus.INACTIVE])(
+      'admin chuyển ACTIVE → %s thì thu hồi session và publish user.updated',
+      async status => {
+        repo.findByIdWithRoles.mockResolvedValue(makeUser());
+
+        const updated = await service.update('user-1', { status }, 'admin-1');
+
+        expect(updated.status).toBe(status);
+        expect(sessionService.removeAllSessions).toHaveBeenCalledWith('user-1');
+        expect(producer.publishUserUpdated).toHaveBeenCalledWith(
+          expect.objectContaining({ userId: 'user-1' }),
+        );
+      },
+    );
+
+    it('status không đổi thì không thu hồi session', async () => {
+      repo.findByIdWithRoles.mockResolvedValue(
+        makeUser({ status: UserStatus.BLOCKED }),
+      );
+
+      await service.update('user-1', { status: UserStatus.BLOCKED }, 'admin-1');
+
+      expect(sessionService.removeAllSessions).not.toHaveBeenCalled();
+    });
+
+    it('admin đổi isVerified vẫn lưu và publish user.updated', async () => {
+      repo.findByIdWithRoles.mockResolvedValue(makeUser({ isVerified: false }));
+
+      const updated = await service.update(
+        'user-1',
+        { isVerified: true },
+        'admin-1',
+      );
+
+      expect(updated.isVerified).toBe(true);
+      expect(repo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'user-1', isVerified: true }),
+      );
+      expect(producer.publishUserUpdated).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: 'user-1' }),
+      );
+      expect(sessionService.removeAllSessions).not.toHaveBeenCalled();
     });
   });
 
