@@ -71,7 +71,7 @@ export type UserDeletedPayloadType = z.infer<typeof userDeletedPayloadSchema>;
 /** Payload event `user.search` — userId nằm trong payload cùng keyword. */
 export const userSearchPayloadSchema = z.object({
   userId: z.string(),
-  mode: z.enum(['semantic', 'hybrid', 'db']),
+  mode: z.enum(['semantic', 'hybrid', 'db', 'lexical']),
   keywordRaw: z.string(),
   keywordNormalized: z.string(),
 });

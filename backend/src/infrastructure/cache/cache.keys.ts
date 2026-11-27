@@ -142,6 +142,14 @@ export const CacheKeys = {
         `k${window}`,
         `v${version}`,
       ),
+    lexical: (keyword: string, window: number, version: number) =>
+      buildKey(
+        'recommendation',
+        'lexical',
+        `q${hashFilters({ keyword: normalizeCacheKeyword(keyword) })}`,
+        `k${window}`,
+        `v${version}`,
+      ),
     lexicalRerank: (keyword: string, window: number, version: number) =>
       buildKey(
         'recommendation',

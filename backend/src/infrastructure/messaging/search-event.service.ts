@@ -5,7 +5,7 @@ import type { UserSearchPayloadType } from './event.types';
 import { UserProducer } from './producers/user.producer';
 
 /** Nguồn tìm kiếm ghi vào event `user.search`. */
-export type SearchEventMode = 'semantic' | 'hybrid' | 'db';
+export type SearchEventMode = 'semantic' | 'hybrid' | 'db' | 'lexical';
 
 /** Thông tin cần để phát event tìm kiếm của một request. */
 export interface PublishSearchEventInput {
