@@ -1,6 +1,6 @@
 # V45 — Backend: failed events, lịch sử tương tác, dashboard aggregate và sửa movie genre/country
 
-> **Trạng thái:** 🟢 Đã triển khai (2026-11-27) — P1–P7 xong, chờ QA tay trên stack thật
+> **Trạng thái:** 🟢 Đã triển khai (2026-11-27) — P1–P8 xong, chờ QA tay trên stack thật
 > **Người thực hiện:** AI agent (Big Pickle)
 > **Thời gian lập plan:** 2026-11-27
 > **Scope:** `backend` (liên quan `frontend` — xem V46)
@@ -106,6 +106,16 @@ Test P7:
 - [x] admin đổi `ACTIVE→BLOCKED` → DB đổi, `removeAllSessions` được gọi, publish `user.updated`;
 - [x] đổi `isVerified` → vẫn lưu/publish;
 - [x] email trùng → `409`; tự block → `400`.
+
+### P8 — Movie stats: cache miss load DB dưới Redis lock (bổ sung theo yêu cầu)
+
+> Lỗi hiện tại: `getStats()` cache miss chỉ `HSET ZERO_STATS`, không load DB. View/like/comment/rating bắt đầu từ 0 và cron có thể ghi 0 đè stats thật xuống DB.
+
+- [x] P8.1 — `getStats(movieId)`: Redis hash hit → trả ngay; miss → lock `lock:stats:load:<movieId>` (TTL ngắn, wait ngắn), double-check cache sau khi có lock.
+- [x] P8.2 — Trong lock: load 1 phim từ DB qua `MOVIE_STATS_REPOSITORY.findOneForBootstrap()` (comment/like/rating lấy từ bảng nguồn, view lấy `movies.view_count`), ghi Redis hash + seed ranking, **trả stats vừa load**.
+- [x] P8.3 — Không seed `ZERO_STATS` khi cache miss; movie không tồn tại mới trả zero và không cache.
+- [x] P8.4 — `recordView/Like/Comment/Rating` và `setRatingStats` dùng chung `ensureStats()` → DB load trước khi `HINCRBY`.
+- [x] P8.5 — Cập nhật spec có sẵn `movie-interaction-stats.service.spec.ts`; không tạo file test mới.
 
 ---
 

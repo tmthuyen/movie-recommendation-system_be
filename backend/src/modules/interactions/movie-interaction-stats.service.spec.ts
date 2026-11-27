@@ -97,33 +97,90 @@ class FakeRedis {
 describe('MovieInteractionStatsService', () => {
   let redis: FakeRedis;
   let service: MovieInteractionStatsService;
+  let repo: { findOneForBootstrap: jest.Mock };
+  let lock: { runWithLockOrFallback: jest.Mock };
+
+  const zeroStats = {
+    likeCount: 0,
+    commentCount: 0,
+    viewCount: 0,
+    ratingCount: 0,
+    voteAverage: 0,
+    ratingTotal: 0,
+    ratingAvg: 0,
+  };
 
   beforeEach(() => {
     redis = new FakeRedis();
+    repo = {
+      findOneForBootstrap: jest.fn((movieId: number) =>
+        Promise.resolve({ movieId, ...zeroStats }),
+      ),
+    };
+    lock = {
+      runWithLockOrFallback: jest.fn(
+        (
+          _key: string,
+          _ttl: number,
+          _options: unknown,
+          callback: () => Promise<unknown>,
+        ) => callback(),
+      ),
+    };
     service = new MovieInteractionStatsService(
       redis as unknown as IRedisService,
+      lock as never,
+      repo as never,
     );
   });
 
-  it('phim chưa có stats → khởi tạo hash số 0, không đụng DB', async () => {
+  it('cache miss → load DB dưới lock, ghi cache và trả stats DB', async () => {
+    repo.findOneForBootstrap.mockResolvedValue({
+      movieId: 7,
+      likeCount: 2,
+      commentCount: 3,
+      viewCount: 5,
+      ratingCount: 4,
+      voteAverage: 4.5,
+      ratingTotal: 18,
+      ratingAvg: 4.5,
+    });
+
     await expect(service.getStats(7)).resolves.toEqual({
-      likeCount: 0,
-      commentCount: 0,
-      viewCount: 0,
-      ratingCount: 0,
-      voteAverage: 0,
-      ratingTotal: 0,
-      ratingAvg: 0,
+      likeCount: 2,
+      commentCount: 3,
+      viewCount: 5,
+      ratingCount: 4,
+      voteAverage: 4.5,
+      ratingTotal: 18,
+      ratingAvg: 4.5,
     });
+    expect(lock.runWithLockOrFallback).toHaveBeenCalledWith(
+      'lock:stats:load:7',
+      5,
+      { waitMs: 1000, retryIntervalMs: 25 },
+      expect.any(Function),
+      expect.any(Function),
+    );
+    expect(repo.findOneForBootstrap).toHaveBeenCalledWith(7);
     expect(redis.hashes.get('cache:stats:movie:7')).toEqual({
-      likeCount: '0',
-      commentCount: '0',
-      viewCount: '0',
-      ratingCount: '0',
-      voteAverage: '0',
-      ratingTotal: '0',
-      ratingAvg: '0',
+      likeCount: '2',
+      commentCount: '3',
+      viewCount: '5',
+      ratingCount: '4',
+      voteAverage: '4.5',
+      ratingTotal: '18',
+      ratingAvg: '4.5',
     });
+    expect(redis.zsets.get('cache:stats:popular:all')?.get('7')).toBe(14);
+  });
+
+  it('cache hit thì không load DB', async () => {
+    await service.getStats(7);
+    repo.findOneForBootstrap.mockClear();
+
+    await service.getStats(7);
+    expect(repo.findOneForBootstrap).not.toHaveBeenCalled();
   });
 
   it('recordView tăng hash, popular/hot/top và đánh dấu dirty', async () => {

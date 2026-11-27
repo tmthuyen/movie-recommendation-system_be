@@ -6,6 +6,10 @@ import {
 } from '@/infrastructure/cache/cache.schemas';
 import { REDIS_SERVICE } from '@/infrastructure/redis/redis.service';
 import type { IRedisService } from '@/infrastructure/redis/redis.service';
+import { REDIS_LOCK_SERVICE } from '@/infrastructure/redis/redis-lock.service';
+import type { IRedisLockService } from '@/infrastructure/redis/redis-lock.service';
+import { MOVIE_STATS_REPOSITORY } from './movie-stats.repository';
+import type { IMovieStatsRepository } from './movie-stats.repository';
 
 export interface MovieInteractionStats {
   likeCount: number;
@@ -43,20 +47,28 @@ const ZERO_STATS: MovieInteractionStats = {
   ratingAvg: 0,
 };
 
+/** Lock ngắn khi load stats từ DB để tránh nhiều request cùng đổ vào DB. */
+const STATS_LOAD_LOCK_TTL_SECONDS = 5;
+const STATS_LOAD_LOCK_WAIT_MS = 1_000;
+const STATS_LOAD_LOCK_RETRY_MS = 25;
+
 /** Đọc và cập nhật stats phim trong Redis. */
 @Injectable()
 export class MovieInteractionStatsService {
   private readonly logger = new Logger(MovieInteractionStatsService.name);
 
-  constructor(@Inject(REDIS_SERVICE) private readonly redis: IRedisService) {}
+  constructor(
+    @Inject(REDIS_SERVICE) private readonly redis: IRedisService,
+    @Inject(REDIS_LOCK_SERVICE) private readonly lock: IRedisLockService,
+    @Inject(MOVIE_STATS_REPOSITORY)
+    private readonly statsRepository: IMovieStatsRepository,
+  ) {}
 
   async getStats(movieId: number): Promise<MovieInteractionStats> {
-    const hash = await this.redis.hgetall(CacheKeys.stats.detail(movieId));
-    const parsed = this.parseHash(hash);
-    if (parsed) return parsed;
+    const cached = await this.readCachedStats(movieId);
+    if (cached) return cached;
 
-    await this.ensureStats(movieId);
-    return { ...ZERO_STATS };
+    return this.loadStatsWithLock(movieId);
   }
 
   async recordView(movieId: number): Promise<MovieInteractionStats> {
@@ -195,12 +207,7 @@ export class MovieInteractionStatsService {
         this.toHashFields(item),
         CacheTtl.statsDetail,
       );
-      await this.redis.zincrby(
-        CacheKeys.stats.popular(),
-        item.viewCount + item.likeCount + item.commentCount + item.ratingCount,
-        String(item.movieId),
-        ZSET_TTL_SECONDS.all,
-      );
+      await this.seedRankings(item.movieId, item);
     }
   }
 
@@ -297,12 +304,115 @@ export class MovieInteractionStatsService {
     );
   }
 
+  /** Đảm bảo hash stats đã có dữ liệu thật từ cache hoặc DB trước khi HINCRBY. */
   private async ensureStats(movieId: number): Promise<void> {
-    await this.redis.hsetIfAbsent(
+    await this.getStats(movieId);
+  }
+
+  private async readCachedStats(
+    movieId: number,
+  ): Promise<MovieInteractionStats | null> {
+    const hash = await this.redis.hgetall(CacheKeys.stats.detail(movieId));
+    return this.parseHash(hash);
+  }
+
+  private async loadStatsWithLock(
+    movieId: number,
+  ): Promise<MovieInteractionStats> {
+    return this.lock.runWithLockOrFallback(
+      `lock:stats:load:${movieId}`,
+      STATS_LOAD_LOCK_TTL_SECONDS,
+      {
+        waitMs: STATS_LOAD_LOCK_WAIT_MS,
+        retryIntervalMs: STATS_LOAD_LOCK_RETRY_MS,
+      },
+      async () => {
+        // Request khác có thể đã load xong trước khi mình giành được lock.
+        const cached = await this.readCachedStats(movieId);
+        if (cached) return cached;
+
+        return this.loadAndCacheStats(movieId);
+      },
+      async () => {
+        // Hết thời gian chờ lock: đọc lại cache, nếu vẫn miss thì load DB để không trả 0.
+        const cached = await this.readCachedStats(movieId);
+        if (cached) return cached;
+
+        this.logger.warn(
+          `[stats] Lock load stats movie ${movieId} bận, fallback đọc DB.`,
+        );
+        return this.loadAndCacheStats(movieId);
+      },
+    );
+  }
+
+  private async loadAndCacheStats(
+    movieId: number,
+  ): Promise<MovieInteractionStats> {
+    const row = await this.statsRepository.findOneForBootstrap(movieId);
+    if (!row) return { ...ZERO_STATS };
+
+    const { movieId: _movieId, ...stats } = row;
+    void _movieId;
+
+    await this.redis.hset(
       CacheKeys.stats.detail(movieId),
-      this.toHashFields(ZERO_STATS),
+      this.toHashFields(stats),
       CacheTtl.statsDetail,
     );
+    await this.seedRankings(movieId, stats);
+    return stats;
+  }
+
+  private async seedRankings(
+    movieId: number,
+    stats: MovieInteractionStats,
+  ): Promise<void> {
+    const member = String(movieId);
+    const popularity =
+      stats.viewCount +
+      stats.likeCount +
+      stats.commentCount +
+      stats.ratingCount;
+
+    await Promise.all([
+      this.redis.zaddMax(
+        CacheKeys.stats.popular(),
+        popularity,
+        member,
+        ZSET_TTL_SECONDS.all,
+      ),
+      this.redis.zaddMax(
+        CacheKeys.stats.hot('all'),
+        popularity,
+        member,
+        ZSET_TTL_SECONDS.all,
+      ),
+      this.redis.zaddMax(
+        CacheKeys.stats.top('view', 'all'),
+        stats.viewCount,
+        member,
+        ZSET_TTL_SECONDS.all,
+      ),
+      this.redis.zaddMax(
+        CacheKeys.stats.top('like', 'all'),
+        stats.likeCount,
+        member,
+        ZSET_TTL_SECONDS.all,
+      ),
+      this.redis.zaddMax(
+        CacheKeys.stats.top('comment', 'all'),
+        stats.commentCount,
+        member,
+        ZSET_TTL_SECONDS.all,
+      ),
+      this.redis.zaddMax(
+        CacheKeys.stats.top('rating', 'all'),
+        stats.ratingAvg * 10,
+        member,
+        ZSET_TTL_SECONDS.all,
+      ),
+    ]);
   }
 
   private async markDirty(movieId: number): Promise<void> {
