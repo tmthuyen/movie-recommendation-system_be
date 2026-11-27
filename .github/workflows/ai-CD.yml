@@ -2,12 +2,12 @@ name: AI-SERVICE CD
 
 on:
   push:
-    branches: [main, production]
+    branches: [production]
     paths:
       - 'ai-service/**'
       - '.github/workflows/ai-CD.yml'
   pull_request:
-    branches: [main, production]
+    branches: [production]
     paths:
       - 'ai-service/**'
       - '.github/workflows/ai-CD.yml'

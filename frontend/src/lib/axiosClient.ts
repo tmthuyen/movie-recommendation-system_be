@@ -98,11 +98,21 @@ axiosClient.interceptors.response.use(
   },
   async (error) => {
     const originalRequest = error.config;
+    const requestUrl: string = originalRequest?.url ?? '';
 
-    if (originalRequest.url.includes('/auth/refresh')) {
+    if (requestUrl.includes('/auth/refresh')) {
       useAuthStore.getState().setAccessToken(null);
       processQueue(error, null);
       console.log('Failed to refresh token');
+      return Promise.reject(error);
+    }
+
+    // 401 từ login/register/login-google là lỗi thông tin đăng nhập, KHÔNG phải access token hết hạn.
+    // Trả nguyên error để form hiện đúng message backend; không refresh, không xoá session hiện tại.
+    const isAuthCredentialRequest = ['/auth/login', '/auth/register', '/auth/login-google'].some(
+      (path) => requestUrl.includes(path),
+    );
+    if (isAuthCredentialRequest) {
       return Promise.reject(error);
     }
 

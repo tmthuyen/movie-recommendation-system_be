@@ -2,12 +2,12 @@ name: BACKEND CD
 
 on:
   push:
-    branches: [main, production]
+    branches: [production]
     paths:
       - 'backend/**'
       - '.github/workflows/backend-CD.yml'
   pull_request:
-    branches: [main, production]
+    branches: [production]
     paths:
       - 'backend/**'
       - '.github/workflows/backend-CD.yml'

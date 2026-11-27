@@ -97,3 +97,7 @@ testpaths = ["tests"]
 markers = [
     "integration: integration tests requiring real models or external dependencies",
 ]
+
+[tool.coverage.run]
+# Entrypoint khởi tạo app/FastAPI — chỉ được exercise trong integration/e2e.
+omit = ["src/api/server.py"]

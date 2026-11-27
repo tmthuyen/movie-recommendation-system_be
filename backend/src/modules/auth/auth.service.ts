@@ -166,7 +166,7 @@ export class AuthService {
     const savedUser = await this.dataSource.transaction(
       async transactionalEntityManager => {
         const defaultRole = await transactionalEntityManager.findOne(Role, {
-          where: { code: 'user' },
+          where: { code: 'USER' },
         });
         const userData = {
           email: googleProfile.email,
@@ -223,7 +223,7 @@ export class AuthService {
     const hashedPassword = await hashUtil.hashBcrypt(registerDto.password, 10);
 
     // Lấy role mặc định 'user' thay vì hardcode id = 1
-    const defaultRole = await this.rolesService.findByCode('user');
+    const defaultRole = await this.rolesService.findByCode('USER');
     const roleIds = defaultRole ? [defaultRole.id] : [];
 
     const user = await this.usersService.create({

@@ -77,14 +77,14 @@ export class AuthController {
     res.cookie('refreshToken', session.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       maxAge: 30 * 24 * 60 * 60 * 1000,
     });
 
     res.cookie('deviceId', session.deviceId, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       maxAge: 365 * 24 * 60 * 60 * 1000,
     });
 
@@ -148,7 +148,7 @@ export class AuthController {
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       maxAge: 30 * 24 * 60 * 60 * 1000,
     });
 
@@ -341,6 +341,15 @@ export class AuthController {
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
   async googleCallback(@Req() req: Request, @Res() res: Response) {
+    const oauthError = (req.user as unknown as { __googleError?: string })
+      ?.__googleError;
+    if (oauthError) {
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3002';
+      return res.redirect(
+        `${frontendUrl}/auth/google-failed?reason=${encodeURIComponent(String(oauthError))}`,
+      );
+    }
+
     const googleProfile = req.user as {
       googleId: string;
       email: string;
@@ -360,10 +369,12 @@ export class AuthController {
       deviceInfo,
     );
 
+    const isProduction = process.env.NODE_ENV === 'production';
+
     res.cookie('refreshToken', result.session.refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
       maxAge: 30 * 24 * 60 * 60 * 1000,
     });
 

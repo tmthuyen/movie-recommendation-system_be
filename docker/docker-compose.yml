@@ -9,7 +9,7 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-nestjs_db}
+      POSTGRES_DB: ${POSTGRES_DB:-movie_db}
       TZ: Asia/Ho_Chi_Minh
 
     volumes:
@@ -131,10 +131,6 @@ services:
       DB_USERNAME: ${POSTGRES_USER:-postgres}
       DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
       DB_DATABASE: ${POSTGRES_DB:-movie-db}
-
-      # gg call back
-      # exact domain in production, for example: https://yourdomain.com/api/auth/google/callback
-      GOOGLE_CALLBACK_URL: 'http://localhost/api/auth/google/callback'
 
       # Redis
       REDIS_HOST: redis

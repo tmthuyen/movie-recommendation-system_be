@@ -21,9 +21,9 @@ export default function AuthCallbackPage() {
     }
 
     if (!user && !isLoading) {
-      router.push('/auth/login?error=google-login-failed');
+      router.replace('/auth/google-failed?reason=google-login-failed');
     }
-  }, [router, user]);
+  }, [router, user, isLoading]);
 
   return (
     <div className="gap-2text-lg flex h-screen w-screen items-center justify-center font-semibold">

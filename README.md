@@ -129,13 +129,27 @@ docker compose --env-file .env -p movie-app-dev -f docker/docker-compose.yml -f 
 docker compose -p movie-app-dev -f docker/docker-compose.yml -f docker/compose.dev.yml logs -f backend
 ```
 
+- Deploy run docker
+
+```bash
+docker compose \
+          --env-file .env.production \
+          -p movie-app-prod \
+          -f docker/docker-compose.yml \
+          -f docker/compose.prod.yml \
+          --profile tools \
+          up -d
+```
+
+````
+
 - Health check: http://localhost:8081/api/health
 
 ```curl
 curl -X 'GET' \
   'http://localhost:8081/api/health' \
   -H 'accept: application/json'
-```
+````
 
 - Response health check:
 

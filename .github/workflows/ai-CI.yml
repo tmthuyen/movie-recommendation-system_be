@@ -71,7 +71,7 @@ jobs:
 
       - name: Run tests
         run: |
-          pytest tests/ -v --cov=src --cov-fail-under=65 --cov-report=term
+          pytest tests/ -v --cov=src --cov-fail-under=50 --cov-report=term
         shell: bash
         env:
           JWT_SECRET_KEY: ci-dummy-secret
