@@ -149,15 +149,15 @@ Báo cáo khảo sát song song Kịch bản Giả định Liên quan (toàn b�
 
 ### 5.1. Bảng Phân bổ NDCG@10 theo 5 Nhóm Truy vấn + Phân nhóm Độ dài
 
-| Nhóm truy vấn                                | TF-IDF |    BM25    | SBERT MiniLM | Multilingual E5 Small | Multilingual E5 Base |          Mô hình dẫn đầu           |
-| :------------------------------------------- | :----: | :--------: | :----------: | :-------------------: | :------------------: | :--------------------------------: |
-| **Nhóm 1: Lexical (Từ khóa/Tên riêng)**      | 0.6942 |   0.7182   |    0.5751    |        0.7220         |      **0.7224**      |  🏆 **E5 Base** (+0.58% vs BM25)   |
-| **Nhóm 2: Semantic (Ngữ nghĩa gián tiếp)**   | 0.3771 |   0.4423   |    0.3138    |        0.3987         |      **0.5000**      |  🏆 **E5 Base** (+13.04% vs BM25)  |
-| **Nhóm 3: Abstract (Cảm xúc & Triết lý)**    | 0.2823 |   0.3537   |    0.2968    |        0.3851         |      **0.3972**      |  🏆 **E5 Base** (+12.30% vs BM25)  |
-| **Nhóm 4: Typo / Slang (Lỗi gõ & Teencode)** | 0.1487 | **0.1959** |    0.0596    |        0.0736         |        0.0302        | 🏆 **BM25** (+166.17% vs E5 Small) |
-| **Nhóm 5: Short & Long (Đối cực độ dài)**    | 0.7354 | **0.7525** |    0.5113    |        0.5931         |        0.6185        |  🏆 **BM25** (+21.67% vs E5 Base)  |
-| ↳ _Phân nhóm Short (Mean 1.9 từ)_            | 0.6632 | **0.6896** |    0.3490    |        0.4625         |        0.4501        | 🏆 **BM25** (+49.10% vs E5 Small)  |
-| ↳ _Phân nhóm Long (Mean 48.8 từ)_            | 0.8075 | **0.8153** |    0.6735    |        0.7236         |        0.7869        |  🏆 **BM25** (+3.61% vs E5 Base)   |
+| Nhóm truy vấn                                | TF-IDF |    BM25    | SBERT MiniLM | Multilingual E5 Small | Multilingual E5 Base |         Mô hình dẫn đầu         |
+| :------------------------------------------- | :----: | :--------: | :----------: | :-------------------: | :------------------: | :-----------------------------: |
+| **Nhóm 1: Lexical (Từ khóa/Tên riêng)**      | 0.6942 |   0.7182   |    0.5751    |        0.7220         |      **0.7224**      |  **E5 Base** (+0.58% vs BM25)   |
+| **Nhóm 2: Semantic (Ngữ nghĩa gián tiếp)**   | 0.3771 |   0.4423   |    0.3138    |        0.3987         |      **0.5000**      |  **E5 Base** (+13.04% vs BM25)  |
+| **Nhóm 3: Abstract (Cảm xúc & Triết lý)**    | 0.2823 |   0.3537   |    0.2968    |        0.3851         |      **0.3972**      |  **E5 Base** (+12.30% vs BM25)  |
+| **Nhóm 4: Typo / Slang (Lỗi gõ & Teencode)** | 0.1487 | **0.1959** |    0.0596    |        0.0736         |        0.0302        | **BM25** (+166.17% vs E5 Small) |
+| **Nhóm 5: Short & Long (Đối cực độ dài)**    | 0.7354 | **0.7525** |    0.5113    |        0.5931         |        0.6185        |  **BM25** (+21.67% vs E5 Base)  |
+| ↳ _Phân nhóm Short (Mean 1.9 từ)_            | 0.6632 | **0.6896** |    0.3490    |        0.4625         |        0.4501        | **BM25** (+49.10% vs E5 Small)  |
+| ↳ _Phân nhóm Long (Mean 48.8 từ)_            | 0.8075 | **0.8153** |    0.6735    |        0.7236         |        0.7869        |  **BM25** (+3.61% vs E5 Base)   |
 
 |             Phân bổ NDCG@10 theo 5 Nhóm Truy vấn             |        Tác động của Độ dài Truy vấn (Short vs Long)         |
 | :----------------------------------------------------------: | :---------------------------------------------------------: |
@@ -218,7 +218,7 @@ Báo cáo khảo sát song song Kịch bản Giả định Liên quan (toàn b�
 ### 6.3. Đề xuất Kiến trúc Tìm kiếm Lai (Hybrid Search)
 
 Từ sự bù trừ rõ nét giữa hai trường phái, nghiên cứu **đề xuất hướng phát triển tiếp theo là xây dựng Kiến trúc Tìm kiếm Lai (Hybrid Search)** kết hợp Okapi BM25 và Multilingual E5 Base thông qua kỹ thuật kết hợp thứ hạng **Reciprocal Rank Fusion (RRF)**:
-$$\text{RRF\_Score}(d) = \frac{1}{60 + \text{Rank}_{\text{BM25}}(d)} + \frac{1}{60 + \text{Rank}_{\text{E5}}(d)}$$
+$$\text{Score}_{\text{RRF}}(d) = \frac{1}{60 + \text{Rank}_{\text{BM25}}(d)} + \frac{1}{60 + \text{Rank}_{\text{E5}}(d)}$$
 
 > **Lưu ý khoa học:** Đây là giả thuyết thiết kế hệ thống được gợi mở từ quan sát thực nghiệm đối chuẩn; hiệu quả thực tế của mô hình lai so với các mô hình đơn lẻ cần được kiểm chứng thông qua các phép đo benchmark độc lập trong nghiên cứu tiếp theo.
 
@@ -284,7 +284,8 @@ python ai-service/scripts/reproduce_step4_benchmark.py --run-sample-all-models
 Hiện thực hóa đề xuất tại Mục 6.3 nhằm kết hợp sức mạnh giữa Lexical Search (Okapi BM25) và Dense Semantic Search (Multilingual E5-Base):
 
 - **Cấu hình:** Lấy Top-50 ứng viên từ BM25 và Top-50 từ E5-Base (ChromaDB HNSW), hợp nhất bằng Reciprocal Rank Fusion:
-  $$\text{RRF\_Score}(d) = \sum_{m \in \{\text{BM25}, \text{E5}\}} \frac{1}{60 + \text{Rank}_m(d)}$$
+
+  $$\text{Score}_{\text{RRF}}(d) = \sum_{m \in \{\text{BM25}, \text{E5}\}} \frac{1}{60 + \text{Rank}_m(d)}$$
 - **Top-10 Cutoff:** Trích xuất 10 bộ phim có điểm hợp nhất cao nhất để đánh giá đối chuẩn các chỉ số IR chuẩn TREC.
 
 ### 9.2. Kiểm toán Dữ liệu & Mở rộng Ground Truth V3 (qrels_v3)
