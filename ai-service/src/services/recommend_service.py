@@ -127,28 +127,36 @@ class RecommendService:
     async def lexical_search(self, query: str, top_k: int = 50) -> list[dict[str, Any]]:
         """Lexical Search: Tìm phim dựa trên BM25 sparse vectors (Qdrant)."""
         if self._bm25 is not None and self._bm25.is_ready:
-            hits = await self._bm25.search_async(query, top_k=top_k)
-            results = []
-            max_score = max((float(hit.get("score", 0.0)) for hit in hits), default=1.0)
-            if max_score <= 0:
-                max_score = 1.0
-            for idx, hit in enumerate(hits):
-                mid = int(hit["movie_id"])
-                raw_score = float(hit.get("score", 0.0))
-                norm_score = min(max(round(raw_score / max_score, 4), 0.0), 1.0)
-                results.append(
-                    {
-                        "id": mid,
-                        "movieId": mid,
-                        "similarityScore": norm_score,
-                        "score": norm_score,
-                        "rank": idx + 1,
-                    }
+            try:
+                hits = await self._bm25.search_async(query, top_k=top_k)
+                results = []
+                max_score = max(
+                    (float(hit.get("score", 0.0)) for hit in hits), default=1.0
                 )
-            logger.info(
-                f"[RecommendService] Found {len(results)} BM25 lexical search results (Top-{top_k})"
-            )
-            return results
+                if max_score <= 0:
+                    max_score = 1.0
+                for idx, hit in enumerate(hits):
+                    mid = int(hit.get("movie_id") or hit.get("id") or 0)
+                    raw_score = float(hit.get("score", 0.0))
+                    norm_score = min(max(round(raw_score / max_score, 4), 0.0), 1.0)
+                    results.append(
+                        {
+                            "id": mid,
+                            "movieId": mid,
+                            "similarityScore": norm_score,
+                            "score": norm_score,
+                            "rank": idx + 1,
+                        }
+                    )
+                logger.info(
+                    f"[RecommendService] Found {len(results)} BM25 lexical search results (Top-{top_k})"
+                )
+                return results
+            except Exception as e:
+                logger.error(
+                    f"[RecommendService] Lỗi khi tìm kiếm BM25: {e}", exc_info=True
+                )
+                return []
         logger.warning("[RecommendService] BM25 index not ready for lexical_search")
         return []
 

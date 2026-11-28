@@ -36,7 +36,11 @@ if hasattr(sys.stdout, "reconfigure"):
 
 import numpy as np
 import pandas as pd
-import psycopg2
+
+try:
+    import psycopg2
+except ImportError:
+    psycopg2 = None
 from dotenv import dotenv_values
 
 # ── allow imports from ai-service/src when run from project root ───────────

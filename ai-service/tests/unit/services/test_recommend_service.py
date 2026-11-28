@@ -13,7 +13,7 @@ Không kết nối ChromaDB hay load SentenceTransformer thật:
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import numpy as np
 import pytest
@@ -155,7 +155,9 @@ class TestBuildSearchText:
             }
         )
 
-        assert text == ("Dune: Hành tinh cát Một hành tinh sa mạc. Sci-Fi Phiêu lưu")
+        assert text == (
+            "Dune: Hành tinh cát (Dune) Một hành tinh sa mạc. Sci-Fi Phiêu lưu"
+        )
 
     @pytest.mark.parametrize("missing_title", ["", None, "nan", "None", "   "])
     def test_falls_back_to_english_title(self, missing_title):
@@ -283,6 +285,32 @@ class TestSemanticSearch:
 
         with pytest.raises(RuntimeError, match="vector store down"):
             run(service.semantic_search("phim"))
+
+
+class TestLexicalSearch:
+    def test_lexical_search_calls_bm25(self, service):
+        service._bm25 = MagicMock()
+        service._bm25.is_ready = True
+        service._bm25.search_async = AsyncMock(
+            return_value=[{"movie_id": 1, "score": 10.5, "title": "Batman"}]
+        )
+
+        results = run(service.lexical_search("batman", top_k=5))
+        assert len(results) == 1
+        assert results[0]["id"] == 1
+        service._bm25.search_async.assert_awaited_once_with("batman", top_k=5)
+
+    def test_lexical_search_empty_when_no_bm25(self, service):
+        service._bm25 = None
+        results = run(service.lexical_search("batman", top_k=5))
+        assert results == []
+
+    def test_lexical_search_handles_exception(self, service):
+        service._bm25 = MagicMock()
+        service._bm25.is_ready = True
+        service._bm25.search_async = AsyncMock(side_effect=RuntimeError("Qdrant down"))
+        results = run(service.lexical_search("batman", top_k=5))
+        assert results == []
 
 
 class TestSimilarMovies:

@@ -6,17 +6,18 @@ theo chuẩn TREC và Information Retrieval (IR) học thuật.
 
 import math
 from typing import List
+
 import pytest
 
 from scripts.benchmark_models_v2 import (
+    compute_average_precision,
     compute_dcg_at_k,
+    compute_hit_at_k,
     compute_idcg_at_k,
     compute_ndcg_at_k,
-    compute_precision_at_k,
     compute_pooled_relative_recall_at_k,
-    compute_hit_at_k,
+    compute_precision_at_k,
     compute_reciprocal_rank,
-    compute_average_precision,
 )
 
 
@@ -48,11 +49,17 @@ class TestIRMetricFormulas:
         total_rel_in_pool = 4
 
         # PR-Recall@1: 1 / 4 = 0.25
-        assert compute_pooled_relative_recall_at_k(flags, total_rel_in_pool, 1) == pytest.approx(0.25, rel=1e-5)
+        assert compute_pooled_relative_recall_at_k(
+            flags, total_rel_in_pool, 1
+        ) == pytest.approx(0.25, rel=1e-5)
         # PR-Recall@3: 2 / 4 = 0.50
-        assert compute_pooled_relative_recall_at_k(flags, total_rel_in_pool, 3) == pytest.approx(0.50, rel=1e-5)
+        assert compute_pooled_relative_recall_at_k(
+            flags, total_rel_in_pool, 3
+        ) == pytest.approx(0.50, rel=1e-5)
         # PR-Recall@5: 2 / 4 = 0.50
-        assert compute_pooled_relative_recall_at_k(flags, total_rel_in_pool, 5) == pytest.approx(0.50, rel=1e-5)
+        assert compute_pooled_relative_recall_at_k(
+            flags, total_rel_in_pool, 5
+        ) == pytest.approx(0.50, rel=1e-5)
 
         # Biên: total_rel_in_pool <= 0 (như query Q076) phải trả về 0.0 an toàn
         assert compute_pooled_relative_recall_at_k(flags, 0, 5) == pytest.approx(0.0)
@@ -82,11 +89,15 @@ class TestIRMetricFormulas:
         # Rank 3 (g=1): 1.0 / log2(4) = 0.5
         # Rank 4 (g=0): 0.0
         expected_idcg4 = 7.0 + 3.0 / math.log2(3) + 0.5
-        assert compute_idcg_at_k(pool_grades, 4) == pytest.approx(expected_idcg4, rel=1e-5)
+        assert compute_idcg_at_k(pool_grades, 4) == pytest.approx(
+            expected_idcg4, rel=1e-5
+        )
 
         # Case ranking hoàn hảo: retrieved = [3, 2, 1, 0] -> NDCG = 1.0
         perfect_retrieved = [3, 2, 1, 0]
-        assert compute_ndcg_at_k(perfect_retrieved, pool_grades, 4) == pytest.approx(1.0, rel=1e-5)
+        assert compute_ndcg_at_k(perfect_retrieved, pool_grades, 4) == pytest.approx(
+            1.0, rel=1e-5
+        )
 
         # Case ranking đảo chiều: retrieved = [1, 0, 2, 3]
         # DCG4 = (2^1 - 1)/log2(2) + 0 + (2^2 - 1)/log2(4) + (2^3 - 1)/log2(5)
@@ -94,7 +105,9 @@ class TestIRMetricFormulas:
         reversed_retrieved = [1, 0, 2, 3]
         expected_dcg_rev = 1.0 + 0.0 + 1.5 + 7.0 / math.log2(5)
         expected_ndcg = expected_dcg_rev / expected_idcg4
-        assert compute_ndcg_at_k(reversed_retrieved, pool_grades, 4) == pytest.approx(expected_ndcg, rel=1e-5)
+        assert compute_ndcg_at_k(reversed_retrieved, pool_grades, 4) == pytest.approx(
+            expected_ndcg, rel=1e-5
+        )
 
         # Biên: Pool toàn 0 -> IDCG = 0 -> NDCG = 0.0
         assert compute_ndcg_at_k([0, 0], [0, 0, 0], 2) == pytest.approx(0.0)
@@ -103,8 +116,12 @@ class TestIRMetricFormulas:
         """MRR: 1 / rank của tài liệu liên quan đầu tiên."""
         assert compute_reciprocal_rank([True, False, False], 3) == pytest.approx(1.0)
         assert compute_reciprocal_rank([False, True, False], 3) == pytest.approx(0.5)
-        assert compute_reciprocal_rank([False, False, True], 3) == pytest.approx(1.0 / 3.0)
-        assert compute_reciprocal_rank([False, False, False, True], 3) == pytest.approx(0.0)  # Ngoài max_k=3
+        assert compute_reciprocal_rank([False, False, True], 3) == pytest.approx(
+            1.0 / 3.0
+        )
+        assert compute_reciprocal_rank([False, False, False, True], 3) == pytest.approx(
+            0.0
+        )  # Ngoài max_k=3
 
     def test_average_precision_hand_calculated(self):
         """MAP@K: Trung bình của Precision tại mỗi vị trí tìm thấy tài liệu liên quan, chia cho min(R, K)."""
@@ -118,17 +135,23 @@ class TestIRMetricFormulas:
         # AP@5 = (1.0 + 2/3) / 4 = (5/3) / 4 = 5 / 12 = 0.4166667
         flags = [True, False, True, False, False]
         expected_ap = (1.0 + 2.0 / 3.0) / 4.0
-        assert compute_average_precision(flags, total_relevant_in_pool=4, max_k=5) == pytest.approx(expected_ap, rel=1e-5)
+        assert compute_average_precision(
+            flags, total_relevant_in_pool=4, max_k=5
+        ) == pytest.approx(expected_ap, rel=1e-5)
 
         # Nếu total_rel_in_pool = 1 và hit tại rank 2:
         # Rank 1: Miss
         # Rank 2: Hit 1 -> P@2 = 1 / 2 = 0.5
         # Denom = min(1, 5) = 1 -> AP = 0.5 / 1 = 0.5
         flags_single = [False, True, False]
-        assert compute_average_precision(flags_single, total_relevant_in_pool=1, max_k=3) == pytest.approx(0.5, rel=1e-5)
+        assert compute_average_precision(
+            flags_single, total_relevant_in_pool=1, max_k=3
+        ) == pytest.approx(0.5, rel=1e-5)
 
         # Biên: total_rel_in_pool <= 0 -> trả về 0.0
-        assert compute_average_precision(flags, total_relevant_in_pool=0, max_k=5) == pytest.approx(0.0)
+        assert compute_average_precision(
+            flags, total_relevant_in_pool=0, max_k=5
+        ) == pytest.approx(0.0)
 
     def test_hit_at_k_and_source_hit(self):
         """Hit@K và Source Movie Hit@K."""
@@ -163,10 +186,16 @@ class TestUnjudgedHandlingPolicy:
 
         for mid in retrieved_ids:
             cand = cand_pool.get(mid)
-            if cand is not None and cand.get("llm_grade") is not None and cand["llm_grade"] in (0, 1, 2, 3):
+            if (
+                cand is not None
+                and cand.get("llm_grade") is not None
+                and cand["llm_grade"] in (0, 1, 2, 3)
+            ):
                 status = "judged"
                 g = int(cand["llm_grade"])
-            elif cand is not None and cand.get("llm_verdict") == "insufficient_evidence":
+            elif (
+                cand is not None and cand.get("llm_verdict") == "insufficient_evidence"
+            ):
                 status = "insufficient_evidence"
                 g = 0  # Quy ước bảo thủ
             else:
@@ -219,7 +248,9 @@ class TestEdgeCasesAndZeroRelevancePolicy:
         # Nếu retrieved có Grade 1 ở rank 1 -> NDCG = 1.0
         assert compute_ndcg_at_k([1, 0], pool_q076, 10) == pytest.approx(1.0, rel=1e-5)
         # Nhưng PR-Recall@10 và MAP@10 với binary threshold Grade >= 2 phải bằng 0.0 an toàn
-        assert compute_pooled_relative_recall_at_k([False, False], 0, 10) == pytest.approx(0.0)
+        assert compute_pooled_relative_recall_at_k(
+            [False, False], 0, 10
+        ) == pytest.approx(0.0)
         assert compute_average_precision([False, False], 0, 10) == pytest.approx(0.0)
 
     def test_graded_relevance_gain_hierarchy(self):
@@ -272,4 +303,3 @@ class TestEdgeCasesAndZeroRelevancePolicy:
         # Chênh lệch delta
         delta_ndcg = ndcg_assumed - ndcg_cons
         assert delta_ndcg > 0.0
-

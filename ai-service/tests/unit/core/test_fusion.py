@@ -41,9 +41,7 @@ class TestReciprocalRankFusionScoring:
         assert result[1][1] == pytest.approx(1 / 62)
 
     def test_document_appearing_in_both_lists_wins(self):
-        result = reciprocal_rank_fusion(
-            {"BM25": [1, 2], "E5": [2, 1]}, k=60
-        )
+        result = reciprocal_rank_fusion({"BM25": [1, 2], "E5": [2, 1]}, k=60)
 
         # 1: 1/61 + 1/62, 2: 1/62 + 1/61 -> hoà điểm -> tie-break theo id
         assert [doc_id for doc_id, _ in result] == [1, 2]
@@ -116,9 +114,7 @@ class TestReciprocalRankFusionWithDetails:
     """Bản có provenance cho kiểm toán thực nghiệm."""
 
     def test_details_include_provenance_fields(self):
-        result = reciprocal_rank_fusion_with_details(
-            {"BM25": [1, 2], "E5": [2]}, k=60
-        )
+        result = reciprocal_rank_fusion_with_details({"BM25": [1, 2], "E5": [2]}, k=60)
 
         assert result[0]["fused_rank"] == 1
         assert set(result[0]) == {
@@ -157,9 +153,7 @@ class TestReciprocalRankFusionWithDetails:
         assert result[0]["raw_scores"] == {}
 
     def test_top_n_limits_details_and_reassigns_fused_rank(self):
-        result = reciprocal_rank_fusion_with_details(
-            {"BM25": [1, 2, 3]}, top_n=2
-        )
+        result = reciprocal_rank_fusion_with_details({"BM25": [1, 2, 3]}, top_n=2)
 
         assert [row["movie_id"] for row in result] == [1, 2]
         assert [row["fused_rank"] for row in result] == [1, 2]
@@ -168,6 +162,8 @@ class TestReciprocalRankFusionWithDetails:
         lists = {"BM25": [3, 1, 2], "E5": [1, 3]}
 
         plain = [doc_id for doc_id, _ in reciprocal_rank_fusion(lists)]
-        detailed = [row["movie_id"] for row in reciprocal_rank_fusion_with_details(lists)]
+        detailed = [
+            row["movie_id"] for row in reciprocal_rank_fusion_with_details(lists)
+        ]
 
         assert plain == detailed
