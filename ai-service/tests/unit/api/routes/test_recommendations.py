@@ -71,6 +71,7 @@ HYBRID_RESULTS = [
 def service() -> MagicMock:
     svc = MagicMock(name="RecommendService")
     svc.semantic_search = AsyncMock(return_value=list(SEMANTIC_RESULTS))
+    svc.lexical_search = AsyncMock(return_value=list(SEMANTIC_RESULTS))
     svc.similar_movies = AsyncMock(return_value=list(SIMILAR_RESULTS))
     svc.hybrid_recommendation = AsyncMock(return_value=list(HYBRID_RESULTS))
     return svc
@@ -137,6 +138,44 @@ class TestSemanticSearchEndpoint:
         )
 
         service.semantic_search.assert_awaited_once_with(query="space", top_k=3)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /lexical-search
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestLexicalSearchEndpoint:
+    def test_returns_paginated_success_envelope(self, client_factory):
+        response = client_factory().get(
+            f"{PREFIX}/lexical-search", params={"keyword": "phim hành động"}
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        assert body["statusCode"] == 200
+        assert body["result"] == SEMANTIC_RESULTS
+        assert body["pagination"] == {
+            "total": 2,
+            "totalPages": 1,
+            "page": 1,
+            "limit": 50,
+        }
+        assert (
+            body["message"] == "Tim kiem BM25 thanh cong cho tu khoa 'phim hành động'"
+        )
+
+    def test_passes_keyword_and_topk_to_service(self, client_factory, service):
+        client_factory().get(
+            f"{PREFIX}/lexical-search", params={"keyword": "batman", "topK": 5}
+        )
+
+        service.lexical_search.assert_awaited_once_with(query="batman", top_k=5)
+
+    def test_missing_keyword_returns_422(self, client_factory):
+        response = client_factory().get(f"{PREFIX}/lexical-search")
+        assert response.status_code == 422
 
     def test_custom_topk_sets_limit(self, client_factory):
         body = (
@@ -315,9 +354,7 @@ class TestSearchEndpoint:
         service.semantic_search.assert_awaited_once_with(query="phim", top_k=10)
 
     def test_function_paginates_with_page_size(self, service):
-        request = SimpleNamespace(
-            query="phim", model="semantic", page=2, page_size=3
-        )
+        request = SimpleNamespace(query="phim", model="semantic", page=2, page_size=3)
         app_request = SimpleNamespace(
             app=SimpleNamespace(state=SimpleNamespace(recommend_service=service))
         )
@@ -436,9 +473,7 @@ class TestHybridSearchEndpoint:
 
         assert response.status_code == 422
 
-    def test_topk_max_boundary_is_accepted(
-        self, client_factory, current_user, service
-    ):
+    def test_topk_max_boundary_is_accepted(self, client_factory, current_user, service):
         response = client_factory(current_user).get(
             f"{PREFIX}/hybrid", params={"topK": 1000}
         )

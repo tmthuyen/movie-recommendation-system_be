@@ -344,9 +344,7 @@ class TestCleanupLocalData:
 
 
 class TestRunTrainingPipeline:
-    def test_happy_path_trains_uploads_and_publishes(
-        self, training, monkeypatch
-    ):
+    def test_happy_path_trains_uploads_and_publishes(self, training, monkeypatch):
         write_jsonl(training, SMALL_ROWS)
         storage = FakeStorage()
         monkeypatch.setattr(training_module, "storage_service", storage)

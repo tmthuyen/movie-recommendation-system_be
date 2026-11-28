@@ -31,7 +31,9 @@ class TestLoadMappingFromFile:
 
     def test_missing_file_returns_false(self, storage_tmp_dir):
         service = MappingService()
-        assert service.load_mapping_from_file(str(storage_tmp_dir / "nope.json")) is False
+        assert (
+            service.load_mapping_from_file(str(storage_tmp_dir / "nope.json")) is False
+        )
         assert service.user_to_idx == {}
 
     def test_invalid_json_returns_false(self, storage_tmp_dir):
@@ -49,9 +51,7 @@ class TestLoadMappingFromFile:
 
     def test_failed_reload_keeps_previous_mapping(self, storage_tmp_dir):
         service = MappingService()
-        good = write_mapping(
-            storage_tmp_dir / "good.json", {"users": {"uuid-a": 1}}
-        )
+        good = write_mapping(storage_tmp_dir / "good.json", {"users": {"uuid-a": 1}})
         broken = storage_tmp_dir / "broken.json"
         broken.write_text("{oops", encoding="utf-8")
 
@@ -85,13 +85,13 @@ class TestLoadMappingFromStorage:
             )
             return True
 
-        monkeypatch.setattr(mapping_module.storage_service, "download_file", fake_download)
+        monkeypatch.setattr(
+            mapping_module.storage_service, "download_file", fake_download
+        )
 
         service = MappingService()
         assert (
-            service.load_mapping_from_storage(
-                "mappings/users.json", str(local_path)
-            )
+            service.load_mapping_from_storage("mappings/users.json", str(local_path))
             is True
         )
         assert service.get_user_idx("uuid-x") == 42

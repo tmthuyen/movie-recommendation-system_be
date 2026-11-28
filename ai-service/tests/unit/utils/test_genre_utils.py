@@ -109,9 +109,7 @@ class TestComputeGenreSimilarity:
         # jaccard = 1/3, recall = 1/2 -> 0.5*(1/3) + 0.5*(1/2)
         expected = 0.5 * (1 / 3) + 0.5 * (1 / 2)
 
-        assert compute_genre_similarity(target, candidate) == pytest.approx(
-            expected
-        )
+        assert compute_genre_similarity(target, candidate) == pytest.approx(expected)
 
     def test_candidate_superset_has_partial_score(self):
         # jaccard = 1/2, recall = 1 -> 0.75
@@ -172,7 +170,9 @@ class TestRerankModes:
     target = {"phim hành động"}
 
     def test_off_keeps_cosine_order_and_limits_top_k(self):
-        ranked = rerank_similar_candidates(self.candidates, self.target, mode="off", top_k=2)
+        ranked = rerank_similar_candidates(
+            self.candidates, self.target, mode="off", top_k=2
+        )
 
         assert [item["id"] for item in ranked] == [1, 2]
 

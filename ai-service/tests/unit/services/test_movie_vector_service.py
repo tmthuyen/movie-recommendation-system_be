@@ -89,7 +89,7 @@ class TestUpsertMovieVector:
         assert stored["movie_id"] == 10
         assert "movieId" not in stored["payload"]
         assert stored["payload"]["search_text"] == (
-            "Dune Vi Hành tinh sa mạc Sci-Fi Phiêu lưu"
+            "Dune Vi (Dune) Hành tinh sa mạc Sci-Fi Phiêu lưu"
         )
         assert len(stored["vector"]) == fake_model.dim
         assert sum(value * value for value in stored["vector"]) == pytest.approx(1.0)

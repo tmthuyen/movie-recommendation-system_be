@@ -47,9 +47,7 @@ class TestGetCurrentUserDependency:
 
     def test_existing_user_is_returned(self):
         request = make_request()
-        user = CurrentUser(
-            sub="42", email="a@b.c", fullName="A", scopes=["movie:read"]
-        )
+        user = CurrentUser(sub="42", email="a@b.c", fullName="A", scopes=["movie:read"])
         request.state.user = user
 
         assert asyncio.run(get_current_user(request)) is user
