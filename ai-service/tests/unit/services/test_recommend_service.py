@@ -457,6 +457,14 @@ class TestHybridRecommendation:
         assert results[0]["raw_scores"]["CF"] == pytest.approx(0.9)
         assert results[0]["raw_scores"]["LONG_TERM"] == pytest.approx(1.0)
         assert results[0]["contributing_models"] == ["CF", "LONG_TERM"]
+        assert results[0]["contributions"] == [
+            {"source": "CF", "rawScore": pytest.approx(0.9), "rawRank": 1},
+            {
+                "source": "LONG_TERM",
+                "rawScore": pytest.approx(1.0),
+                "rawRank": 1,
+            },
+        ]
         assert results[0]["agreement_count"] == 2
         assert results[1]["agreement_count"] == 2
 
@@ -478,6 +486,9 @@ class TestHybridRecommendation:
         assert results[0]["contributing_models"] == ["CF"]
         assert results[0]["model_ranks"] == {"CF": 1}
         assert results[0]["raw_scores"]["CF"] == pytest.approx(0.7)
+        assert results[0]["contributions"] == [
+            {"source": "CF", "rawScore": pytest.approx(0.7), "rawRank": 1}
+        ]
 
     def test_long_term_only_for_cold_start_user(
         self, service, fake_chroma, settings, monkeypatch
@@ -491,6 +502,13 @@ class TestHybridRecommendation:
         assert [item["movie_id"] for item in results] == [301]
         assert results[0]["contributing_models"] == ["LONG_TERM"]
         assert results[0]["model_ranks"] == {"LONG_TERM": 1}
+        assert results[0]["contributions"] == [
+            {
+                "source": "LONG_TERM",
+                "rawScore": pytest.approx(1.0),
+                "rawRank": 1,
+            }
+        ]
 
     def test_unknown_user_without_profile_returns_empty(
         self, service, fake_chroma, monkeypatch

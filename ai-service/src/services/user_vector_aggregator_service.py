@@ -23,6 +23,20 @@ logger = setup_logger(name="FastAPI-Recommendations")
 settings = get_settings()
 
 
+def _build_contributions(item: dict[str, Any]) -> list[dict[str, Any]]:
+    """Chuyển model_ranks/raw_scores thành list nguồn đóng góp cho frontend."""
+    ranks = item.get("model_ranks") or {}
+    raw_scores = item.get("raw_scores") or {}
+    return [
+        {
+            "source": source,
+            "rawScore": raw_scores.get(source),
+            "rawRank": rank,
+        }
+        for source, rank in ranks.items()
+    ]
+
+
 class UserVectorAggregatorService:
     """Gom CF, các vector người dùng và thể loại rồi fusion theo trọng số."""
 
@@ -131,6 +145,7 @@ class UserVectorAggregatorService:
                 "id": item["movie_id"],
                 "rank": item["fused_rank"],
                 "score": item["rrf_score"],
+                "contributions": _build_contributions(item),
             }
             for item in detailed_fused
         ]
