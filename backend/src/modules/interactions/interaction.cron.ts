@@ -17,6 +17,9 @@ import {
 import { Interaction } from '@/modules/interactions/entities/interaction.entity';
 import { idUtil } from '@/common/utils/id.util';
 
+/** 60 phút */
+export const CRON_TIME_TRAINING_UPLOAD = '0 */60 * * * *';
+
 @Injectable()
 export class InteractionCronService {
   private readonly logger = new Logger(InteractionCronService.name);
@@ -36,7 +39,7 @@ export class InteractionCronService {
   ) {}
 
   // 0h sáng hàng ngày
-  @Cron('0 0 0 * * *')
+  @Cron(CRON_TIME_TRAINING_UPLOAD)
   /**
    * Cron job để chạy định kỳ và gửi dữ liệu tương tác để train ALS model cho AI service
    * @description Luồng xử lý:

@@ -23,6 +23,7 @@ export class GenreMatrixRefreshCron {
 
   @Cron(GENRE_MATRIX_CRON)
   async handleRefresh(): Promise<void> {
+    this.logger.log('Bắt đầu refresh ma trận thể loại...');
     try {
       await this.lock.runWithLock(
         GENRE_MATRIX_LOCK_KEY,
@@ -33,5 +34,7 @@ export class GenreMatrixRefreshCron {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Bỏ qua lần refresh ma trận thể loại: ${message}`);
     }
+
+    this.logger.log('Kết thúc refresh ma trận thể loại.');
   }
 }

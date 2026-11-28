@@ -81,11 +81,11 @@ def check_infra():
     mem = psutil.virtual_memory()
     process = psutil.Process()
 
-    print("PID:", os.getpid())
-    print("Total RAM:", round(mem.total / 1024**3, 2), "GiB")
-    print("Available RAM:", round(mem.available / 1024**3, 2), "GiB")
-    print("Used Percent:", mem.percent, "%")
-    print("App RSS:", round(process.memory_info().rss / 1024**3, 2), "GiB")
+    # print("PID:", os.getpid())
+    # print("Total RAM:", round(mem.total / 1024**3, 2), "GiB")
+    # print("Available RAM:", round(mem.available / 1024**3, 2), "GiB")
+    # print("Used Percent:", mem.percent, "%")
+    # print("App RSS:", round(process.memory_info().rss / 1024**3, 2), "GiB")
 
     res = {
         "pid": os.getpid(),

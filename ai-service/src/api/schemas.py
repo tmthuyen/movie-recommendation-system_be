@@ -108,6 +108,13 @@ class HybridRequest(BaseModel):
     topK: int = Field(default=100, ge=1, le=1000, description="Số lượng kết quả trả về")
 
 
+class AIConfigUpdateRequest(BaseModel):
+    changes: dict[str, Any] = Field(
+        min_length=1,
+        description="Map flat key -> value mới của AI config",
+    )
+
+
 class RecommendationRequest(BaseModel):
     user_id: int | None = None
     movie_ids: list[int] = Field(default_factory=list)

@@ -18,8 +18,13 @@ export class MovieStatsSyncCron {
     private readonly stats: MovieInteractionStatsService,
   ) {}
 
-  @Cron('0 0 3 * * *')
+  /**
+   * Cron job này sẽ chạy để đồng bộ stats từ Redis xuống DB.
+   * Thời gian chạy là 3 giờ sáng mỗi ngày (0 0 3 * * *).
+   */
+  @Cron('0 */2 * * * *')
   async syncToDatabase(): Promise<void> {
+    this.logger.log('Bắt đầu đồng bộ stats Redis → DB...');
     await this.lock.runWithLockOrFallback(
       'lock:stats:sync',
       120,

@@ -11,6 +11,7 @@ from qdrant_client.models import Distance, PointIdsList, PointStruct, VectorPara
 from redis.asyncio import Redis
 
 from api.schemas import TrainRequest
+from core.ai_config import AIConfig
 from core.custom_exception import CustomException
 from infra.redis.redis_service import RedisStore
 from services.model_training_service import ModelTrainingService
@@ -777,10 +778,11 @@ class VectorStore:
 
         names = [
             getattr(self.settings, "vector_collection", None),
-            getattr(self.settings, "vector_user_cf_collection", None),
-            getattr(self.settings, "vector_movie_cf_collection", None),
-            getattr(self.settings, "vector_user_profile_collection", None),
-            getattr(self.settings, "vector_user_genre_collection", None),
+            self.settings.vector_user_genre_collection,
+            self.settings.vector_user_profile_collection,
+            self.settings.vector_user_long_term_collection,
+            self.settings.vector_user_short_term_collection,
+            self.settings.vector_user_search_collection,
         ]
         counts: dict[str, int | None] = {}
         for name in dict.fromkeys(n for n in names if n):
@@ -802,11 +804,17 @@ class VectorStore:
 
 
 class TrainingScheduler:
-    def __init__(self, settings: Settings, redis_store: RedisStore) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        redis_store: RedisStore,
+        ai_config: AIConfig | None = None,
+    ) -> None:
         self.settings = settings
         self.scheduler: AsyncIOScheduler | None = None
         self.is_training = False
         self.redis_store = redis_store
+        self.ai_config = ai_config
 
     async def start(self) -> None:
         if not self.settings.model_train_enabled:
@@ -839,7 +847,13 @@ class TrainingScheduler:
 
         self.is_training = True
         logger.info("Main model training job started")
-        svc = ModelTrainingService(redis_store=self.redis_store)
+        if self.ai_config is None:
+            svc = ModelTrainingService(redis_store=self.redis_store)
+        else:
+            svc = ModelTrainingService(
+                redis_store=self.redis_store,
+                ai_config=self.ai_config,
+            )
         try:
             await svc.run_training_pipeline()
         except Exception:

@@ -9,6 +9,7 @@ import pandas as pd
 # Use implicit library for ALS
 from implicit.als import AlternatingLeastSquares
 
+from core.ai_config import AIConfig, TrainingConfig
 from core.config import get_settings
 from infra.messaging.event_schemas import InteractionAction
 from infra.redis.redis_service import RedisStore
@@ -20,9 +21,14 @@ logger = setup_logger(name="FastAPI-Recommendations")
 
 
 class ModelTrainingService:
-    def __init__(self, redis_store: RedisStore):
+    def __init__(
+        self,
+        redis_store: RedisStore,
+        ai_config: AIConfig | None = None,
+    ):
         self.settings = get_settings()
         self.redis_store = redis_store
+        self.ai_config = ai_config
 
         # Paths
         self.data_dir = Path("data/training")
@@ -41,7 +47,10 @@ class ModelTrainingService:
             await self._download_training_data()
 
             # 2. Preprocess Data & Create Sparse Matrix
-            user_mapping, movie_mapping, full_df = self._preprocess_data()
+            training_cfg = await self._load_training_config()
+            user_mapping, movie_mapping, full_df = self._preprocess_data(
+                training_cfg=training_cfg
+            )
 
             # 3. Train ALS Model
 
@@ -49,6 +58,7 @@ class ModelTrainingService:
                 train_df=full_df,
                 num_users=len(user_mapping),
                 num_items=len(movie_mapping),
+                training_cfg=training_cfg,
             )
 
             # 5. Upload Model & Mapping to R2
@@ -90,7 +100,28 @@ class ModelTrainingService:
             storage_service.download_file(s3_key, str(local_path))
             logger.info(f"Downloaded {s3_key} to {local_path}")
 
-    def _get_action_score(self, action: str, rating: float | None = None) -> float:
+    async def _load_training_config(self) -> TrainingConfig:
+        """Đọc snapshot config train; fallback settings khi không có AIConfig."""
+        if self.ai_config is not None:
+            return await self.ai_config.training_snapshot()
+
+        return TrainingConfig(
+            factors=self.settings.cf_num_factors,
+            alpha=self.settings.cf_alpha,
+            regularization=self.settings.cf_regularization,
+            iterations=self.settings.cf_iterations,
+            random_state=self.settings.cf_random_state,
+            min_user_interactions=1,
+            min_item_interactions=1,
+            action_scores={"click": 1.0, "like": 5.0, "comment": 2.0},
+        )
+
+    def _get_action_score(
+        self,
+        action: str,
+        rating: float | None = None,
+        action_scores: dict[str, float] | None = None,
+    ) -> float:
         """Tính score dựa trên action và rating (nếu có)."""
         if action == InteractionAction.RATING and rating is not None:
             return float(rating)
@@ -101,9 +132,26 @@ class ModelTrainingService:
             InteractionAction.COMMENT: 2.0,
             InteractionAction.RATING: 0.0,
         }
+        if action_scores:
+            scores.update(
+                {
+                    InteractionAction.CLICK: action_scores.get(
+                        "click", scores[InteractionAction.CLICK]
+                    ),
+                    InteractionAction.LIKE: action_scores.get(
+                        "like", scores[InteractionAction.LIKE]
+                    ),
+                    InteractionAction.COMMENT: action_scores.get(
+                        "comment", scores[InteractionAction.COMMENT]
+                    ),
+                }
+            )
         return scores.get(action.lower(), 1.0)
 
-    def _preprocess_data(self) -> Tuple[Any, dict, dict, pd.DataFrame]:
+    def _preprocess_data(
+        self,
+        training_cfg: TrainingConfig | None = None,
+    ) -> Tuple[Any, dict, dict, pd.DataFrame]:
         logger.info("Preprocessing data and creating mappings...")
 
         interaction_files = glob.glob(str(self.interaction_dir / "*.jsonl"))
@@ -135,6 +183,28 @@ class ModelTrainingService:
         full_df = full_df.sort_values("createdAt", ascending=True).drop_duplicates(
             subset=["userId", "movieId", "action"], keep="last"
         )
+
+        if training_cfg is not None:
+            user_counts = full_df.groupby("userId").size()
+            item_counts = full_df.groupby("movieId").size()
+            valid_users = user_counts[
+                user_counts >= training_cfg.min_user_interactions
+            ].index
+            valid_items = item_counts[
+                item_counts >= training_cfg.min_item_interactions
+            ].index
+            before = len(full_df)
+            full_df = full_df[
+                full_df["userId"].isin(valid_users)
+                & full_df["movieId"].isin(valid_items)
+            ]
+            logger.info(
+                "[AIConfig] training filter min_user=%d min_item=%d rows=%d -> %d",
+                training_cfg.min_user_interactions,
+                training_cfg.min_item_interactions,
+                before,
+                len(full_df),
+            )
 
         # EDA
         logger.info("Performing EDA...")
@@ -169,7 +239,11 @@ class ModelTrainingService:
         # Tính score cho từng tương tác
         full_df["score"] = full_df.apply(
             lambda row: self._get_action_score(
-                action=row["action"], rating=row.get("score")
+                action=row["action"],
+                rating=row.get("score"),
+                action_scores=(
+                    training_cfg.action_scores if training_cfg is not None else None
+                ),
             ),
             axis=1,
         )
@@ -182,19 +256,30 @@ class ModelTrainingService:
         train_df: pd.DataFrame,
         num_users: int,
         num_items: int,
+        training_cfg: TrainingConfig | None = None,
     ) -> ALS_Implicit:
         logger.info("Training Implicit ALS Model...")
         settings = get_settings()
-
-        model = ALS_Implicit(
-            train_frame=train_df,
-            num_users=num_users,
-            num_items=num_items,
+        config = training_cfg or TrainingConfig(
             factors=settings.cf_num_factors,
             alpha=settings.cf_alpha,
             regularization=settings.cf_regularization,
             iterations=settings.cf_iterations,
             random_state=settings.cf_random_state,
+            min_user_interactions=1,
+            min_item_interactions=1,
+            action_scores={"click": 1.0, "like": 5.0, "comment": 2.0},
+        )
+
+        model = ALS_Implicit(
+            train_frame=train_df,
+            num_users=num_users,
+            num_items=num_items,
+            factors=config.factors,
+            alpha=config.alpha,
+            regularization=config.regularization,
+            iterations=config.iterations,
+            random_state=config.random_state,
         )
 
         logger.info("ALS Model training complete.")

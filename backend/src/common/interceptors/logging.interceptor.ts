@@ -25,13 +25,8 @@ export class LoggingInterceptor implements NestInterceptor {
     const headers = req.headers;
     const activeSpan = trace.getActiveSpan();
     const traceID = activeSpan ? activeSpan.spanContext().traceId : 'None';
-    const kongID = (headers['x-kong-request-id'] as string) || '';
 
-    if (!kongID) {
-      this.logger.warn('Missing request ID or kong ID');
-    }
-
-    this.logger.log(`[trace_id=${traceID}] - [kong_id=${kongID}]`);
+    this.logger.log(`trace_id=${traceID}`);
     this.logger.log(`→ ${method} ${originalUrl} - ${ip} - ${userAgent}`);
 
     return next.handle().pipe(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.ai_config import AIConfig
 from core.config import get_settings
 from core.fusion import reciprocal_rank_fusion_with_details
 from core.vector_constants import (
@@ -31,11 +32,13 @@ class UserVectorAggregatorService:
         movie_vector_service: MovieVectorService,
         genre_vector_service: GenreVectorService | None = None,
         popular_repository: RedisGenreRepository | None = None,
+        ai_config: AIConfig | None = None,
     ) -> None:
         self._user_vector_service = user_vector_service
         self._movie_vector_service = movie_vector_service
         self._genre_vector_service = genre_vector_service
         self._popular_repository = popular_repository
+        self._ai_config = ai_config
 
     async def aggregate(
         self,
@@ -62,37 +65,65 @@ class UserVectorAggregatorService:
         if not has_cf or not has_vectors:
             popular_ids = await self._load_popular(top_k * 2)
 
+        snapshot = (
+            await self._ai_config.for_you_snapshot()
+            if self._ai_config is not None
+            else None
+        )
+        warm_weights = dict(snapshot.weights) if snapshot else dict(FOR_YOU_WEIGHTS)
+        cold_weights = (
+            dict(snapshot.cold_weights) if snapshot else dict(FOR_YOU_COLD_WEIGHTS)
+        )
+        cf_popular_weights = (
+            dict(snapshot.cf_popular_weights)
+            if snapshot
+            else dict(FOR_YOU_CF_POPULAR_WEIGHTS)
+        )
+        popular_only_weight = snapshot.popular_only_weight if snapshot else 1.0
+        rrf_k = snapshot.rrf_k if snapshot else 60
+        candidate_multiplier = snapshot.candidate_multiplier if snapshot else 2
+
         if has_cf and has_vectors:
-            weights = dict(FOR_YOU_WEIGHTS)
+            weights = warm_weights
         elif not has_cf and has_vectors:
-            weights = dict(FOR_YOU_COLD_WEIGHTS)
+            weights = cold_weights
         elif has_cf and popular_ids:
-            weights = dict(FOR_YOU_CF_POPULAR_WEIGHTS)
+            weights = cf_popular_weights
             ranked_lists["POPULAR"] = popular_ids
             raw_scores["POPULAR"] = [1.0] * len(popular_ids)
         elif popular_ids:
-            weights = {"POPULAR": 1.0}
+            weights = {"POPULAR": popular_only_weight}
             ranked_lists = {"POPULAR": popular_ids}
             raw_scores = {"POPULAR": [1.0] * len(popular_ids)}
         else:
-            weights = dict(FOR_YOU_CF_POPULAR_WEIGHTS)
+            weights = cf_popular_weights
 
         active_weights = {
             name: weight for name, weight in weights.items() if ranked_lists.get(name)
         }
         total_weight = sum(active_weights.values())
         if total_weight <= 0:
+            logger.warning(
+                "[AIConfig] Không có weight hợp lệ cho user=%s, trả rỗng", user_id
+            )
             return []
         normalized_weights = {
             name: weight / total_weight for name, weight in active_weights.items()
         }
+        logger.debug(
+            "[AIConfig] snapshot=for_you user=%s rrf_k=%d multiplier=%d weights=%s",
+            user_id,
+            rrf_k,
+            candidate_multiplier,
+            normalized_weights,
+        )
 
         detailed_fused = reciprocal_rank_fusion_with_details(
             ranked_lists=ranked_lists,
             raw_scores_lists=raw_scores,
             weights=normalized_weights,
-            k=60,
-            top_n=top_k * 2,
+            k=rrf_k,
+            top_n=top_k * candidate_multiplier,
         )
         return [
             {

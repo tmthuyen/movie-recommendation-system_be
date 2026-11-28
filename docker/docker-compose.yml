@@ -222,6 +222,9 @@ services:
     expose:
       - '8082'
 
+    volumes:
+      - ../ai-service/config/ai_config.yaml:/app/config/ai_config.yaml:ro
+
     logging:
       driver: json-file
       options:

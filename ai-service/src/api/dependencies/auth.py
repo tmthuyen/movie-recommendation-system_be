@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import HTTPException, Request
+from fastapi import Depends, HTTPException, Request
 
 from api.schemas import CurrentUser
 
@@ -36,3 +36,16 @@ async def get_current_user(request: Request) -> CurrentUser:
         detail="Bạn chưa đăng nhập",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+
+async def require_admin(
+    current_user: Annotated[CurrentUser, Depends(get_current_user)],
+) -> CurrentUser:
+    """Chỉ cho phép ADMIN/SUPERADMIN quản lý cấu hình AI."""
+    scopes = {str(scope).upper() for scope in (current_user.scopes or [])}
+    if not scopes.intersection({"ADMIN", "SUPERADMIN"}):
+        raise HTTPException(
+            status_code=403,
+            detail="Chỉ ADMIN hoặc SUPERADMIN được quản lý cấu hình AI",
+        )
+    return current_user

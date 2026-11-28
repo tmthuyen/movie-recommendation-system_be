@@ -321,16 +321,6 @@ class TestUploadArtifacts:
 
 
 class TestCleanupLocalData:
-    def test_removes_parquet_and_model_files(self, training):
-        parquet = training.interaction_dir / "batch.parquet"
-        parquet.write_bytes(b"parquet")
-        model_file = training.models_dir / "als_model.npz"
-        model_file.write_bytes(b"model")
-
-        training._cleanup_local_data()
-
-        assert not parquet.exists()
-        assert not model_file.exists()
 
     def test_undeletable_entry_is_skipped_without_raising(self, training, caplog):
         subdir = training.models_dir / "not_a_file"

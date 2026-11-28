@@ -1,0 +1,225 @@
+groups:
+- id: ai.for_you.weights
+  label: Trọng số For You
+  items:
+  - key: ai.for_you.weights.CF
+    label: Trọng số CF
+    description: Trọng số collaborative filtering
+    type: float
+    default: 0.375
+    min: 0
+    max: 1
+  - key: ai.for_you.weights.LONG_TERM
+    label: Trọng số dài hạn
+    description: Trọng số vector sở thích dài hạn
+    type: float
+    default: 0.1875
+    min: 0
+    max: 1
+  - key: ai.for_you.weights.SHORT_TERM
+    label: Trọng số ngắn hạn
+    description: Trọng số vector tương tác gần đây
+    type: float
+    default: 0.1875
+    min: 0
+    max: 1
+  - key: ai.for_you.weights.SEARCH
+    label: Trọng số tìm kiếm
+    description: Trọng số vector tìm kiếm
+    type: float
+    default: 0.125
+    min: 0
+    max: 1
+  - key: ai.for_you.weights.GENRE
+    label: Trọng số thể loại
+    description: Trọng số thể loại
+    type: float
+    default: 0.125
+    min: 0
+    max: 1
+- id: ai.for_you.cold_weights
+  label: Cold-start — Trọng số
+  items:
+  - key: ai.for_you.cold_weights.LONG_TERM
+    label: Cold — dài hạn
+    description: Trọng số long-term khi không có CF
+    type: float
+    default: 0.1333333333
+    min: 0
+    max: 1
+  - key: ai.for_you.cold_weights.SHORT_TERM
+    label: Cold — ngắn hạn
+    description: Trọng số short-term khi không có CF
+    type: float
+    default: 0.3333333333
+    min: 0
+    max: 1
+  - key: ai.for_you.cold_weights.SEARCH
+    label: Cold — tìm kiếm
+    description: Trọng số search khi không có CF
+    type: float
+    default: 0.1333333333
+    min: 0
+    max: 1
+  - key: ai.for_you.cold_weights.GENRE
+    label: Cold — thể loại
+    description: Trọng số genre khi không có CF
+    type: float
+    default: 0.4
+    min: 0
+    max: 1
+- id: ai.for_you.cf_popular_weights
+  label: CF + Popular — Trọng số
+  items:
+  - key: ai.for_you.cf_popular_weights.CF
+    label: CF fallback
+    description: Trọng số CF khi không có vector người dùng
+    type: float
+    default: 0.7
+    min: 0
+    max: 1
+  - key: ai.for_you.cf_popular_weights.POPULAR
+    label: Popular fallback
+    description: Trọng số popular khi không có vector người dùng
+    type: float
+    default: 0.3
+    min: 0
+    max: 1
+  - key: ai.for_you.popular_only_weight
+    label: Popular only
+    description: Trọng số popular khi không có CF và vector
+    type: float
+    default: 1.0
+    min: 0
+    max: 1
+- id: ai.for_you.rrf
+  label: RRF
+  items:
+  - key: ai.for_you.rrf.k
+    label: Hằng số RRF k
+    description: Hằng số làm mượt RRF
+    type: int
+    default: 60
+    min: 1
+  - key: ai.for_you.candidate_multiplier
+    label: Hệ số candidate
+    description: Hệ số nhân số candidate trước khi cắt topK
+    type: int
+    default: 2
+    min: 1
+- id: ai.for_you.segments
+  label: Phân đoạn người dùng
+  items:
+  - key: ai.for_you.segments.cold_max
+    label: Cold tối đa
+    description: Ngưỡng tối đa của user cold-start
+    type: int
+    default: 0
+    min: 0
+  - key: ai.for_you.segments.low_max
+    label: Ít tương tác tối đa
+    description: Ngưỡng tối đa của user ít tương tác
+    type: int
+    default: 4
+    min: 0
+  - key: ai.for_you.segments.medium_max
+    label: Trung bình tối đa
+    description: Ngưỡng tối đa của user tương tác trung bình
+    type: int
+    default: 49
+    min: 0
+  - key: ai.recommendation.ema_alpha
+    label: EMA alpha
+    description: Tốc độ cập nhật vector hành vi người dùng
+    type: float
+    default: 0.2
+    min: 0.001
+    max: 1
+- id: ai.genre
+  label: Thể loại
+  items:
+  - key: ai.genre.alpha
+    label: Genre alpha
+    description: Tốc độ cập nhật weight thể loại
+    type: float
+    default: 0.05
+    min: 0.001
+    max: 1
+  - key: ai.genre.min_abs_weight
+    label: Ngưỡng weight thể loại
+    description: Ngưỡng weight thể loại tối thiểu
+    type: float
+    default: 0.05
+    min: 0
+    max: 1
+  - key: ai.genre.top_movies_per_genre
+    label: Số phim mỗi thể loại
+    description: Số phim tối đa mỗi thể loại
+    type: int
+    default: 100
+    min: 1
+- id: ai.training.cf
+  label: Huấn luyện CF
+  items:
+  - key: ai.training.cf.factors
+    label: Số chiều ALS
+    description: Số chiều latent factor
+    type: int
+    default: 64
+    min: 1
+  - key: ai.training.cf.alpha
+    label: ALS alpha
+    description: Confidence scaling
+    type: float
+    default: 40.0
+    min: 0.1
+  - key: ai.training.cf.regularization
+    label: Regularization
+    description: Hệ số regularization
+    type: float
+    default: 0.1
+    min: 0
+  - key: ai.training.cf.iterations
+    label: Số vòng lặp
+    description: Số vòng lặp ALS
+    type: int
+    default: 15
+    min: 1
+  - key: ai.training.cf.random_state
+    label: Random state
+    description: Seed tái lập
+    type: int
+    default: 42
+  - key: ai.training.cf.min_user_interactions
+    label: Tương tác tối thiểu / user
+    description: User tối thiểu để đưa vào train CF
+    type: int
+    default: 5
+    min: 1
+  - key: ai.training.cf.min_item_interactions
+    label: Tương tác tối thiểu / phim
+    description: Item tối thiểu để đưa vào train CF
+    type: int
+    default: 1
+    min: 1
+- id: ai.training.action_scores
+  label: Điểm hành vi huấn luyện
+  items:
+  - key: ai.training.action_scores.click
+    label: Điểm click
+    description: Score cho hành vi click
+    type: float
+    default: 1.0
+    min: 0
+  - key: ai.training.action_scores.comment
+    label: Điểm comment
+    description: Score cho hành vi comment
+    type: float
+    default: 2.0
+    min: 0
+  - key: ai.training.action_scores.like
+    label: Điểm like
+    description: Score cho hành vi like
+    type: float
+    default: 5.0
+    min: 0

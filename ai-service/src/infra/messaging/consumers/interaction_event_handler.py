@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from core.ai_config import AIConfig
 from core.config import get_settings
 from core.custom_exception import CustomException
 from core.integrations import TrainingScheduler
@@ -33,10 +34,12 @@ class InteractionEventHandler:
         training_scheduler: TrainingScheduler,
         user_vector_service: UserVectorService,
         movie_vector_service: MovieVectorService,
+        ai_config: AIConfig | None = None,
     ):
         self.training_scheduler = training_scheduler
         self.user_vector_service = user_vector_service
         self.movie_vector_service = movie_vector_service
+        self.ai_config = ai_config
 
     async def handle(self, event: dict[str, Any]) -> None:
         """
@@ -187,6 +190,8 @@ class InteractionEventHandler:
         collections.append(settings.vector_user_short_term_collection)
 
         alpha = 0.2
+        if self.ai_config is not None:
+            alpha = float(await self.ai_config.get("ai.recommendation.ema_alpha"))
         for collection_name in collections:
             data = await self.user_vector_service.find_named_user_vector(
                 user_id, collection_name

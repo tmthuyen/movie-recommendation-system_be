@@ -12,6 +12,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from api.middleware import setup_middleware
 from api.routes import chat, health, recommendations
+from core.ai_config import AIConfig
 from core.config import get_settings
 from core.custom_exception import CustomException
 from core.handle_model_updated import handle_model_updated
@@ -85,6 +86,9 @@ async def lifespan(application: FastAPI):
     redis_store = RedisStore(settings)
     await redis_store.start()
 
+    # AI config: default từ YAML, value override từ Redis
+    ai_config = AIConfig(redis_store=redis_store)
+
     # tasks
     training_updated_subscriber_task = asyncio.create_task(
         redis_store.subscribe(
@@ -97,7 +101,11 @@ async def lifespan(application: FastAPI):
     )
 
     # khởi tạo training scheduler
-    training_scheduler = TrainingScheduler(settings=settings, redis_store=redis_store)
+    training_scheduler = TrainingScheduler(
+        settings=settings,
+        redis_store=redis_store,
+        ai_config=ai_config,
+    )
     await training_scheduler.start()
 
     # mapping service lấy từ storage
@@ -127,12 +135,14 @@ async def lifespan(application: FastAPI):
     genre_vector_service = GenreVectorService(
         repository=genre_repository,
         user_vector_service=user_vector_service,
+        ai_config=ai_config,
     )
     user_vector_aggregator = UserVectorAggregatorService(
         user_vector_service=user_vector_service,
         movie_vector_service=movie_vector_service,
         genre_vector_service=genre_vector_service,
         popular_repository=genre_repository,
+        ai_config=ai_config,
     )
     search_event_consumer = SearchEventConsumer(
         user_vector_service=user_vector_service,
@@ -182,6 +192,7 @@ async def lifespan(application: FastAPI):
         training_scheduler=training_scheduler,
         user_vector_service=user_vector_service,
         movie_vector_service=movie_vector_service,
+        ai_config=ai_config,
     )
     genre_event_handler = GenreEventHandler(genre_vector_service=genre_vector_service)
     user_event_handler = UserEventHandler(
@@ -219,6 +230,7 @@ async def lifespan(application: FastAPI):
     application.state.interaction_queue = interaction_mq
     application.state.user_queue = user_mq
     application.state.redis = redis_store
+    application.state.ai_config = ai_config
     application.state.training_scheduler = training_scheduler
 
     try:

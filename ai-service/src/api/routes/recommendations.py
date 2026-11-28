@@ -2,8 +2,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, requests, status
 
-from api.dependencies.auth import get_current_user
+from api.dependencies.auth import get_current_user, require_admin
 from api.schemas import (
+    AIConfigUpdateRequest,
     ApiResponse,
     CurrentUser,
     HybridRequest,
@@ -13,6 +14,7 @@ from api.schemas import (
     SimilarMoviesResponse,
     SuccessResponse,
 )
+from core.ai_config import AIConfig
 from core.config import get_settings
 from core.integrations import VectorStore
 from services.embedding_service import embedding_service
@@ -50,6 +52,15 @@ async def _get_recommend_service(request: Request) -> RecommendService:
     )
     request.app.state.recommend_service = svc
     return svc
+
+
+def _get_ai_config(request: Request) -> AIConfig:
+    """Lấy AIConfig từ app.state; fallback instance YAML-only cho test."""
+    config = getattr(request.app.state, "ai_config", None)
+    if config is None:
+        config = AIConfig(redis_store=None)
+        request.app.state.ai_config = config
+    return config
 
 
 @router.get("/lexical-search", response_model=PaginatedResponse[list[dict]])
@@ -270,6 +281,47 @@ async def hybrid_search(
         page=1,
         limit=request.topK,
         message=message,
+    )
+
+
+@router.get("/admin/ai-config")
+async def get_ai_config(
+    app_request: Request,
+    _: Annotated[CurrentUser, Depends(require_admin)],
+) -> ApiResponse[dict]:
+    """Lấy toàn bộ AI config hiện tại (default YAML + Redis override)."""
+    config = _get_ai_config(app_request)
+    data = await config.describe()
+    logger.info(
+        "[AIConfigApi] GET keys=%d version=%s",
+        sum(len(group["items"]) for group in data["groups"]),
+        data["version"],
+    )
+    return success(data, message="Lấy cấu hình AI thành công")
+
+
+@router.post("/admin/ai-config")
+async def update_ai_config(
+    body: AIConfigUpdateRequest,
+    app_request: Request,
+    _: Annotated[CurrentUser, Depends(require_admin)],
+) -> ApiResponse[dict]:
+    """Cập nhật một hoặc nhiều AI config; chỉ nhận key ai.*."""
+    config = _get_ai_config(app_request)
+    try:
+        version = await config.set_many(body.changes)
+    except ValueError as exc:
+        logger.warning("[AIConfigApi] POST invalid changes: %s", exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        logger.warning("[AIConfigApi] POST redis unavailable: %s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    updated = list(body.changes.keys())
+    logger.info("[AIConfigApi] POST updated=%s version=%d", updated, version)
+    return success(
+        {"version": version, "updated": updated},
+        message="Cập nhật cấu hình AI thành công",
     )
 
 

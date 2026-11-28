@@ -10,6 +10,7 @@ from typing import Any
 import joblib
 import numpy as np
 
+from core.ai_config import AIConfig
 from core.config import get_settings
 from core.vector_constants import (
     GENRE_MATRIX_TTL_SECONDS,
@@ -48,11 +49,13 @@ class GenreVectorService:
         repository: RedisGenreRepository,
         user_vector_service: UserVectorService,
         cache_path: Path | str = GENRE_MATRIX_CACHE_PATH,
+        ai_config: AIConfig | None = None,
     ) -> None:
         self._repository = repository
         self._user_vector_service = user_vector_service
         self._cache_path = Path(cache_path)
         self._cached_matrix: GenreMatrix | None = None
+        self._ai_config = ai_config
 
     async def load_matrix_from_redis(self) -> GenreMatrix | None:
         """Đọc 2 key Redis và build ma trận movie↔genre, ô có quan hệ bằng 1.
@@ -138,6 +141,16 @@ class GenreVectorService:
         if matrix is None or not matrix.movie_vectors:
             return []
 
+        snapshot = (
+            await self._ai_config.genre_snapshot()
+            if self._ai_config is not None
+            else None
+        )
+        min_abs_weight = snapshot.min_abs_weight if snapshot else GENRE_MIN_ABS_WEIGHT
+        top_movies_per_genre = (
+            snapshot.top_movies_per_genre if snapshot else TOP_MOVIES_PER_GENRE
+        )
+
         try:
             weights = await self._user_vector_service.find_genre_payload(
                 user_id, settings.vector_user_genre_collection
@@ -149,7 +162,7 @@ class GenreVectorService:
         active_ids = [
             genre_id
             for genre_id in matrix.genre_ids
-            if abs(weights.get(genre_id, 0.0)) >= GENRE_MIN_ABS_WEIGHT
+            if abs(weights.get(genre_id, 0.0)) >= min_abs_weight
         ]
         if not active_ids:
             return []
@@ -165,7 +178,7 @@ class GenreVectorService:
         candidates: set[int] = set()
         for genre_id in active_ids:
             candidates.update(
-                matrix.genre_movies.get(genre_id, [])[:TOP_MOVIES_PER_GENRE]
+                matrix.genre_movies.get(genre_id, [])[:top_movies_per_genre]
             )
 
         scored = []
@@ -232,8 +245,14 @@ class GenreVectorService:
         # before
         logger.info(f"Current genre weights for user=%s: %s", user_id, weights)
 
+        snapshot = (
+            await self._ai_config.genre_snapshot()
+            if self._ai_config is not None
+            else None
+        )
+        alpha = snapshot.alpha if snapshot else GENRE_WEIGHT_ALPHA
         normalized = self._normalize_genre_score(score, interaction_type)
-        delta = GENRE_WEIGHT_ALPHA * normalized / max(1, len(genre_ids))
+        delta = alpha * normalized / max(1, len(genre_ids))
         for genre_id in genre_ids:
             current = weights.get(genre_id, 0.0) + delta
             weights[genre_id] = max(GENRE_WEIGHT_MIN, min(GENRE_WEIGHT_MAX, current))

@@ -9,7 +9,9 @@ from utils import setup_logger
 logger = setup_logger(name="FastAPI-Recommendations")
 
 
-async def build_vector_db_health(vector_store: Any, settings: Any) -> dict[str, Any]:
+async def build_vector_db_health(
+    vector_store: Any, settings: Settings
+) -> dict[str, Any]:
     """Return provider, location and collection counts for a vector store."""
     if vector_store is None:
         return {
@@ -21,6 +23,7 @@ async def build_vector_db_health(vector_store: Any, settings: Any) -> dict[str, 
 
     counts = await vector_store.collection_counts()
     movies_collection = getattr(settings, "vector_collection", "movies")
+
     return {
         "provider": getattr(settings, "vector_db_provider", None),
         "location": vector_store.location,

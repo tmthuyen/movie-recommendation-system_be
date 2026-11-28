@@ -4,8 +4,8 @@ export const GENRE_MATRIX_TTL_SECONDS = 12 * 60 * 60;
 /** Số phim giữ lại cho mỗi thể loại. */
 export const TOP_MOVIES_PER_GENRE = 100;
 
-/** Chạy lúc 01:00 mỗi ngày. */
-export const GENRE_MATRIX_CRON = '0 1 * * *';
+/** Thời gian chạy cron job refresh ma trận thể loại (1 phút). */
+export const GENRE_MATRIX_CRON = '0 */1 * * *';
 
 /** Lock chống chạy trùng job refresh ma trận thể loại. */
 export const GENRE_MATRIX_LOCK_KEY = 'cache:stats:genre:refresh:lock';
